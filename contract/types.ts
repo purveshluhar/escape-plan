@@ -26,10 +26,10 @@ export type MemberKind = (typeof MEMBER_KINDS)[number];
 
 export const DISCIPLINES = [
   'mep', // chiller
-  'logistics', // glass panel
+  'logistics', // glass panel, sofa
   'accessibility', // wheelchair
   'structure', // load
-  'life_safety', // people (T2)
+  'life_safety', // people (T1 walk out; T2 race with smoke)
   'fire', // smoke (T2)
   'plumbing', // water (T2)
   'electrical', // power (T3)
@@ -41,7 +41,7 @@ export const RULES = [
   'corner_turn', // T1 glass
   'no_steps', // T1 wheelchair
   'downward', // T1 load
-  'shortest_exit', // T2 people
+  'shortest_exit', // T1 people walk out (T2: the race with smoke)
   'spread', // T2 smoke
   'downhill', // T2 water
   'supply', // T3 electrical
@@ -144,7 +144,7 @@ export interface SolverResult {
   reason: Reason | null; // null on pass
   needed: number | null; // what the token needs at blocked_at (for example width in metres)
   available: number | null; // what the building gives there
-  time?: number | null; // T2: time steps, people and smoke only
+  time?: number | null; // people and smoke only: T1 people, edges walked; T2 smoke, time steps
 }
 
 // ---------- 4.3 edits ----------

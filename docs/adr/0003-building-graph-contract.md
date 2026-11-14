@@ -1,6 +1,7 @@
 # 0003. The building graph JSON is the shared contract, owned by P1
 
-Status: accepted (2026-11-14)
+Status: accepted (2026-11-14). The 13:00 merge and the hourly merge point are superseded by
+0009: `contract/` changes at a merge point, and merges are small and frequent.
 
 ## Context
 

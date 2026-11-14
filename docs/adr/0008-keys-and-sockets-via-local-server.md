@@ -1,6 +1,7 @@
 # 0008. Keys and phone sockets go through a small local server
 
-Status: accepted (2026-11-14)
+Status: accepted (2026-11-14). The 19:30 time of the wifi go/no-go is superseded by 0009: the
+phone wifi check is a condition at the "Tier 2 done" gate (gate 10 in `docs/plan.md`).
 
 Updated 2026-11-14: P1 owns the server, and it lives in the top-level `server/` folder, not in
 `app/server/`. The team moved the Jev work (parse, plan B and C, votes) to P1. P3 keeps the

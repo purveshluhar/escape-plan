@@ -17,11 +17,11 @@ imports this folder: P3's screens in `app/` call the server over HTTP or WebSock
 
 ## Status
 
-Empty until tier 2 starts at 17:00. When the first code lands, P1 adds `server/` to the test and
-typecheck globs (AGENTS.md).
+Empty until tier 2 starts, when all of tier 1 is green. When the first code lands, P1 adds
+`server/` to the test and typecheck globs (AGENTS.md).
 
 ## Tier 2 first task
 
 `parse(request)` for Jev, with plan B and plan C behind the same function. Accept an answer only
-when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Go/no-go (P1's call): 13:00 (key in
-hand?) and 17:30 (slower than 2 s means plan B or C).
+when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Go/no-go (P1's call): at the first merge
+(key in hand?) and at the Jev latency check (slower than 2 s means plan B or C).

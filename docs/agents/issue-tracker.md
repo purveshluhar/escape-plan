@@ -17,8 +17,8 @@ gh label create ready-for-agent --force --color 0E8A16 --description "Fully spec
 gh label create ready-for-human --force --color 1D76DB --description "Requires human implementation"
 gh label create wontfix         --force --color FFFFFF --description "Will not be actioned"
 gh label create tier-1          --force --color B60205 --description "Tier 1: must ship"
-gh label create tier-2          --force --color D93F0B --description "Tier 2: starts at 17:00 if tier 1 is green"
-gh label create tier-3          --force --color FEF2C0 --description "Tier 3: starts at 19:30 if tier 2 is tagged"
+gh label create tier-2          --force --color D93F0B --description "Tier 2: starts when all of tier 1 is green"
+gh label create tier-3          --force --color FEF2C0 --description "Tier 3: starts when tier 2 is tagged"
 ```
 
 ## Ticket shape

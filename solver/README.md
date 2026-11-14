@@ -13,6 +13,8 @@ Starter stub. `IMPLEMENTED_RULES` is empty, so every expected case in `solver.te
 
 ## Tier 1 first task
 
-Chiller end to end by 14:30: the `clearance` rule (clear width and height on every edge, plant
-to truck). Then glass (`corner_turn`), wheelchair (`no_steps`), load (`downward`), and the
-`cuts_above_width` shaft-breaks-beam rule. Use the `solver-token` skill for each.
+MVP first (ADR 0009): the search core and the wheelchair (`no_steps`), then the sofa
+(`corner_turn`, with the token's width) and people walking out (`shortest_exit`, no smoke).
+Then the chiller (`clearance`), the load (`downward` and the `cuts_above_width`
+shaft-breaks-beam rule) and the glass. The rule text is the "Rule details" section of
+`contract/README.md`. Use the `solver-token` skill for each.

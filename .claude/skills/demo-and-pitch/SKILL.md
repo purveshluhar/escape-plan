@@ -33,8 +33,10 @@ Drop any sentence whose feature is not green at freeze.
 1. Write the script in `design/demo-script.md` from the beats above, with who clicks what.
 2. Each edit in the script must be an expected case in `data/expected.json`, so the demo
    cannot surprise you.
-3. Rehearse from the `tier1-demo` (or `tier2-demo`) tag on the presenting laptop. Time it.
-4. At 21:00-22:00 record a raw screen capture of the full demo: the backup. Keep it on two machines.
+3. Rehearse from the `tier1-demo` (or `tier2-demo`) tag on the presenting laptop. Run
+   `git fetch --tags --force` first, because `tier1-demo` is re-tagged. Time it.
+4. At gate 12 in `docs/plan.md` (after feature freeze, gate 11), record a raw screen capture of
+   the full demo: the backup. Keep it on two machines.
 5. If anything fails live, switch to the backup without apology and keep talking.
 
 ## Judge Q&A
@@ -44,7 +46,7 @@ Drop any sentence whose feature is not green at freeze.
 | Has this been done? | Separate checks exist: accessibility and egress checkers, evacuation and equipment-path research. One shared graph where each discipline plays a token and every edit re-solves all of them, as a game, we did not find. Our search was limited, so we say "not found", not "new". |
 | Is this a code check? | No. It is a game, not a code check. It shows path clashes early so the right expert looks. |
 | Does AI decide? | No. A deterministic solver decides every pass or fail and shows the numbers. Jev turns words into edits and gives vote bubbles. |
-| How did 5 people build this in 10 hours? | AI agents built against one frozen contract, hourly merges, and hand-checked test cases as the truth. |
+| How did 5 people build this in 10 hours? | AI agents built against one frozen contract, small frequent merges, and hand-checked test cases as the truth. |
 | Can I use it? | MIT, a sample building, runs in the browser (tier 1 needs no server). No Cityweft data is in the repo; plug in your own context. |
 
 ## Done when

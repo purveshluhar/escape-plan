@@ -1,6 +1,6 @@
 ---
 name: review-merge
-description: Checks to run before an hourly merge to main, by the author and by P1. Use before every merge, before a tag, or when deciding whether to revert.
+description: Checks to run before a merge to main, by the author and by P1. Use before every merge, before a tag, or when deciding whether to revert.
 ---
 
 # Review before merge
@@ -27,8 +27,11 @@ description: Checks to run before an hourly merge to main, by the author and by 
 1. Merge the PRs one at a time, smallest first, after CI is green. Run `npm run check` on `main` after each.
 2. If one breaks the build or the demo, take it out and hand it back with the failing output.
 3. Push `main` only when `npm run check` is green and the demo runs.
-4. At 17:00 and 19:30, tag the green `main`: `git tag tier1-demo` or `git tag tier2-demo`, then
-   `git push origin <tag>`.
+4. At a tag gate in `docs/plan.md`, tag the green `main`: `git tag tier1-demo` at the MVP gate,
+   or `git tag tier2-demo` when tier 2 is done. Then `git push origin <tag>`. To re-tag
+   `tier1-demo` when all of tier 1 is green, use `git tag -f tier1-demo` and
+   `git push -f origin tier1-demo`. Tell the team to run `git fetch --tags --force`, because a
+   plain `git fetch` keeps the old tag.
 
 ## Done when
 

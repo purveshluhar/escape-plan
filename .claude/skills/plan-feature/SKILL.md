@@ -11,7 +11,7 @@ asking anyone.
 ## Steps
 
 1. Read `AGENTS.md`, `contract/types.ts`, `GLOSSARY.md` and `docs/plan.md`. Find the tier the
-   idea belongs to. If it is tier 2 or 3, say which checkpoint it waits for.
+   idea belongs to. If it is tier 2 or 3, say which gate it waits for.
 2. Write the spec in the issue body (no separate file), in this shape:
    - **Goal**: one sentence a judge would understand.
    - **Demo moment**: what the audience sees when it works.

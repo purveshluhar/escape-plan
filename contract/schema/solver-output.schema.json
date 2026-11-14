@@ -75,7 +75,7 @@
             "number",
             "null"
           ],
-          "description": "T2: people and smoke only"
+          "description": "People and smoke only. T1 people: edges walked. T2 smoke: time steps."
         }
       },
       "additionalProperties": false

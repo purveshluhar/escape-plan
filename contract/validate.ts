@@ -11,7 +11,7 @@ import edits from './schema/edits.schema.json' with { type: 'json' };
 import jev from './schema/jev.schema.json' with { type: 'json' };
 import phone from './schema/phone.schema.json' with { type: 'json' };
 import expected from './schema/expected.schema.json' with { type: 'json' };
-import type { Building } from './types.ts';
+import type { Building, EdgeKind } from './types.ts';
 
 type Schema = { [key: string]: unknown };
 
@@ -142,6 +142,9 @@ function check(s: Schema, v: unknown, at: string, file: string, errors: string[]
   }
 }
 
+// Edge kinds that may join two levels. drain_route and supply run in risers.
+const LEVEL_CHANGE_KINDS: readonly EdgeKind[] = ['stair', 'elevator', 'shaft', 'ramp', 'drain_route', 'supply'];
+
 // Reference checks a schema cannot express: unique ids, and every id points at something real.
 export function checkBuildingRefs(b: Building): string[] {
   const errors: string[] = [];
@@ -170,6 +173,16 @@ export function checkBuildingRefs(b: Building): string[] {
   }
   const memberById = new Map(b.members.map((m) => [m.id, m]));
   for (const e of b.edges) if (e.from === e.to) errors.push(`edge "${e.id}": from and to are the same node`);
+  // A change of floor is an edge whose two nodes sit on different levels (contract/README.md, Levels).
+  const nodeById = new Map(b.nodes.map((n) => [n.id, n]));
+  for (const e of b.edges) {
+    const f = nodeById.get(e.from);
+    const t = nodeById.get(e.to);
+    if (!f || !t) continue;
+    if (f.level !== t.level && !LEVEL_CHANGE_KINDS.includes(e.kind)) {
+      errors.push(`edge "${e.id}": joins ${f.level} and ${t.level} but is a ${e.kind}`);
+    }
+  }
   for (const m of b.members) {
     if (m.node !== undefined && !nodes.has(m.node)) errors.push(`member "${m.id}": unknown node "${m.node}"`);
     if (m.kind === 'foundation' && m.supported_by.length > 0) errors.push(`member "${m.id}": a foundation has no supports`);

@@ -1,6 +1,7 @@
 # 0005. Build in tiers, with go/no-go times and demo tags
 
-Status: accepted (2026-11-14)
+Status: accepted (2026-11-14). The tier 1 definition and every clock time here are superseded
+by 0009.
 
 ## Context
 
