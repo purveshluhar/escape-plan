@@ -27,7 +27,27 @@ test('a pass has no fail label', () => {
   assert.equal(failText(b, fail({ status: 'pass' })), null);
 });
 
-test('each label goes on the side away from its nearest neighbour', () => {
-  // Two Xs side by side, one above the left one.
-  assert.deepEqual(labelSides([[100, 300], [220, 300], [100, 200]]), ['left', 'right', 'right']);
+const layout = { height: 50, gap: 36, minX: 0, maxX: 1200 };
+
+test('a label takes the free side: away from a neighbour on its row, right by default', () => {
+  // Two Xs side by side, and one alone high above.
+  const spots = [{ x: 400, y: 300, width: 200 }, { x: 520, y: 300, width: 200 }, { x: 400, y: 100, width: 200 }];
+  assert.deepEqual(labelSides(spots, layout), ['left', 'right', 'right']);
+});
+
+test('labels on nearby rows do not stack on top of each other', () => {
+  // The base case on a narrow screen: chiller above, glass under it, wheelchair to the right
+  // and a little lower. Chiller and wheelchair labels both on the right would overlap.
+  const spots = [
+    { x: 235, y: 372, width: 260 }, // chiller
+    { x: 228, y: 425, width: 260 }, // glass
+    { x: 336, y: 412, width: 300 }, // wheelchair
+  ];
+  const sides = labelSides(spots, { ...layout, maxX: 864 });
+  assert.notDeepEqual([sides[0], sides[2]], ['right', 'right']);
+});
+
+test('a label never runs off the edge of the free screen when the other side is clear', () => {
+  assert.deepEqual(labelSides([{ x: 1100, y: 300, width: 250 }], layout), ['left']);
+  assert.deepEqual(labelSides([{ x: 60, y: 300, width: 250 }], layout), ['right']);
 });

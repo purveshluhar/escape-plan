@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  doorPoint, FOUNDATION_DEPTH, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
+  doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
   routeLength, STOREY_HEIGHT, tokenRoute,
 } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
@@ -109,4 +109,16 @@ test('pointAt walks the route by distance and clamps at both ends', () => {
   assert.deepEqual(pointAt(pts, cum, 3.5), [2, 1.5, 0]);
   assert.deepEqual(pointAt(pts, cum, -1), [0, 0, 0]);
   assert.deepEqual(pointAt(pts, cum, 99), [2, 3, 0]);
+});
+
+test('the view centres the model in the screen left of a side panel, scaled to fit that space', () => {
+  // Model reaches 10 m either side of its centre and 5 m up and down; 1000 x 500 px canvas.
+  const full = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 0, margin: 1 });
+  assert.deepEqual(full, { left: -10, right: 10, top: 5, bottom: -5 });
+  // A 500 px panel leaves a square 500 x 500 px: the 20 m wide model now sets the scale, and
+  // its centre (camera x = 0) lands in the middle of that free space, 250 px from the left.
+  const inset = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, margin: 1 });
+  assert.deepEqual(inset, { left: -10, right: 30, top: 10, bottom: -10 });
+  const centrePx = ((0 - inset.left) / (inset.right - inset.left)) * 1000;
+  assert.equal(centrePx, 250);
 });

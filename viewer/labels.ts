@@ -45,16 +45,62 @@ export function failText(b: Building, r: SolverResult): FailText | null {
   return { title: `${label}  ${REASON_WORDS[reason]}`, detail };
 }
 
-// Which side of its red X each fail label goes, given the X positions on screen (pixels).
-// Labels are wide and short, so only Xs on about the same row can collide: the label goes away
-// from the nearest of those. Default is the right.
-export function labelSides(points: [number, number][], rowHeight = 60): ('left' | 'right')[] {
-  return points.map((p, i) => {
-    let dx = 0;
-    for (const [j, q] of points.entries()) {
-      const d = q[0] - p[0];
-      if (j !== i && Math.abs(q[1] - p[1]) < rowHeight && (dx === 0 || Math.abs(d) < Math.abs(dx))) dx = d;
+// Where each fail label goes: right of its red X, left of it, or above it (never below: the
+// token sits there). Labels are placed top to bottom; each takes the spot whose box overlaps the
+// fewest red Xs and already placed labels, counting a box past the free screen's edge as a clash
+// too. Ties go right, then left.
+export interface LabelSpot {
+  x: number; // red X centre on screen, pixels
+  y: number;
+  width: number; // label box width, pixels
+}
+export interface LabelLayout {
+  height: number; // label box height
+  gap: number; // from the X centre to the near edge of the box
+  minX: number; // free screen, left and right edges
+  maxX: number;
+  xSize?: number; // half the size of a red X
+}
+
+interface Rect { l: number; r: number; t: number; b: number }
+const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+
+export type LabelSide = 'right' | 'left' | 'above';
+const SIDES: LabelSide[] = ['right', 'left', 'above'];
+
+export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[] {
+  const { height, gap, minX, maxX, xSize = 26 } = layout;
+  const marks: Rect[] = spots.map((p) => ({ l: p.x - xSize, r: p.x + xSize, t: p.y - xSize, b: p.y + xSize }));
+  const placed: Rect[] = [];
+  const sides: LabelSide[] = new Array(spots.length).fill('right');
+  const order = spots.map((_, i) => i).sort((a, b) => spots[a]!.y - spots[b]!.y);
+  for (const i of order) {
+    const p = spots[i]!;
+    const box = (side: LabelSide): Rect => {
+      if (side === 'above') {
+        const b = p.y - xSize - 6;
+        return { l: p.x - p.width / 2, r: p.x + p.width / 2, t: b - height, b };
+      }
+      const l = side === 'right' ? p.x + gap : p.x - gap - p.width;
+      return { l, r: l + p.width, t: p.y - height / 2, b: p.y + height / 2 };
+    };
+    const clashes = (r: Rect): number =>
+      marks.filter((m, j) => j !== i && overlaps(r, m)).length
+      + placed.filter((q) => overlaps(r, q)).length
+      + (r.l < minX || r.r > maxX ? 1 : 0);
+    let best: { side: LabelSide; rect: Rect; n: number } | null = null;
+    for (const side of SIDES) {
+      const rect = box(side);
+      const n = clashes(rect);
+      if (!best || n < best.n) best = { side, rect, n };
     }
-    return dx > 0 ? 'left' : 'right';
-  });
+    sides[i] = best!.side;
+    placed.push(best!.rect);
+  }
+  return sides;
+}
+
+// About how wide a fail label is in pixels, from its text (14 px title, 15 px detail).
+export function labelWidth(text: FailText): number {
+  return Math.max(text.title.length * 10, text.detail.length * 7.6) + 28;
 }
