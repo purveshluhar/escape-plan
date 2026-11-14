@@ -20,11 +20,23 @@ They are not real answers. Replace them with v1.
 
 ## Cityweft block (tier 2)
 
-`node --env-file=.env data/cityweft-fetch.ts` fetches a 150 m block around 120 Broadway as a GLB
-into git-ignored `data/cityweft/` (`block.glb` and `meta.json`). It needs `CITYWEFT_API_KEY` in the
-git-ignored `.env`, never with a `VITE_` prefix. `cityweft-request.ts` holds the pure request
-builder that `cityweft-request.test.ts` checks. Nothing from `data/cityweft/` is ever committed
+`node --env-file=.env data/cityweft-fetch.ts` fetches an 800 m block (override with
+`CITYWEFT_SIZE_M`) into git-ignored `data/cityweft/`. It needs `CITYWEFT_API_KEY` in the
+git-ignored `.env`, never with a `VITE_` prefix. Nothing from `data/cityweft/` is ever committed
 (`docs/adr/0004`).
+
+- The block is centred 350 m south of 120 Broadway so the bay (water) fills its south side. 120
+  Broadway lands about 400 m east and 50 m from the north edge.
+- `block.glb` holds buildings, surface (roads, paths, gardens, water), barriers (fence, wall) and
+  terrain. `meta.json` records the target, centre, size and polygon.
+- The GLB export leaves instances out (tested: an empty placeholder), so a second small request
+  saves them as points in `instances.json`: `type` (tree, bench, busStop, picnicTable, hydrant,
+  sculpture, ...), `x`, `y`, `z`, `height` (metres), `rotation` (radians). Trees ask for
+  `treeSource: hybrid`, which the docs recommend.
+- Frame (inferred from where the water falls): x east, y up, z south, origin at the north-west
+  corner. The GLB and `instances.json` share it.
+- `cityweft-request.ts` holds the pure builders that `cityweft-request.test.ts` checks.
+- Size grows fast: about 10 MB at 300 m and 63 MB at 800 m.
 
 ## Tier 1 first task
 

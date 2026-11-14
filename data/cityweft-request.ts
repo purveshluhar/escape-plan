@@ -11,17 +11,28 @@ export interface Center {
 
 export interface ContextRequest {
   polygon: LatLon[];
-  settings: { geometry: string[]; upAxis: 'Y' | 'Z'; crs: 'local' };
+  settings: { geometry: string[]; upAxis: 'Y' | 'Z'; crs: 'local'; treeSource: 'hybrid' };
   export: { format: 'glb' };
 }
 
 export const MAX_AREA_KM2 = 10; // Cityweft rejects a larger polygon with a 400
+
+// Everything Cityweft can generate: instances are trees and street items, topography is terrain.
+const GEOMETRY = ['buildings', 'surface', 'barriers', 'instances', 'infrastructure', 'topography'];
 
 const METRES_PER_DEG_LAT = 111_132;
 const METRES_PER_DEG_LON_AT_EQUATOR = 111_320;
 
 const metresPerDegLon = (lat: number): number =>
   METRES_PER_DEG_LON_AT_EQUATOR * Math.cos((lat * Math.PI) / 180);
+
+// Move a point by metres north (negative = south) and east (negative = west).
+export function shiftCenter(center: Center, northMetres: number, eastMetres: number): Center {
+  return {
+    lat: center.lat + northMetres / METRES_PER_DEG_LAT,
+    lon: center.lon + eastMetres / metresPerDegLon(center.lat),
+  };
+}
 
 // Area of a small lat/lon polygon (shoelace on a local flat projection), in km2.
 export function polygonAreaKm2(polygon: LatLon[]): number {
@@ -61,9 +72,64 @@ export function buildRequest(center: Center, sizeMetres: number): ContextRequest
   }
   return {
     polygon,
-    settings: { geometry: ['buildings', 'surface', 'barriers'], upAxis: 'Y', crs: 'local' },
+    // hybrid = detected canopy with measured heights; the docs recommend it over the default.
+    settings: { geometry: [...GEOMETRY], upAxis: 'Y', crs: 'local', treeSource: 'hybrid' },
     export: { format: 'glb' },
   };
+}
+
+// The GLB export leaves instances (trees, benches, bus stops, hydrants, picnic tables) out, so
+// they come from a second request: same polygon, JSON points back.
+export interface InstancesRequest {
+  polygon: LatLon[];
+  settings: { geometry: ['instances']; upAxis: 'Y' | 'Z'; crs: 'local'; treeSource: 'hybrid' };
+}
+
+export function buildInstancesRequest(center: Center, sizeMetres: number): InstancesRequest {
+  const { polygon, settings } = buildRequest(center, sizeMetres);
+  return {
+    polygon,
+    settings: { geometry: ['instances'], upAxis: settings.upAxis, crs: settings.crs, treeSource: settings.treeSource },
+  };
+}
+
+// A street-level point in the same local metres as the GLB (y is up). `type` is Cityweft's
+// instanceType: tree, bench, busStop, picnicTable, hydrant, sculpture, ...
+export interface Instance {
+  type: string;
+  x: number;
+  y: number;
+  z: number;
+  height: number; // metres
+  rotation: number; // radians about the up axis
+}
+
+const DEFAULT_HEIGHT: Record<string, number> = { tree: 10 };
+const FALLBACK_HEIGHT = 1; // metres, for any other type when Cityweft gives none
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+// Pulls instance points out of a /v1/context JSON response. Anything unexpected gives fewer points.
+export function extractInstances(response: unknown): Instance[] {
+  const geometry = (response as { geometry?: unknown } | undefined)?.geometry;
+  if (!Array.isArray(geometry)) return [];
+  const out: Instance[] = [];
+  for (const group of geometry) {
+    if (group?.type !== 'instances' || !Array.isArray(group.nodes)) continue;
+    for (const n of group.nodes) {
+      const type = n?.instanceType;
+      if (typeof type !== 'string' || !finite(n.x) || !finite(n.y) || !finite(n.z)) continue;
+      out.push({
+        type,
+        x: n.x,
+        y: n.y,
+        z: n.z,
+        height: finite(n.height) ? n.height : (DEFAULT_HEIGHT[type] ?? FALLBACK_HEIGHT),
+        rotation: finite(n.rotation) ? n.rotation : 0,
+      });
+    }
+  }
+  return out;
 }
 
 // What to tell the person at the terminal. Never includes the key.
