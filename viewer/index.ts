@@ -1,29 +1,40 @@
-// Viewer: draws the building as an isometric maze-arcade cutaway and animates every token. Owner: P2.
-// The look is design/look.md: double-line walls, pellet trails the token eats, a disc token with
-// its glyph, a shake and a blinking red X on fail, LEVEL COMPLETE and a wall flash on win.
+// Viewer: draws the building as an isometric cutaway and animates every token. Owner: P2.
+// The look is design/look.md (Liquid Glass v2): a pale building, route dots the token travels
+// over, a tile token with its glyph, a shake and a blinking red X on fail, LEVEL COMPLETE and an
+// outline blink on win.
 import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Building, SolverResult } from '../contract/types.ts';
 import {
-  BACKGROUND, DISCIPLINE_STYLE, FAIL, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET, GRID, MOTION, PATH,
-  SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
+  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
+  GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
 } from '../design/tokens.ts';
-import { failText, labelSides } from './labels.ts';
-import { cumulativeLengths, easeInOut, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, type Vec3 } from './layout.ts';
+import { failText, labelSides, labelWidth } from './labels.ts';
+import {
+  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, type Vec3,
+} from './layout.ts';
 
 export interface Viewer {
   show(building: Building, results: SolverResult[]): void;
 }
 
-const WALL_GAP = 0.15; // metres between the bright outer and dim inner line of a wall
-const FILL_OPACITY = 0.25;
+export interface ViewerOptions {
+  // Pixels on the right of the container covered by a floating panel. The model and LEVEL COMPLETE
+  // centre in the space left of it. Default 0.
+  insetRight?: number;
+}
+
+const FILL_OPACITY = 0.5; // pale frosted wall faces
 const FLAT_HEIGHT: Partial<Record<string, number>> = { street: 0.15, truck: 2.6 }; // not storey boxes
 const VIEW_MARGIN = 1.2;
 const CAMERA_DIR = new THREE.Vector3(1, 1, 1).normalize(); // fixed isometric angle
 const SHAKE_METRES = 0.25;
 // The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
 const X_LIFT = -48; // pixels
+const LABEL_GAP = 36; // pixels from the X centre to its label
+const LABEL_HEIGHT = 56; // pixels, about two lines of label
 const UP = new THREE.Vector3(0, 1, 0);
+const WIN_FLASH_OFF = '#ffffff'; // the outline blinks ACCENT <-> white on LEVEL COMPLETE (look.md)
 
 interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
 interface TrailPiece { from: number; len: number; core: THREE.Mesh; glow: THREE.Mesh }
@@ -38,17 +49,19 @@ interface Run {
   pellets: Pellet[];
   trail: TrailPiece[];
   token: THREE.Group;
-  x: { obj: CSS2DObject; at: THREE.Vector3 } | null;
+  x: { obj: CSS2DObject; at: THREE.Vector3; width: number } | null;
   reachedAt: number | null; // token-local seconds when it reached its stop
 }
 
-export function createViewer(container: HTMLElement): Viewer {
+export function createViewer(container: HTMLElement, options: ViewerOptions = {}): Viewer {
+  const insetRight = options.insetRight ?? 0;
   injectStyles();
   if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Transparent canvas, so the page backdrop (with its colour washes) shows behind the model.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setClearColor(BACKGROUND);
+  renderer.setClearColor(BACKGROUND, 0);
   renderer.autoClear = false;
   renderer.domElement.style.display = 'block';
   container.appendChild(renderer.domElement);
@@ -58,6 +71,7 @@ export function createViewer(container: HTMLElement): Viewer {
   const banner = document.createElement('div');
   banner.className = 'ep-banner';
   banner.textContent = 'LEVEL COMPLETE';
+  banner.style.right = `${insetRight}px`;
   container.appendChild(banner);
 
   const world = new THREE.Scene(); // building and grid
@@ -65,7 +79,6 @@ export function createViewer(container: HTMLElement): Viewer {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
-  const innerMat = new THREE.LineBasicMaterial({ color: WALL_INNER });
   const fillMat = new THREE.MeshBasicMaterial({ color: WALL_INNER, transparent: true, opacity: FILL_OPACITY, depthWrite: false });
   const dimMat = new THREE.MeshBasicMaterial({ color: TEXT_MUTED, transparent: true, opacity: 0.3 });
   const geo = {
@@ -75,7 +88,7 @@ export function createViewer(container: HTMLElement): Viewer {
     trailGlow: new THREE.CylinderGeometry(PATH.trailWidth * 1.5, PATH.trailWidth * 1.5, 1, 8).translate(0, 0.5, 0),
     tokenGlow: new THREE.SphereGeometry(PATH.tokenRadius * 2, 20, 14),
   };
-  const shared = new Set<object>([wallMat, innerMat, fillMat, dimMat, ...Object.values(geo)]);
+  const shared = new Set<object>([wallMat, fillMat, dimMat, ...Object.values(geo)]);
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const bounds = new THREE.Box3();
@@ -95,14 +108,8 @@ export function createViewer(container: HTMLElement): Viewer {
       const outer = new THREE.BoxGeometry(w, h, d);
       const fill = new THREE.Mesh(outer, fillMat);
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(outer), wallMat);
-      const inner = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.BoxGeometry(
-          Math.max(w - 2 * WALL_GAP, 0.01), Math.max(h - 2 * WALL_GAP, 0.01), Math.max(d - 2 * WALL_GAP, 0.01),
-        )),
-        innerMat,
-      );
-      for (const o of [fill, edges, inner]) o.position.set(box.center[0], y, box.center[2]);
-      world.add(fill, edges, inner);
+      for (const o of [fill, edges]) o.position.set(box.center[0], y, box.center[2]);
+      world.add(fill, edges);
     }
     bounds.setFromObject(world);
     const centre = bounds.getCenter(new THREE.Vector3());
@@ -128,6 +135,7 @@ export function createViewer(container: HTMLElement): Viewer {
       const glow = new THREE.MeshBasicMaterial({
         color, transparent: true, opacity: PATH.glow * 0.35, blending: THREE.AdditiveBlending, depthWrite: false,
       });
+      glow.visible = PATH.glow > 0;
 
       const pellets: Pellet[] = [];
       for (let d = PATH.pelletSpacing; d < total - 1e-6; d += PATH.pelletSpacing) {
@@ -159,7 +167,7 @@ export function createViewer(container: HTMLElement): Viewer {
       tokenGroup.add(new THREE.Mesh(geo.tokenGlow, glow));
       const disc = document.createElement('div');
       disc.className = 'ep-token';
-      disc.innerHTML = `<i style="--c:${style.color}" title="${style.label}">${style.glyph}</i>`;
+      disc.innerHTML = `<i style="--c:${style.color};--ink:${style.glyphInk}" title="${style.label}">${style.glyph}</i>`;
       tokenGroup.add(new CSS2DObject(disc));
       tokenGroup.position.set(...(route.points[0] ?? [0, 0, 0]));
       fx.add(tokenGroup);
@@ -176,7 +184,7 @@ export function createViewer(container: HTMLElement): Viewer {
         obj.position.set(...route.blocked);
         obj.visible = false;
         fx.add(obj);
-        x = { obj, at: new THREE.Vector3(...route.blocked) };
+        x = { obj, at: new THREE.Vector3(...route.blocked), width: labelWidth(words) };
       }
 
       for (const p of route.points) bounds.expandByPoint(new THREE.Vector3(...p));
@@ -206,22 +214,16 @@ export function createViewer(container: HTMLElement): Viewer {
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
-    const aspect = w / h;
-    const half = Math.max(hy, hx / aspect) * VIEW_MARGIN;
-    camera.left = -half * aspect;
-    camera.right = half * aspect;
-    camera.top = half;
-    camera.bottom = -half;
+    Object.assign(camera, frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN }));
     camera.updateProjectionMatrix();
 
     const xs = runs.flatMap((r) => (r.x ? [r.x] : []));
-    const sides = labelSides(xs.map(({ at }) => {
+    const sides = labelSides(xs.map(({ at, width }) => {
       const v = at.clone().project(camera);
-      return [(v.x + 1) * w / 2, (1 - v.y) * h / 2];
-    }));
+      return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width };
+    }), { height: LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8 });
     xs.forEach(({ obj }, i) => {
-      obj.element.classList.toggle('side-left', sides[i] === 'left');
-      obj.element.classList.toggle('side-right', sides[i] !== 'left');
+      for (const side of ['left', 'right', 'above']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
     });
   }
 
@@ -268,7 +270,7 @@ export function createViewer(container: HTMLElement): Viewer {
       const since = t - allDone;
       const period = 1 / MOTION.winFlashHz;
       const flashing = !reduced && since < period * MOTION.winFlashCount;
-      wallMat.color.set(flashing && since % period < period / 2 ? TEXT : WALL);
+      wallMat.color.set(flashing ? (since % period < period / 2 ? ACCENT : WIN_FLASH_OFF) : WALL);
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
@@ -323,22 +325,26 @@ function injectStyles(): void {
   style.textContent = `
 .ep-labels { position: absolute; inset: 0; pointer-events: none; }
 .ep-token, .ep-fail { width: 0; height: 0; }
-.ep-token i { position: absolute; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%;
-  display: grid; place-items: center; background: var(--c); color: ${BACKGROUND}; font: 16px ${FONT_DISPLAY};
-  font-style: normal; box-shadow: 0 0 14px var(--c); }
+/* CSS2DRenderer stacks labels by distance; a red X and its label must never hide behind a token. */
+.ep-fail { z-index: 100000 !important; }
+.ep-token i { position: absolute; transform: translate(-50%, -50%); width: 38px; height: 38px;
+  display: grid; place-items: center; background: var(--c); color: var(--ink); font: 700 18px ${FONT_BODY};
+  font-style: normal; border-radius: 10px; box-shadow: 0 0 0 2px #ffffff, 0 4px 10px rgba(15, 23, 42, 0.18); }
 .ep-x { position: absolute; top: ${X_LIFT}px; width: 0; height: 0; animation: ep-pop 0.25s ease-out,
   ep-blink ${1 / MOTION.failBlinkHz}s steps(1, end) 0.25s ${MOTION.failBlinkCount}; }
 .ep-x::before, .ep-x::after { content: ''; position: absolute; width: 50px; height: 9px; border-radius: 5px;
-  background: ${FAIL}; box-shadow: 0 0 12px ${FAIL}; transform: translate(-50%, -50%) rotate(45deg); }
+  background: ${FAIL}; box-shadow: 0 0 0 2px #ffffff; transform: translate(-50%, -50%) rotate(45deg); }
 .ep-x::after { transform: translate(-50%, -50%) rotate(-45deg); }
-.ep-card { position: absolute; top: ${X_LIFT}px; transform: translateY(-50%); white-space: nowrap; background: ${BACKGROUND};
-  border: 2px solid ${FAIL}; border-radius: 4px; padding: 7px 10px; animation: ep-fade 0.25s ease-out; }
-.side-right .ep-card { left: 36px; }
-.side-left .ep-card { right: 36px; }
-.ep-card b { display: block; font: 12px/1.3 ${FONT_DISPLAY}; color: ${FAIL}; white-space: pre; }
+.ep-card { position: absolute; top: ${X_LIFT}px; transform: translateY(-50%); white-space: nowrap; background: ${GLASS_STRONG};
+  border: 2px solid ${FAIL}; border-radius: 10px; padding: 8px 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+  animation: ep-fade 0.25s ease-out; }
+.side-right .ep-card { left: ${LABEL_GAP}px; }
+.side-left .ep-card { right: ${LABEL_GAP}px; }
+.side-above .ep-card { left: 0; top: ${X_LIFT - 32}px; transform: translate(-50%, -100%); }
+.ep-card b { display: block; font: 700 14px/1.3 ${FONT_BODY}; letter-spacing: 1px; color: ${FAIL_INK}; white-space: pre; }
 .ep-card span { display: block; margin-top: 4px; font: 600 15px/1.3 ${FONT_BODY}; color: ${TEXT}; }
-.ep-banner { position: absolute; left: 0; right: 0; top: 50%; text-align: center; pointer-events: none;
-  font: clamp(24px, 5vw, 64px) ${FONT_DISPLAY}; color: ${SCORE}; text-shadow: 0 0 18px ${SCORE};
+.ep-banner { position: absolute; left: 0; right: 0; top: 50%; text-align: center; pointer-events: none; z-index: 100001;
+  font: clamp(24px, 5vw, 64px) ${FONT_DISPLAY}; color: ${SCORE};
   opacity: 0; transform: translateY(-50%) scale(0.6); transition: opacity 0.3s, transform 0.3s, top 0.4s, font-size 0.4s; }
 .ep-banner.on { opacity: 1; transform: translateY(-50%) scale(1); }
 .ep-banner.on.small { top: 32px; font-size: 20px; }
