@@ -1,50 +1,49 @@
-// App entry: the 12-sheet flow from design/flow.md over the full-screen model. Glass HUD on top,
-// one context card on the right, the action bar at the bottom, pop-ups for inputs. Owner: P3.
-// The logic lives in flow.ts, answers.ts, state.ts and scoreboard.ts (tested in Node).
+// App entry, design B (daylight model, spatial glass): place objects from the dock, press
+// Escape!, read PASS or FAIL in the summary pill, and apply a fix from the sheet or the edit box.
+// Every fix re-solves the placed objects. Owner: P3. The logic lives in shell.ts, state.ts,
+// answers.ts, flow.ts and scoreboard.ts (tested in Node); this file only draws and wires it.
 import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
-import type { Building, Edit, ExpectedFile, Id, Reason } from '../contract/types.ts';
-import { MOTION, VIEWS } from '../design/tokens.ts';
+import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
+import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
 import type { Answer } from './answers.ts';
-import {
-  afterRun, badgeFor, escapedCount, exitsFor, fixesFor, newlyBlocked, nextBlocked, objectFacts, viewFor,
-} from './flow.ts';
-import type { Screen } from './flow.ts';
-import { REASON_TEXT, placeName } from './scoreboard.ts';
-import { applyEdit, demoButtons, editLabel, initialState, run } from './state.ts';
+import { fixesFor } from './flow.ts';
+import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
+import { PHASE_WORD, countText, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
+import type { ParseOutcome, Phase, PickItem } from './shell.ts';
+import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
 const building = buildingJson as Building;
 const expected = expectedJson as ExpectedFile;
 const buttons = demoButtons(building, expected);
-const tokens = building.tokens;
+const items = pickerItems(building);
+const placeable = items.filter((i) => i.token !== null);
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Jev (P1's AI fixer) is not connected yet, so fixes come from the preset list (sheet 11).
-const JEV_CONNECTED = false;
-
-interface Flow {
-  screen: Screen;
-  selected: Id | null;
+interface State {
+  phase: Phase;
+  placed: Id[]; // in building order
   game: GameState; // applied edits
-  results: Answer[] | null; // last ESCAPE! run; null = not run since the start or a reset
-  conflict: Answer[]; // objects the last run newly blocked
-  fix: Edit | null; // the proposed fix (sheets 07 and 09)
-  back: Screen; // where Cancel goes from a pop-up
-  showDialog: boolean; // the level-complete dialog; View building hides it
+  results: Answer[] | null; // last Escape! run, placed objects only
+  note: string; // live-region line: "Re-solved after ..."
+  editOpen: boolean;
+  jev: { text: string; out: ParseOutcome } | null; // a typed edit that was not clear enough
+  scoreOpen: boolean;
 }
 
-let flow: Flow = start();
-
-function start(): Flow {
-  return { screen: 'start', selected: null, game: initialState(), results: null, conflict: [], fix: null, back: 'start', showDialog: true };
-}
+const S: State = {
+  phase: 'empty', placed: [], game: initialState(), results: null, note: '', editOpen: false, jev: null, scoreOpen: false,
+};
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
-const viewerBox = $('viewer');
-const viewer = createViewer(viewerBox);
+// On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
+const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
+const viewer = createViewer($('viewer'), { insetRight: innerWidth > 700 ? SIDE_PANEL : 0 });
+let runTimer = 0;
 
 // ---------- Small DOM helper (textContent only, never innerHTML) ----------
 
@@ -56,370 +55,338 @@ function h(tag: string, attrs: Record<string, string> = {}, ...children: Child[]
   return el;
 }
 
-function btn(label: string, cls: string, onClick: () => void, extra: Record<string, string> = {}): HTMLButtonElement {
-  const b = h('button', { type: 'button', class: `btn ${cls}`, ...extra }, label) as HTMLButtonElement;
+function btn(label: Child | Child[], cls: string, onClick: () => void, attrs: Record<string, string> = {}): HTMLButtonElement {
+  const b = h('button', { type: 'button', class: cls, ...attrs }, ...(Array.isArray(label) ? label : [label])) as HTMLButtonElement;
   b.addEventListener('click', onClick);
   return b;
 }
 
-function tile(id: Id): HTMLElement {
-  const t = tokens.find((x) => x.id === id)!;
-  const f = objectFacts(building, t);
-  const i = h('i', { style: `color:${f.glyphInk}` }, f.glyph);
-  return h('span', { class: 'tile', style: `--c:${f.color}`, 'aria-hidden': 'true' }, i);
+const itemOf = (id: Id): PickItem => placeable.find((i) => i.token === id)!;
+function dot(item: PickItem, small = false, off = false): HTMLElement {
+  return h('span', {
+    class: `dot${small ? ' sm' : ''}${off ? ' off' : ''}`, 'aria-hidden': 'true',
+    style: off ? '' : `--c:${item.color};--gi:${item.glyphInk}`,
+  }, item.glyph);
 }
+const word = (r: Answer | null | undefined, running = false): HTMLElement => r
+  ? h('b', { class: `word ${r.status}` }, r.status === 'pass' ? 'PASS' : 'FAIL')
+  : h('span', { class: 'word ready' }, running ? '...' : 'Ready');
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- Solving ----------
 
-function solveNow(edits: readonly Edit[]): { edited: Building; results: Answer[] } {
-  const { building: edited, results } = run(building, { edits: [...edits] });
-  return { edited, results: answers(building, edited, edits, results, expected, IMPLEMENTED_RULES) };
+function edited(): Building {
+  return run(building, S.game).building;
 }
 
-let bannerTimer = 0;
+function solvePlaced(): { edited: Building; results: Answer[] } {
+  const { building: b, results } = run(building, S.game);
+  const all = answers(building, b, S.game.edits, results, expected, IMPLEMENTED_RULES);
+  return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
+}
+
+// Show the building as it is now, with no run on it (after a place, clear or fix with nothing placed).
+function idle(): void {
+  window.clearTimeout(runTimer);
+  viewer.show(edited(), []);
+}
 
 function escape(): void {
-  const { edited, results } = solveNow(flow.game.edits);
-  const conflict = newlyBlocked(flow.results, results) as Answer[];
-  viewer.show(edited, results);
-  const screen = afterRun(results, flow.selected);
-  flow = { ...flow, results, conflict, fix: null, screen, showDialog: true };
-  if (screen === 'result' && conflict.length > 0) {
-    window.clearTimeout(bannerTimer);
-    showBanner(true);
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!reduced) bannerTimer = window.setTimeout(() => showBanner(false), MOTION.bannerHoldSeconds * 1000);
+  if (S.placed.length === 0 || S.phase === 'running') return;
+  const { edited: b, results } = solvePlaced();
+  S.results = results;
+  S.scoreOpen = false;
+  viewer.show(b, results);
+  window.clearTimeout(runTimer);
+  if (REDUCE) {
+    S.phase = phaseAfterRun(results);
   } else {
-    showBanner(false);
+    S.phase = 'running';
+    const ms = runSeconds(results.length, MOTION.secondsPerToken, MOTION.staggerSeconds) * 1000;
+    runTimer = window.setTimeout(() => {
+      S.phase = phaseAfterRun(results);
+      render();
+    }, ms);
   }
   render();
 }
 
-function go(screen: Screen, patch: Partial<Flow> = {}): void {
-  flow = { ...flow, ...patch, screen };
-  if (screen !== 'result') showBanner(false);
+// ---------- Actions ----------
+
+function place(id: Id): void {
+  if (S.phase === 'running') return;
+  S.placed = togglePlaced(building, S.placed, id);
+  S.results = null;
+  S.note = '';
+  S.phase = S.placed.length ? 'placed' : 'empty';
+  idle();
   render();
 }
 
-function select(id: Id): void {
-  flow = { ...flow, selected: id };
-  render();
-}
-
-function openReset(): void {
-  if (flow.game.edits.length === 0) return replay();
-  go('reset', { back: flow.screen });
-}
-
-function replay(): void {
-  flow = start();
-  viewer.show(building, []);
-  showBanner(false);
-  render();
-}
-
-// Cancel on the fix pop-up: back to the selected object's last result.
-function backFromFix(): void {
-  go(flow.results ? afterRun(flow.results, flow.selected) : 'start', { fix: null });
-}
-
-function apply(fix: Edit): void {
-  flow = { ...flow, game: applyEdit(flow.game, fix) };
-  escape();
-}
-
-// ---------- Words ----------
-
-const HEADLINE: Record<Reason, string> = {
-  too_narrow: 'Insufficient clearance',
-  too_low: 'Not enough headroom',
-  cannot_turn: 'Cannot make the turn',
-  step: 'Step in the way',
-  no_support: 'No support',
-  smoke_first: 'Smoke got there first',
-  uphill: 'Runs uphill',
-  crosses_beam: 'Crosses a beam',
-  no_supply: 'No supply',
-  no_route: 'No route out',
-};
-
-const name = (id: Id | null): string => {
-  const t = tokens.find((x) => x.id === id);
-  return t ? objectFacts(building, t).name : '';
-};
-const title = (id: Id | null): string => {
-  const n = name(id).toLowerCase();
-  return n.charAt(0).toUpperCase() + n.slice(1);
-};
-const m = (v: number): string => `${Number(v.toFixed(2))} m`;
-
-function sentence(r: Answer, edited: Building): string {
-  const t = tokens.find((x) => x.id === r.token)!;
-  const place = r.blocked_at ? placeName(edited, r.blocked_at) : '';
-  const lower = place.charAt(0).toLowerCase() + place.slice(1);
-  if (r.reason === 'too_narrow' && r.needed !== null && r.available !== null) {
-    return `The ${name(t.id).toLowerCase()} is ${m(r.needed)} wide. The ${lower} is ${m(r.available)}.`;
+function applyFix(edit: Edit, label: string): void {
+  if (S.phase === 'running') return;
+  S.game = applyEdit(S.game, edit);
+  S.editOpen = false;
+  S.jev = null;
+  ($('editInput') as HTMLInputElement).value = '';
+  S.note = `Re-solved after ${label}`;
+  if (S.placed.length) escape();
+  else {
+    idle();
+    render();
   }
-  if (r.reason === 'no_support') return `The load at ${lower} has no path to the ground.`;
-  if (r.reason === 'step') return `There is a ${r.available !== null ? `${m(r.available)} ` : ''}step at the ${lower}.`;
-  if (r.reason === 'cannot_turn') return `The ${name(t.id).toLowerCase()} cannot turn at the ${lower}.`;
-  const why = r.reason ? REASON_TEXT[r.reason] : 'blocked';
-  return place ? `Blocked at the ${lower}: ${why}.` : `${title(t.id)}: ${why}. The solver has no rule for it yet.`;
+}
+
+function reset(): void {
+  if (S.phase === 'running' || S.game.edits.length === 0) return;
+  S.game = initialState();
+  S.note = 'Re-solved after Reset (back to building.json)';
+  if (S.results && S.placed.length) escape();
+  else {
+    idle();
+    render();
+  }
+}
+
+function clear(): void {
+  if (S.phase === 'running') return;
+  S.placed = [];
+  S.results = null;
+  S.note = '';
+  S.phase = 'empty';
+  idle();
+  render();
+}
+
+function openEdit(): void {
+  if (S.phase === 'running') return;
+  S.editOpen = true;
+  render();
+  $('editInput').focus();
+}
+
+function closeEdit(): void {
+  S.editOpen = false;
+  S.jev = null;
+  render();
+}
+
+function submitText(text: string): void {
+  // Jev is not connected yet, so typed edits go through plan C (shell.ts parseEdit), which returns
+  // the same JevParse shape. A sure parse applies at once; anything else asks "Did you mean".
+  const out = parseEdit(text, buttons);
+  if (out.edit) applyFix(out.edit, editLabel(building, out.edit));
+  else {
+    S.jev = { text, out };
+    render();
+  }
 }
 
 // ---------- Render ----------
 
 function render(): void {
-  const { screen } = flow;
-  const conflict = flow.conflict.length > 0;
-  document.body.dataset.screen = screen;
-  viewerBox.dataset.view = viewFor(screen);
-  renderHud(conflict);
-  renderBar();
-  renderCard();
-  renderDialog();
-  const hint = $('hint');
-  hint.hidden = screen !== 'start';
-  const fromData = flow.results?.some((r) => r.source === 'expected') ?? false;
-  $('source').hidden = !fromData;
+  const running = S.phase === 'running';
+  const done = S.phase === 'result' || S.phase === 'complete';
+  const resOf = (id: Id): Answer | null => (done && S.results ? S.results.find((r) => r.token === id) ?? null : null);
+
+  // Picker chips
+  for (const b of $('picker').querySelectorAll<HTMLButtonElement>('.chip')) {
+    b.setAttribute('aria-pressed', String(S.placed.includes(b.dataset.token!)));
+    b.disabled = running;
+  }
+
+  // Dock tools
+  const esc = $('btnEscape') as HTMLButtonElement;
+  esc.disabled = running || S.placed.length === 0;
+  if (S.placed.length) esc.removeAttribute('aria-describedby');
+  else esc.setAttribute('aria-describedby', 'escHint');
+  const n = S.game.edits.length;
+  const rb = $('btnReset') as HTMLButtonElement;
+  rb.disabled = running || n === 0;
+  rb.replaceChildren(n ? `Reset (${n}) ` : 'Reset ', h('kbd', {}, 'R'));
+  rb.setAttribute('aria-label', n ? `Reset, ${plural(n, 'edit')} applied` : 'Reset');
+  ($('btnClear') as HTMLButtonElement).disabled = running || S.placed.length === 0;
+  ($('btnEdit') as HTMLButtonElement).disabled = running;
+  const dock = $('dock');
+  const wasSlim = dock.classList.contains('slim');
+  dock.classList.toggle('slim', running);
+  if (wasSlim !== running && !REDUCE) {
+    dock.classList.remove('pop');
+    void dock.offsetWidth;
+    dock.classList.add('pop');
+  }
+  $('slimText').textContent = `Running - ${plural(S.placed.length, 'object')} escaping`;
+
+  // Summary pill
+  const sm = $('summary') as HTMLButtonElement;
+  const line = h('span', { class: 'sline' }, h('span', { class: 'phase' }, PHASE_WORD[S.phase]),
+    h('span', { class: 'vbar' }), h('span', { class: 'count num' }, countText(S.phase, S.placed.length, S.results)));
+  const chips = S.placed.length
+    ? [h('span', { class: 'schips' }, ...S.placed.map((id) => h('span', { class: 'schip' }, dot(itemOf(id), true), word(resOf(id), running)))),
+      h('span', { class: 'caret', 'aria-hidden': 'true' })]
+    : [];
+  sm.replaceChildren(line, ...chips);
+  sm.disabled = S.phase === 'empty';
+  sm.setAttribute('aria-expanded', String(S.scoreOpen));
+  sm.setAttribute('aria-label', `Scoreboard: ${sm.textContent?.replace(/\s+/g, ' ').trim() ?? ''}`);
+
+  // Scoreboard rows
+  const b = edited();
+  const sp = $('scorePanel');
+  sp.classList.toggle('open', S.scoreOpen && S.placed.length > 0);
+  document.body.classList.toggle('scoring', S.scoreOpen);
+  sp.replaceChildren(...S.placed.map((id) => {
+    const r = resOf(id);
+    const token = building.tokens.find((t) => t.id === id)!;
+    const det = !r ? `Starts in ${placeName(b, token.start)}`
+      : r.status === 'pass' ? `Out via ${r.path.map((p) => placeName(b, p)).join(', ')}`
+      : failLine(r, b);
+    return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, itemOf(id).label), word(r), h('span', { class: 'det num' }, det));
+  }));
+
+  // Sample label: where the numbers come from
+  const fromData = S.results?.some((r) => r.source === 'expected') ?? false;
+  $('sample').replaceChildren(h('b', {}, '432 Park Avenue slice'), ' - self-made sample building',
+    fromData ? h('span', { class: 'more' }, '. Results come from expected.json until the solver has these rules.') : '');
+
+  // Live note and LEVEL COMPLETE
+  $('note').textContent = S.note;
+  $('banner').classList.toggle('on', S.phase === 'complete');
+  $('bannerSub').textContent = `${S.placed.length} of ${S.placed.length} out with ${plural(n, 'edit')}`;
+
+  renderSheet(b);
+  renderEdit();
 }
 
-function renderHud(conflict: boolean): void {
-  const sel = tokens.find((t) => t.id === flow.selected);
-  $('where').textContent = sel ? objectFacts(building, sel).where : '432 Park Avenue';
-  $('pips').replaceChildren(
-    ...tokens.map((t) => {
-      const r = flow.results?.find((x) => x.token === t.id);
-      const cls = r ? (r.status === 'pass' ? 'pip ok' : 'pip bad') : 'pip';
-      return h('span', { class: cls, title: `${title(t.id)}: ${r ? (r.status === 'pass' ? 'escaped' : 'blocked') : 'not run'}` });
+function failLine(r: Answer, b: Building): string {
+  const why = r.reason ? REASON_TEXT[r.reason] : 'blocked';
+  const at = r.blocked_at ? ` at ${placeName(b, r.blocked_at)}` : '';
+  const nums = numbersText(r);
+  return `${cap(why)}${at}${nums ? ` - ${nums}` : ''}`;
+}
+
+// One card per failed object: verdict, reason, numbers and the demo fixes that matter to it.
+function renderSheet(b: Building): void {
+  const sheet = $('sheet');
+  const fails = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
+  sheet.classList.toggle('on', fails.length > 0 && !S.editOpen);
+  if (fails.length === 0) return sheet.replaceChildren();
+  const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
+  sheet.replaceChildren(
+    h('div', { class: 'lbl' }, 'Fix it'),
+    ...cards,
+    h('div', { class: 'foot' },
+      btn('Type an edit', 'fixbtn ghost', openEdit),
+      btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' })),
+  );
+}
+
+function fixCard(r: Answer, b: Building): HTMLElement {
+  const it = itemOf(r.token);
+  const fixes = fixesFor(buttons, relevantTargets(building, expected, r.token), S.game.edits);
+  const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
+  const nums = numbersText(r);
+  return h('div', { class: 'fcard', role: 'group', 'aria-label': `${it.label} failed` },
+    h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, it.label), h('span', { class: 'word fail' }, 'FAIL')),
+    h('div', { class: 'rs' }, why, r.blocked_at && h('span', {}, ` at ${placeName(b, r.blocked_at)}`)),
+    nums && h('div', { class: 'nb num' }, cap(nums)),
+    fixes.length
+      ? h('div', { class: 'fx', role: 'group', 'aria-label': `Fix for ${it.label}` },
+        ...fixes.map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))))
+      : h('div', { class: 'none' }, 'No preset fix for this object. Try typing an edit.'),
+  );
+}
+
+function renderEdit(): void {
+  document.body.classList.toggle('editing', S.editOpen);
+  const ep = $('editPanel');
+  ep.classList.toggle('open', S.editOpen);
+  ep.classList.toggle('err', S.jev !== null);
+  $('quick').replaceChildren(
+    ...buttons.map((f) => {
+      const on = isApplied(S.game, f.edit);
+      return btn(on ? `Applied: ${f.label}` : f.label, 'fixbtn', () => applyFix(f.edit, f.label), { 'aria-pressed': String(on) });
     }),
+    btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
   );
-  $('count').textContent = `${escapedCount(flow.results)}/${tokens.length}`;
-  const badge = badgeFor(flow.screen, conflict);
-  const b = $('badge');
-  b.textContent = badge;
-  b.className = `b ${badge === 'BLOCKED' || badge === 'CONFLICT' ? 'b-bad' : badge === 'COMPLETE' || badge === 'ESCAPED' ? 'b-ok' : 'b-acc'}`;
-  const view = viewFor(flow.screen);
-  $('views').replaceChildren(
-    ...VIEWS.map((v) => h('span', { class: v === view ? 'on' : '', 'aria-current': v === view ? 'true' : 'false' },
-      v === 'xray' ? 'X-RAY' : v.toUpperCase())),
+  const jev = $('jev');
+  jev.classList.toggle('on', S.jev !== null);
+  if (!S.jev) return jev.replaceChildren();
+  const { text, out } = S.jev;
+  jev.replaceChildren(
+    h('div', { class: 'q' }, 'Not sure what you meant by ', h('b', {}, `"${text}"`), '.'),
+    h('div', { class: 'dym' }, 'Did you mean'),
+    h('div', { class: 'opts' },
+      ...out.suggestions.filter((f) => !isApplied(S.game, f.edit)).map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))),
+      btn('Cancel', 'fixbtn ghost', () => {
+        S.jev = null;
+        render();
+        $('editInput').focus();
+      })),
+    h('div', { class: 'src' }, 'Typed edits use the keyword parser until Jev is connected.'),
   );
 }
 
-function renderBar(): void {
-  const p = $('primary') as HTMLButtonElement;
-  const { screen } = flow;
-  p.className = 'esc';
-  p.disabled = false;
-  if (screen === 'start') {
-    p.textContent = 'CHOOSE OBJECT';
-    p.classList.add('pulse', 'small');
+// ---------- Build the dock once ----------
+
+for (const it of items) {
+  if (it.token) {
+    const id = it.token;
+    const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => place(id),
+      { 'data-token': id, 'aria-pressed': 'false', ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}) });
+    $('picker').append(b);
   } else {
-    p.textContent = 'ESCAPE!';
-    if (screen === 'ready') p.classList.add('pulse');
-    else if (screen === 'clash' || screen === 'result') p.classList.add('quiet');
-    else p.disabled = true;
+    const group = $('laterGroup');
+    if (!group.querySelector('.later')) group.append(h('span', { class: 'later' }, 'Later'));
+    group.append(btn([dot(it, false, true), h('span', {}, it.label)], 'chip', () => undefined,
+      { disabled: '', title: 'Later', 'aria-label': `${it.label} (later)` }));
   }
-  const reset = $('reset') as HTMLButtonElement;
-  reset.disabled = flow.game.edits.length === 0 && flow.results === null;
-}
-
-function card(alert = false, ...children: Child[]): void {
-  const c = $('card');
-  c.className = `card glass${alert ? ' alert' : ''}`;
-  c.hidden = false;
-  c.replaceChildren(...children.filter(Boolean) as (Node | string)[]);
-}
-
-function renderCard(): void {
-  const c = $('card');
-  const { screen, selected } = flow;
-  const sel = tokens.find((t) => t.id === selected);
-  const edited = run(building, flow.game).building;
-  if (screen === 'exits' && sel) {
-    const exits = exitsFor(building, sel);
-    return card(false,
-      h('div', { class: 'step' }, `STEP 2 OF 2 · ${name(sel.id)}`),
-      h('div', { class: 'ttl' }, 'Where can it leave?'),
-      ...exits.map((x) => h('div', { class: 'ocard on' }, h('span', { class: 'chk on' }, '✓'),
-        h('div', { class: 'who' }, h('b', {}, x.name.toUpperCase()), h('span', {}, x.note)))),
-      h('p', { class: 'p muted' }, 'Exits come from building.json. Choosing other exits needs more exits per object in the data.'),
-      h('div', { class: 'row2' }, btn('Back', 'glass', () => go('select')), btn('Confirm', 'fill', () => go('ready'))),
-    );
-  }
-  if (screen === 'ready' && sel) {
-    const exit = exitsFor(building, sel)[0];
-    return card(false,
-      h('div', { class: 'lbl' }, 'Ready to run'),
-      h('div', { class: 'ttl' }, `${title(sel.id)} → ${exit?.name ?? 'exit'}`),
-      h('p', { class: 'p muted' }, `The building is x-rayed so you can see the ${name(sel.id).toLowerCase()} and its exit.`),
-      h('div', { class: 'row2' }, btn('Change object', 'glass', () => go('select')), btn('Change exit', 'glass', () => go('exits'))),
-      h('div', { class: 'keys' }, 'E or Space: ESCAPE!'),
-    );
-  }
-  if (screen === 'clash' || (screen === 'result' && flow.conflict.length > 0)) {
-    const r = screen === 'clash' ? flow.results?.find((x) => x.token === selected) : flow.conflict[0];
-    if (r) return blockedCard(r, edited);
-  }
-  if (screen === 'result' && sel) {
-    const next = flow.results ? nextBlocked(flow.results) : null;
-    return card(false,
-      h('div', { class: 'lbl' }, `${title(sel.id)} · escaped`),
-      h('div', { class: 'ttl' }, `${title(sel.id)} is out`),
-      h('p', { class: 'p muted' }, `${escapedCount(flow.results)} of ${tokens.length} objects escape. Pick the next one.`),
-      btn('Choose next object', 'fill', () => go('select', { selected: next ?? selected })),
-    );
-  }
-  if (screen === 'proposal' && sel && flow.fix) return proposalCard(sel.id, flow.fix);
-  c.hidden = true;
-  c.replaceChildren();
-}
-
-function blockedCard(r: Answer, edited: Building): void {
-  const place = r.blocked_at ? placeName(edited, r.blocked_at) : 'No route';
-  // Needs and has only where they are sizes; a step reads better as one number in the sentence.
-  const nums = r.needed !== null && r.available !== null && (r.reason === 'too_narrow' || r.reason === 'too_low');
-  const offer = (): void => go('fallback', { selected: r.token });
-  card(true,
-    h('div', { class: 'lbl' }, `${title(r.token)} · ${place}`),
-    h('div', { class: 'ttl bad' }, r.reason ? HEADLINE[r.reason] : 'Blocked'),
-    h('p', { class: 'p' }, sentence(r, edited)),
-    nums && h('div', { class: 'nums' },
-      h('div', { class: 'num' }, h('span', { class: 'lbl' }, 'Needs'), h('b', {}, m(r.needed!))),
-      h('div', { class: 'num bad' }, h('span', { class: 'lbl' }, 'Has'), h('b', {}, m(r.available!)))),
-    JEV_CONNECTED ? btn('Ask Jev for a fix', 'tint', offer) : btn('Pick a fix', 'tint', offer),
-    !JEV_CONNECTED && h('div', { class: 'keys' }, 'Jev is not connected yet: preset fixes from the demo.'),
-  );
-}
-
-function proposalCard(token: Id, fix: Edit): void {
-  const now = solveNow(flow.game.edits).results;
-  const dry = solveNow([...flow.game.edits, fix]);
-  const breaks = newlyBlocked(now, dry.results) as Answer[];
-  card(false,
-    h('div', { class: 'lbl' }, `Fix for ${title(token)} · ${JEV_CONNECTED ? 'from Jev' : 'preset'}`),
-    h('div', { class: 'opt on' }, h('span', { class: 'dot' }), h('b', {}, editLabel(building, fix))),
-    h('p', { class: 'p muted' }, 'Apply it, then the run plays again with the change in place.'),
-    ...breaks.map((b) => h('div', { class: 'callout' },
-      'Also blocks ', h('b', {}, title(b.token)),
-      b.blocked_at ? ` at ${placeName(dry.edited, b.blocked_at)}` : '',
-      b.reason ? `: ${REASON_TEXT[b.reason]}.` : '.')),
-    h('div', { class: 'row2' }, btn('Cancel', 'glass', () => go(flow.back, { fix: null })), btn('Apply', 'fill', () => apply(fix))),
-  );
-}
-
-function dialog(cls: string, ...children: Child[]): void {
-  const d = $('dialog');
-  d.className = `dlg glass ${cls}`;
-  d.hidden = false;
-  $('scrim').hidden = false;
-  d.replaceChildren(...children.filter(Boolean) as (Node | string)[]);
-  const focus = d.querySelector<HTMLElement>('[data-focus]') ?? d.querySelector<HTMLElement>('button');
-  focus?.focus();
-}
-
-function renderDialog(): void {
-  const { screen, selected } = flow;
-  if (screen === 'select') {
-    return dialog('wide',
-      h('div', { class: 'step' }, 'STEP 1 OF 2'),
-      h('div', { class: 'ttl', id: 'dlg-title' }, 'Which object needs to get out?'),
-      ...tokens.map((t, i) => {
-        const f = objectFacts(building, t);
-        const r = flow.results?.find((x) => x.token === t.id);
-        const on = t.id === selected;
-        const card = h('button', { type: 'button', class: `ocard${on ? ' on' : ''}`, 'aria-pressed': String(on), ...(on ? { 'data-focus': '' } : {}) },
-          tile(t.id),
-          h('span', { class: 'who' }, h('b', {}, f.name), h('span', {}, f.line)),
-          r && h('span', { class: `b ${r.status === 'pass' ? 'b-ok' : 'b-bad'}` }, r.status === 'pass' ? '✓ ESCAPED' : '✕ BLOCKED'),
-          h('kbd', {}, String(i + 1)),
-        );
-        card.addEventListener('click', () => select(t.id));
-        card.addEventListener('dblclick', () => go('exits', { selected: t.id }));
-        return card;
-      }),
-      h('div', { class: 'row2' },
-        btn('Cancel', 'glass', () => go(flow.results ? 'result' : 'start')),
-        btn('Next', `fill${selected ? '' : ' off'}`, () => selected && go('exits'))),
-    );
-  }
-  if (screen === 'fallback' && selected) {
-    const fixes = fixesFor(buttons, relevantTargets(building, expected, selected), flow.game.edits);
-    return dialog('mid',
-      h('div', { class: 'callout info' }, `${JEV_CONNECTED ? 'Jev is unavailable.' : 'Jev is not connected yet.'} Pick a fix for the ${name(selected).toLowerCase()}.`),
-      ...fixes.map((b) => {
-        const o = h('button', { type: 'button', class: 'ocard' }, h('span', { class: 'chk' }),
-          h('span', { class: 'who' }, h('b', {}, b.label.toUpperCase()), h('span', {}, 'From the full-demo case in expected.json')));
-        o.addEventListener('click', () => go('proposal', { fix: b.edit, back: 'fallback' }));
-        return o;
-      }),
-      fixes.length === 0 && h('p', { class: 'p' }, 'No preset fix for this object.'),
-      h('p', { class: 'p muted' }, 'Only fixes for the selected object are listed.'),
-      h('div', { class: 'row2' }, btn('Cancel', 'glass', backFromFix, { 'data-focus': '' })),
-    );
-  }
-  if (screen === 'complete' && flow.showDialog) {
-    return dialog('wide center',
-      h('div', { class: 'win' }, 'LEVEL', h('br'), 'COMPLETE'),
-      h('div', { class: 'score' }, `${tokens.length}/${tokens.length} escaped · ${flow.game.edits.length} edit${flow.game.edits.length === 1 ? '' : 's'}`),
-      h('p', { class: 'p muted' }, flow.game.edits.map((e) => editLabel(building, e)).join(' · ') || 'No edits needed'),
-      h('div', { class: 'row2 narrow' },
-        btn('View building', 'glass', () => { flow = { ...flow, showDialog: false }; render(); }),
-        btn('Replay', 'fill', replay, { 'data-focus': '' })),
-    );
-  }
-  if (screen === 'reset') {
-    const n = flow.game.edits.length;
-    return dialog('small',
-      h('div', { class: 'ttl' }, 'Reset the building?'),
-      h('p', { class: 'p' }, `This removes ${n} edit${n === 1 ? '' : 's'} and puts the original building back. Results are cleared.`),
-      h('div', { class: 'row2' }, btn('Keep editing', 'glass', () => go(flow.back), { 'data-focus': '' }), btn('Reset', 'danger', replay)),
-      h('div', { class: 'keys' }, 'Esc keeps editing'),
-    );
-  }
-  $('dialog').hidden = true;
-  $('scrim').hidden = true;
-}
-
-function showBanner(on: boolean): void {
-  const b = $('banner');
-  if (!on) {
-    b.hidden = true;
-    return;
-  }
-  const r = flow.conflict[0];
-  b.replaceChildren(h('span', { class: 'pix bad' }, 'CONFLICT!'),
-    h('span', {}, `${title(flow.selected)} escaped. `, h('b', {}, title(r?.token ?? null)), ' is now blocked.'));
-  b.hidden = false;
 }
 
 // ---------- Controls ----------
 
-$('primary').addEventListener('click', () => (flow.screen === 'start' ? go('select', { selected: flow.selected ?? tokens[0]?.id ?? null }) : escape()));
-$('reset').addEventListener('click', openReset);
+$('btnEscape').addEventListener('click', escape);
+$('btnReset').addEventListener('click', reset);
+$('btnClear').addEventListener('click', clear);
+$('btnEdit').addEventListener('click', () => (S.editOpen ? closeEdit() : openEdit()));
+$('editClose').addEventListener('click', closeEdit);
+$('summary').addEventListener('click', () => {
+  S.scoreOpen = !S.scoreOpen;
+  render();
+});
+$('editForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const text = ($('editInput') as HTMLInputElement).value.trim();
+  if (text) submitText(text);
+});
 
-document.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement) return;
-  const { screen } = flow;
-  if (e.key === 'Escape') {
-    if (screen === 'select') go(flow.results ? 'result' : 'start');
-    else if (screen === 'exits') go('select');
-    else if (screen === 'ready') go('select');
-    else if (screen === 'proposal' || screen === 'reset') go(flow.back, { fix: null });
-    else if (screen === 'fallback') backFromFix();
+document.addEventListener('keydown', (ev) => {
+  const typing = ev.target instanceof HTMLInputElement;
+  if (ev.key === 'Escape') {
+    if (S.editOpen) closeEdit();
+    else if (S.scoreOpen) {
+      S.scoreOpen = false;
+      render();
+    }
     return;
   }
-  const n = Number(e.key);
-  if (n >= 1 && n <= tokens.length && (screen === 'start' || screen === 'select' || screen === 'result')) {
-    go('select', { selected: tokens[n - 1]!.id });
-    return;
+  if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const onBtn = ev.target instanceof HTMLButtonElement;
+  const k = Number(ev.key);
+  const hit = placeable.find((i) => i.key === k);
+  if (hit?.token) return place(hit.token);
+  // Space is always Escape! (outside the text box); Enter is Escape! unless a button has focus.
+  if (ev.key === ' ' || (ev.key === 'Enter' && !onBtn)) {
+    ev.preventDefault();
+    return escape();
   }
-  if (e.key === 'Enter' && screen === 'select' && flow.selected && !(e.target instanceof HTMLButtonElement)) go('exits');
-  if ((e.key === 'e' || e.key === 'E' || e.key === ' ') && (screen === 'ready' || screen === 'clash' || screen === 'result')) {
-    e.preventDefault();
-    escape();
+  if (ev.key === 'r' || ev.key === 'R') return reset();
+  if (ev.key === '/') {
+    ev.preventDefault();
+    openEdit();
   }
 });
 
-viewer.show(building, []);
+idle();
 render();

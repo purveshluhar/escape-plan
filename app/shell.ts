@@ -1,0 +1,122 @@
+// The daylight shell (design B): which objects the dock offers, what the summary pill says, and the
+// plan C keyword parser behind the "Type an edit" box. Pure, so Node tests can check it. Owner: P3.
+import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult } from '../contract/types.ts';
+import { DISCIPLINES, JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
+import { DISCIPLINE_STYLE } from '../design/tokens.ts';
+import type { DemoButton } from './state.ts';
+
+// ---------- Dock picker ----------
+
+export interface PickItem {
+  token: Id | null; // null = a later discipline with no token in building.json yet
+  discipline: Discipline;
+  label: string;
+  glyph: string;
+  color: string;
+  glyphInk: string;
+  key: number | null; // keyboard shortcut 1..9, placeable objects only
+}
+
+// Every token in the building can be placed, in data order. Disciplines with no token yet are
+// listed after them as "Later" chips, so the audience sees what is coming.
+export function pickerItems(building: Building): PickItem[] {
+  const placeable = building.tokens.map((t, i): PickItem => {
+    const s = DISCIPLINE_STYLE[t.discipline];
+    return { token: t.id, discipline: t.discipline, label: s.label, glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: i < 9 ? i + 1 : null };
+  });
+  const have = new Set(building.tokens.map((t) => t.discipline));
+  const later = DISCIPLINES.filter((d) => !have.has(d)).map((d): PickItem => {
+    const s = DISCIPLINE_STYLE[d];
+    return { token: null, discipline: d, label: s.label, glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: null };
+  });
+  return [...placeable, ...later];
+}
+
+// Placing toggles: a second click takes the object off again. Order follows the building, so
+// the viewer's stagger and the summary chips stay stable.
+export function togglePlaced(building: Building, placed: readonly Id[], token: Id): Id[] {
+  const on = placed.includes(token) ? placed.filter((id) => id !== token) : [...placed, token];
+  const order = building.tokens.map((t) => t.id);
+  return order.filter((id) => on.includes(id));
+}
+
+// ---------- Phases and the summary pill ----------
+
+export type Phase = 'empty' | 'placed' | 'running' | 'result' | 'complete';
+
+export function phaseAfterRun(results: readonly SolverResult[]): Phase {
+  return results.length > 0 && results.every((r) => r.status === 'pass') ? 'complete' : 'result';
+}
+
+export const PHASE_WORD: Record<Phase, string> = {
+  empty: 'Ready', placed: 'Ready', running: 'Running', result: 'Result', complete: 'LEVEL COMPLETE',
+};
+
+export function countText(phase: Phase, placed: number, results: readonly SolverResult[] | null): string {
+  if (phase === 'empty') return 'Pick an object to place it';
+  if (phase === 'running') return `${placed} escaping`;
+  if ((phase === 'result' || phase === 'complete') && results) {
+    return `${results.filter((r) => r.status === 'pass').length} of ${placed} out`;
+  }
+  return `${placed} placed`;
+}
+
+// Seconds the viewer needs to finish every placed token's walk (stagger plus one full path).
+export function runSeconds(count: number, perToken: number, stagger: number): number {
+  return count === 0 ? 0 : (count - 1) * stagger + perToken;
+}
+
+// ---------- Plan C: keyword parser for typed edits ----------
+
+const OP_WORDS: [EditOp, RegExp][] = [
+  ['add_transfer_beam', /\btransfer\b|\bbeam\b/],
+  ['add_ramp', /\bramps?\b|\bslope\b|\bstep\b/],
+  ['widen', /\bwide[nr]?\b|\bwidth\b|\bbigger\b|\blarger\b|\benlarge\b|\bopen up\b/],
+];
+
+const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9.]+/).filter((w) => w.length > 1);
+const STOP = new Set(['the', 'to', 'at', 'add', 'a', 'an', 'of', 'in', 'and', 'make', 'it', 'please', 'by', 'widen', 'wider', 'ramp', 'beam', 'transfer']);
+
+export interface ParseOutcome {
+  parse: JevParse;
+  edit: Edit | null; // set when every part clears JEV_ACCEPT_CONFIDENCE
+  suggestions: DemoButton[]; // "Did you mean": best demo fixes first, at most 3
+}
+
+// The same JevParse shape Jev or plan B would return, from plain keyword matching. Targets are
+// the demo buttons' targets, named the way the building names them ("Lobby door", "beam B2").
+export function parseEdit(text: string, buttons: readonly DemoButton[], range = { min: 0.5, max: 6 }): ParseOutcome {
+  const t = text.toLowerCase();
+  const opHit = OP_WORDS.find(([, re]) => re.test(t));
+  const op: EditOp = opHit?.[0] ?? 'widen';
+  const opConf = opHit ? 0.95 : 0.3;
+
+  const said = new Set(words(t).filter((w) => !STOP.has(w)));
+  const scored = buttons.map((b) => {
+    const name = words(b.label).filter((w) => !STOP.has(w) && !/^\d/.test(w) && w !== 'm');
+    const hits = name.filter((w) => said.has(w)).length;
+    const score = name.length ? hits / name.length : 0;
+    return { b, score: score + (b.edit.op === op && opHit ? 0.5 : 0), match: score };
+  }).sort((a, z) => z.score - a.score);
+  const best = scored[0];
+  const targetConf = best ? Math.min(1, best.match + (best.b.edit.op === op && opHit ? 0.2 : 0)) : 0;
+
+  const num = t.match(/(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?)?/);
+  const raw = num ? Number(num[1]) : null;
+  const inRange = raw !== null && raw >= range.min && raw <= range.max;
+  const value = op === 'widen'
+    ? { score: inRange ? raw! : best?.b.edit.value ?? range.min, confidence: inRange ? 0.95 : best?.b.edit.value != null ? 0.85 : 0.2 }
+    : null;
+
+  const parse: JevParse = {
+    op: { choice: op, confidence: opConf },
+    target: { choice: best?.b.edit.target ?? '', confidence: targetConf },
+    value,
+  };
+  const sure = best !== undefined && best.b.edit.op === op && opConf >= JEV_ACCEPT_CONFIDENCE
+    && targetConf >= JEV_ACCEPT_CONFIDENCE && (value === null || value.confidence >= JEV_ACCEPT_CONFIDENCE);
+  const edit: Edit | null = sure
+    ? { op, target: best.b.edit.target, value: value ? value.score : null, source: 'text' }
+    : null;
+  return { parse, edit, suggestions: scored.slice(0, 3).map((s) => s.b) };
+}

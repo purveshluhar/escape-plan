@@ -1,200 +1,257 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Escape Plan</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&family=Press+Start+2P&display=swap" />
-    <style>
-      /* The 12-sheet layout from design/flow.md, in Liquid Glass v2 (values from design/tokens.ts).
-         The model fills the screen; glass chrome floats over it: HUD top, one card right, the
-         action bar bottom, pop-ups for inputs. */
-      :root {
-        color-scheme: light;
-        --bg: #eef2f8; --line-soft: #c3cde2; --line: #7184ae;
-        --ink: #0f172a; --ink-muted: #475569; --ink-dim: #64748b;
-        --accent: #2f5bff; --accent-deep: #2146d6; --accent-tint: rgba(47, 91, 255, 0.12);
-        --pass: #0e9f6e; --pass-tint: #dcf5ea; --pass-ink: #05603f;
-        --fail: #e5484d; --fail-tint: #fde7e8; --fail-ink: #b4232a;
-        --glass: rgba(255, 255, 255, 0.62); --glass-strong: rgba(255, 255, 255, 0.86);
-        --glass-blur: blur(24px) saturate(180%);
-        --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.55),
-          0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 32px rgba(15, 23, 42, 0.08);
-        --shadow-alert: inset 0 0 0 1px rgba(229, 72, 77, 0.45), 0 12px 32px rgba(229, 72, 77, 0.18);
-        --ease: cubic-bezier(0.32, 0.72, 0, 1);
-        --body: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
-        --pixel: 'Press Start 2P', 'Courier New', monospace;
-        --data: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-        --gutter: 20px;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0; height: 100vh; overflow: hidden; font-family: var(--body); color: var(--ink);
-        background:
-          radial-gradient(520px 360px at 18% 20%, rgba(47, 91, 255, 0.1), transparent 70%),
-          radial-gradient(480px 340px at 82% 30%, rgba(224, 71, 158, 0.08), transparent 70%),
-          radial-gradient(560px 380px at 50% 90%, rgba(14, 165, 198, 0.1), transparent 70%), var(--bg);
-      }
-      button { font: inherit; cursor: pointer; border: 0; }
-      button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-      [hidden] { display: none !important; }
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Escape Plan</title>
+<style>
+/* Design B: daylight model, spatial glass. The model fills the screen; light glass floats over it:
+   the summary pill at the top, the dock at the bottom, the fix sheet and the edit box above it. */
+:root{
+  color-scheme: light;
+  --ink:#14161c; --muted:#3d4250; --pass:#05592c; --fail:#9a0f19; --esc:#1b1e24; --focus:#1d3fd6;
+  --g-top:rgba(250,251,253,.74); --g-bot:rgba(236,240,246,.66); --blur:16px;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --s2:8px;
+  --spring:cubic-bezier(.34,1.36,.64,1); --soft:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0;height:100%;overflow:hidden;font-family:var(--font);color:var(--ink);
+  background:linear-gradient(180deg,#c9d8ea 0%,#e6ebf0 55%,#f4efe6 100%);-webkit-font-smoothing:antialiased}
+#viewer{position:fixed;inset:0}
+/* The app shows LEVEL COMPLETE in its own banner, with the line under it. */
+#viewer .ep-banner{display:none}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:2}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:default}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
 
-      #viewer { position: fixed; inset: 0; }
-      /* The app shows LEVEL COMPLETE in its own dialog (sheet 10), so the viewer's banner stays off. */
-      #viewer .ep-banner { display: none; }
+/* ---------- Light liquid glass ---------- */
+.glass{position:relative;isolation:isolate;pointer-events:auto;
+  background:rgba(246,248,251,.97);
+  border:1px solid rgba(255,255,255,.95);
+  box-shadow:inset 0 1px 0 #fff, inset 0 0 0 1px rgba(255,255,255,.35), inset 0 -1px 0 rgba(40,60,90,.10),
+    0 0 0 1px rgba(30,45,70,.13), 0 18px 40px -16px rgba(30,40,60,.34), 0 2px 6px rgba(30,40,60,.08);}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .glass{background:linear-gradient(180deg,var(--g-top),var(--g-bot));
+    -webkit-backdrop-filter:blur(var(--blur)) saturate(1.5) brightness(1.04);backdrop-filter:blur(var(--blur)) saturate(1.5) brightness(1.04)}
+}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:linear-gradient(180deg,rgba(255,255,255,.7) 0,rgba(255,255,255,.18) 22%,rgba(255,255,255,0) 45%),
+    linear-gradient(105deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 60%),
+    radial-gradient(80% 60% at 90% 120%,rgba(150,175,215,.30),rgba(150,175,215,0) 60%)}
+@media (prefers-reduced-transparency: reduce){
+  .glass{background:#f7f6f3 !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;border-color:#8a8f9a !important}
+  .glass::before{display:none}
+}
 
-      .glass {
-        background: var(--glass); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-        box-shadow: var(--shadow-glass);
-      }
-      @supports not (backdrop-filter: blur(1px)) { .glass { background: rgba(255, 255, 255, 0.94); } }
+/* ---------- Glyph dots ---------- */
+.dot{flex:none;display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;
+  background:var(--c);border:2px solid var(--ink);color:var(--gi,var(--ink));font:700 15px/1 var(--font)}
+.dot.sm{width:24px;height:24px;font-size:13px}
+.dot.off{background:#d9d7d2;border-color:#6b6f7a;color:#4a4f5a}
+kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6px;color:var(--muted);
+  background:rgba(20,22,28,.06);border:1px solid rgba(20,22,28,.16)}
+.word{font-weight:700;letter-spacing:.02em}
+.word.pass{color:var(--pass)} .word.fail{color:var(--fail)} .word.ready{color:var(--muted);font-weight:600}
 
-      /* HUD */
-      .hud { position: fixed; top: 16px; height: 52px; border-radius: 16px; display: flex; align-items: center; gap: 14px; padding: 0 18px; z-index: 2; }
-      .hud.left { left: var(--gutter); }
-      .hud.right { right: var(--gutter); }
-      .word { font: 14px var(--pixel); letter-spacing: 1px; margin: 0; }
-      .lbl { font: 700 12px/16px var(--body); letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-muted); }
-      .pips { display: flex; gap: 5px; }
-      .pip { width: 12px; height: 12px; border-radius: 50%; background: var(--line-soft); }
-      .pip.ok { background: var(--pass); }
-      .pip.bad { background: var(--fail); }
-      .count { font: 700 15px var(--data); }
-      .b { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: 999px; font: 700 11px/1 var(--body); letter-spacing: 1.2px; white-space: nowrap; }
-      .b-ok { background: var(--pass-tint); color: var(--pass-ink); }
-      .b-bad { background: var(--fail-tint); color: var(--fail-ink); }
-      .b-acc { background: var(--accent-tint); color: var(--accent-deep); }
+/* ---------- Dock (bottom capsule) ---------- */
+#dock{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);border-radius:999px;padding:8px;
+  display:flex;align-items:center;max-width:calc(100vw - 24px);transition:padding .5s var(--spring)}
+#dock.pop{animation:settle .6s var(--spring)}
+@keyframes settle{from{transform:translateX(-50%) scale(.94);opacity:.6}to{transform:translateX(-50%) scale(1);opacity:1}}
+.dock-full{display:flex;align-items:center;gap:var(--s2);min-width:0}
+#picker{display:flex;gap:8px;align-items:center}
+.scrollwrap{position:relative;min-width:0;display:flex;flex:1}
+.scroller{display:flex;align-items:center;gap:var(--s2);min-width:0;overflow-x:auto;scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+#laterGroup{display:flex;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 9px;border-radius:999px;
+  background:rgba(255,255,255,.5);border:1px solid rgba(20,22,28,.10);font:600 16px/1 var(--font);white-space:nowrap;
+  transition:background .3s var(--soft),transform .4s var(--spring)}
+.chip:hover:not(:disabled){background:rgba(255,255,255,.9)}
+.chip:active:not(:disabled){transform:scale(.97)}
+.chip[aria-pressed="true"]{background:#fff;border:1px solid rgba(20,22,28,.6);box-shadow:0 1px 3px rgba(20,22,28,.10)}
+.chip:disabled{color:#4a4f5a;background:rgba(255,255,255,.3);border-style:dashed;height:40px;font-size:14px;padding:0 12px 0 6px;gap:7px}
+.chip:disabled .dot{width:24px;height:24px;font-size:12px}
+/* Later chips are dots only on a wide screen, so the tools and Escape! always fit; the label is the tooltip. */
+@media (min-width:701px){ #laterGroup .chip{padding:0 6px;gap:0} #laterGroup .chip span:not(.dot){display:none} }
+.later{font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 0 10px}
+.sep{width:1px;height:30px;background:rgba(20,22,28,.16);flex:none}
+.tool{height:42px;padding:0 13px;border-radius:999px;background:transparent;border:1px solid rgba(20,22,28,.10);
+  font:600 15px/1 var(--font);display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.tool:hover:not(:disabled){background:rgba(255,255,255,.7)}
+.tool:disabled{color:#5a5f6a}
+.tools{display:flex;gap:6px}
+#btnEscape{flex:none;height:58px;padding:0 26px 0 30px;border-radius:999px;margin-left:var(--s2);
+  display:inline-flex;align-items:center;gap:12px;font:700 21px/1 var(--font);color:#fff;
+  background:linear-gradient(180deg,#30343c,#16181d);border:1px solid rgba(20,22,28,.9);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 8px 20px -10px rgba(20,22,28,.55);
+  transition:transform .4s var(--spring),box-shadow .4s var(--soft)}
+#btnEscape kbd{color:#fff;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3)}
+#btnEscape:hover:not(:disabled){transform:translateY(-1px)}
+#btnEscape:disabled{color:#4a4f5a;background:rgba(20,22,28,.07);border:1px solid rgba(20,22,28,.14);box-shadow:none}
+#btnEscape:disabled kbd{color:#4a4f5a;background:rgba(20,22,28,.05);border-color:rgba(20,22,28,.14)}
+.dock-slim{display:none;align-items:center;gap:12px;padding:6px 18px 6px 10px;font:600 16px/1 var(--font)}
+#dock.slim{padding:6px}
+#dock.slim .dock-full{display:none}
+#dock.slim .dock-slim{display:flex}
+.spinner{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(20,22,28,.18);border-top-color:var(--esc);animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-      .hint, .source { position: fixed; left: 50%; transform: translateX(-50%); border-radius: 999px; padding: 8px 16px; font-size: 13px; color: var(--ink-muted); white-space: nowrap; z-index: 2; margin: 0; }
-      .hint { top: 84px; }
-      .source { bottom: 92px; font-size: 12px; }
+/* ---------- Summary pill (top centre) and scoreboard ---------- */
+#summary{position:fixed;top:16px;left:50%;transform:translateX(-50%);border-radius:999px;
+  display:flex;align-items:center;gap:14px;padding:8px 12px 8px 22px;font:400 18px/1.1 var(--font);white-space:nowrap;
+  border:1px solid rgba(255,255,255,.8);max-width:calc(100vw - 24px);min-height:48px}
+#summary .sline{display:flex;align-items:center;gap:14px}
+#summary .phase{font-weight:700}
+#summary .vbar{width:1px;height:24px;background:rgba(20,22,28,.18)}
+.schips{display:flex;gap:6px}
+.schip{display:inline-flex;align-items:center;gap:7px;padding:4px 12px 4px 4px;border-radius:999px;background:rgba(255,255,255,.6);border:1px solid rgba(20,22,28,.10)}
+.schip .word{font-size:20px}
+.caret{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(20,22,28,.06)}
+.caret::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateY(-2px) rotate(45deg);transition:transform .4s var(--spring)}
+#summary[aria-expanded="true"] .caret::after{transform:translateY(2px) rotate(225deg)}
+#scorePanel{position:fixed;top:78px;left:50%;transform:translateX(-50%);border-radius:28px;padding:10px 16px;
+  width:min(560px,calc(100vw - 24px));display:none}
+#scorePanel.open{display:block;animation:fadeup .4s var(--soft)}
+.srow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:10px 4px;border-bottom:1px solid rgba(20,22,28,.08)}
+.srow:last-child{border-bottom:0}
+.srow .nm{font:600 17px/1.2 var(--font)} .srow .word{font-size:20px}
+.srow .det{grid-column:2 / 4;font:400 16px/1.35 var(--font);color:var(--muted)}
+@keyframes fadeup{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 
-      /* Banner (CONFLICT!) */
-      .chip { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); border-radius: 16px; padding: 10px 18px; display: flex; align-items: center; gap: 12px; white-space: nowrap; z-index: 3; background: var(--glass-strong); box-shadow: var(--shadow-alert); animation: drop 240ms var(--ease); }
-      .pix { font: 18px var(--pixel); }
-      .pix.bad { color: var(--fail-ink); }
-      @keyframes drop { from { opacity: 0; transform: translate(-50%, -8px); } }
+#note{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#sample{position:fixed;left:20px;top:20px;max-width:260px;font:500 13px/1.3 var(--font);color:var(--muted);pointer-events:none}
+#sample b{font-weight:600;color:var(--ink)}
 
-      /* Context card, right */
-      .card { position: fixed; right: var(--gutter); top: 84px; width: 320px; max-height: calc(100vh - 84px - 100px); overflow-y: auto; border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 2; animation: slide 240ms var(--ease); }
-      .card.alert { box-shadow: var(--shadow-alert); background: var(--glass-strong); }
-      @keyframes slide { from { opacity: 0; transform: translateX(12px); } }
-      .ttl { font: 700 20px/26px var(--body); }
-      .ttl.bad { color: var(--fail-ink); }
-      .p { font-size: 15px; line-height: 21px; margin: 0; }
-      .muted { color: var(--ink-muted); }
-      .step { font: 700 11px var(--body); letter-spacing: 1.2px; color: var(--accent-deep); }
-      .keys { font-size: 12px; color: var(--ink-dim); }
-      .nums { display: flex; gap: 8px; }
-      .num { flex: 1; border-radius: 10px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--line-soft); padding: 6px 10px; }
-      .num b { display: block; font: 700 26px/30px var(--data); }
-      .num.bad b { color: var(--fail-ink); }
-      .callout { border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 18px; background: var(--fail-tint); color: var(--fail-ink); }
-      .callout.info { background: rgba(47, 91, 255, 0.08); color: var(--accent-deep); }
-      .opt { display: flex; align-items: center; gap: 10px; border-radius: 10px; padding: 8px 10px; background: var(--glass-strong); box-shadow: 0 0 0 2px var(--accent); font-size: 14px; }
-      .opt .dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 4px var(--accent); flex: none; }
-      .opt b { flex: 1; }
+/* ---------- LEVEL COMPLETE ---------- */
+#banner{position:fixed;left:0;right:0;top:104px;text-align:center;pointer-events:none;display:none}
+#banner.on{display:block;animation:bannerIn .9s var(--spring)}
+#banner .big{font:800 clamp(40px,5.2vw,76px)/1 var(--font);letter-spacing:.03em;color:var(--ink)}
+#banner .sub{margin-top:10px;font:500 20px/1.3 var(--font);color:var(--muted)}
+@keyframes bannerIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
 
-      /* Buttons */
-      .btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 999px; font: 700 13px var(--body); letter-spacing: 1.3px; text-transform: uppercase; padding: 0 18px; transition: transform 120ms var(--ease); }
-      .btn:active { transform: scale(0.98); }
-      .btn.fill { background: var(--accent); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 8px 24px rgba(47, 91, 255, 0.35); }
-      .btn.tint { background: var(--accent-tint); color: var(--accent-deep); }
-      .btn.glass { background: var(--glass-strong); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line-soft); }
-      .btn.danger { background: var(--fail); color: #fff; }
-      .btn.off { opacity: 0.45; pointer-events: none; }
-      .row2 { display: flex; gap: 8px; }
-      .row2 .btn { flex: 1; }
-      .row2.narrow { width: min(420px, 100%); }
+/* ---------- Buttons in panels ---------- */
+.fixbtn{height:46px;padding:0 18px;border-radius:999px;font:600 16px/1 var(--font);text-align:left;white-space:nowrap;
+  background:rgba(255,255,255,.92);border:1px solid rgba(20,22,28,.22);box-shadow:0 1px 0 #fff inset,0 2px 6px rgba(28,34,52,.08);
+  transition:transform .4s var(--spring),background .3s}
+.fixbtn:hover:not(:disabled){background:#fff;transform:translateY(-1px)}
+.fixbtn.ghost{background:transparent;border-color:rgba(20,22,28,.16);font-weight:500}
+.fixbtn[aria-pressed="true"]{background:rgba(37,70,216,.08);border-color:rgba(37,70,216,.5)}
+.fixbtn:disabled{color:#5a5f6a;border-style:dashed;background:transparent}
 
-      /* Action bar, bottom */
-      .bar { position: fixed; left: var(--gutter); right: var(--gutter); bottom: 16px; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; z-index: 2; pointer-events: none; }
-      .bar > * { pointer-events: auto; }
-      .bar .r { display: flex; justify-content: flex-end; }
-      .pill { height: 40px; padding: 0 16px; border-radius: 999px; font: 700 12px var(--body); letter-spacing: 1.2px; color: var(--ink-muted); }
-      .pill:disabled { opacity: 0.45; cursor: default; }
-      .esc { width: 320px; height: 60px; border-radius: 999px; background: var(--accent); color: #fff; font: 20px var(--pixel); letter-spacing: 1px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 8px 24px rgba(47, 91, 255, 0.35); transition: box-shadow 240ms var(--ease), background 240ms var(--ease); }
-      .esc.small { font-size: 14px; }
-      .esc.pulse { animation: pulse 1.2s var(--ease) infinite alternate; }
-      .esc.quiet { background: var(--glass-strong); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
-      .esc:disabled { background: var(--line-soft); color: #fff; box-shadow: none; opacity: 0.6; cursor: default; }
-      @keyframes pulse { to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 12px 40px rgba(47, 91, 255, 0.55), 0 0 0 6px rgba(47, 91, 255, 0.12); } }
-      .views { display: flex; gap: 2px; padding: 4px; border-radius: 999px; }
-      .views span { height: 32px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; font: 700 11px var(--body); letter-spacing: 1.2px; color: var(--ink-muted); }
-      .views span.on { background: #fff; color: var(--accent); box-shadow: 0 0 0 1px var(--line-soft); }
+/* ---------- Fix sheet: one card per failed object ---------- */
+#sheet{position:fixed;right:24px;bottom:104px;width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 200px);overflow-y:auto;
+  border-radius:28px;padding:10px 10px 8px;display:none}
+#sheet.on{display:block;animation:sheetIn .5s var(--spring)}
+#sheet .lbl{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px}
+.fcard{padding:10px 8px;border-bottom:1px solid rgba(20,22,28,.08)}
+.fcard .top{display:flex;align-items:center;gap:10px}
+.fcard .nm{font:600 17px/1.1 var(--font)}
+.fcard .word{font-size:20px;margin-left:auto}
+.fcard .rs{margin:8px 0 2px 2px;font:600 16px/1.25 var(--font)}
+.fcard .rs span{font-weight:400}
+.fcard .nb{margin-left:2px;font:400 15px/1.3 var(--font);color:var(--muted)}
+.fcard .fx{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.fcard .fx .fixbtn{height:42px;font-size:15px;padding:0 14px;white-space:normal;line-height:1.15}
+.fcard .none{font:400 15px/1.3 var(--font);color:var(--muted);margin-top:8px}
+#sheet .foot{display:flex;gap:6px;margin-top:8px}
+#sheet .foot .fixbtn{flex:1;height:40px;text-align:center}
 
-      /* Pop-ups */
-      .scrim { position: fixed; inset: 0; background: rgba(238, 242, 248, 0.35); z-index: 4; }
-      .dlg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); max-height: calc(100vh - 40px); overflow-y: auto; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 14px; background: var(--glass-strong); z-index: 5; animation: pop 240ms var(--ease); }
-      .dlg.wide { width: min(620px, calc(100vw - 32px)); }
-      .dlg.mid { width: min(520px, calc(100vw - 32px)); }
-      .dlg.small { width: min(480px, calc(100vw - 32px)); }
-      .dlg.center { align-items: center; text-align: center; }
-      @keyframes pop { from { opacity: 0; transform: translate(-50%, -48%) scale(0.98); } }
-      .ocard { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border-radius: 16px; padding: 10px 12px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--line-soft); color: inherit; }
-      button.ocard:hover { box-shadow: inset 0 0 0 1px var(--line); }
-      .ocard.on { box-shadow: 0 0 0 2px var(--accent), 0 8px 24px rgba(47, 91, 255, 0.18); }
-      .ocard kbd { font: 700 12px var(--data); color: var(--ink-dim); }
-      .who { flex: 1; min-width: 0; }
-      .who b { display: block; font: 700 14px/18px var(--body); letter-spacing: 1.3px; }
-      .who span { font-size: 13px; color: var(--ink-muted); }
-      .tile { width: 30px; height: 30px; border-radius: 9px; background: #fff; display: flex; align-items: center; justify-content: center; font: 11px var(--pixel); box-shadow: inset 0 -3px 0 var(--c); flex: none; }
-      .tile i { display: flex; width: 22px; height: 20px; border-radius: 5px; background: var(--c); align-items: center; justify-content: center; font-style: normal; margin-bottom: 3px; }
-      .chk { width: 18px; height: 18px; border-radius: 5px; box-shadow: inset 0 0 0 2px var(--line); flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font: 700 12px var(--body); }
-      .chk.on { background: var(--accent); box-shadow: none; }
-      .win { font: 40px/1.25 var(--pixel); color: var(--accent); letter-spacing: 2px; }
-      .score { font: 700 26px var(--data); }
+/* ---------- Edit box (typed edits) ---------- */
+#editPanel{position:fixed;right:24px;bottom:104px;width:min(520px,calc(100vw - 16px));
+  border-radius:30px;padding:14px;display:none}
+#editPanel.open{display:block;animation:sheetIn .45s var(--soft)}
+#editPanel .row{display:flex;gap:8px;align-items:center}
+#editPanel .ehead{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px 8px}
+#editPanel .ehead .tool{height:36px;font-size:14px}
+#editPanel label{display:block;font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+#editInput{flex:1;min-width:0;height:50px;border-radius:999px;border:1px solid rgba(20,22,28,.22);background:rgba(255,255,255,.92);
+  padding:0 20px;font:400 17px/1 var(--font);color:var(--ink)}
+#editInput::placeholder{color:#5a5f6a}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.quick .fixbtn{height:40px;font-size:15px;padding:0 14px}
+#editPanel.err .quick{display:none}
+#jev{display:none;margin-top:12px;padding:12px 12px 4px;border-top:1px solid rgba(20,22,28,.10)}
+#jev.on{display:block}
+#jev .q{font:400 17px/1.35 var(--font);margin:0 4px 4px}
+#jev .q b{font-weight:700}
+#jev .dym{font:700 20px/1.2 var(--font);margin:10px 4px 8px}
+#jev .opts{display:flex;flex-wrap:wrap;gap:6px}
+#jev .src{font:400 13px/1.3 var(--font);color:var(--muted);margin:10px 4px 6px}
 
-      @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after { animation: none !important; transition: none !important; }
-      }
-
-      /* Narrow screens: HUD stacks, the card becomes a bottom sheet above the bar. */
-      @media (max-width: 760px) {
-        :root { --gutter: 12px; }
-        .hud { height: 44px; padding: 0 12px; gap: 10px; }
-        .hud.right { top: 68px; }
-        .hud .lbl { display: none; }
-        .hint, .chip { top: 124px; }
-        .card { left: var(--gutter); right: var(--gutter); width: auto; top: auto; bottom: 128px; max-height: 46vh; }
-        .bar { grid-template-columns: auto 1fr; }
-        .bar .r { display: none; }
-        .esc { width: 100%; font-size: 16px; }
-        .hint, .source, .chip { white-space: normal; width: calc(100vw - 24px); text-align: center; }
-        .win { font-size: 26px; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="viewer" data-view="shaded" aria-label="3D isometric model of the building"></div>
-
-    <header class="hud glass left">
-      <h1 class="word">ESCAPE PLAN</h1>
-      <span class="lbl" id="where"></span>
-    </header>
-    <div class="hud glass right" aria-live="polite">
-      <span class="pips" id="pips"></span>
-      <span class="count" id="count">0/4</span>
-      <span class="lbl">Escaped</span>
-      <span class="b b-acc" id="badge">READY</span>
+/* ---------- Compact (phone) ---------- */
+@media (max-width:700px){
+  #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;border-radius:30px}
+  .dock-full{flex-wrap:wrap;row-gap:6px;width:100%}
+  #picker{flex-basis:100%}
+  #picker .chip{flex:1;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
+  #picker .dot{width:24px;height:24px;font-size:13px}
+  .scroller{flex:1;padding:2px 22px 2px 2px;-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent 96%)}
+  .scroller > .sep:first-of-type{display:none}
+  #dock.pop{animation:none}
+  .chip{height:46px;font-size:15px}
+  .tools{order:-1}
+  #btnEscape{height:52px;padding:0 18px;font-size:18px;margin-left:4px}
+  #btnEscape kbd{display:none}
+  #dock.slim{left:50%;right:auto;transform:translateX(-50%)}
+  #summary{top:30px;padding:8px 10px 8px 16px;gap:10px;font-size:16px;flex-wrap:wrap;justify-content:center;border-radius:28px;row-gap:8px;width:max-content;white-space:normal}
+  #summary .vbar,#summary .caret,.chip kbd,.glabel{display:none}
+  #summary .sline{flex-basis:100%;justify-content:center;gap:8px}
+  .schip .word{font-size:16px}
+  #sample{left:0;right:0;top:8px;max-width:none;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 12px}
+  #sample .more{display:none}
+  #scorePanel{top:120px}
+  #sheet{left:8px;right:8px;width:auto;bottom:136px;max-height:45vh}
+  #editPanel{bottom:136px;left:8px;right:8px;width:auto}
+  #banner{top:128px}
+  #banner .sub{font-size:16px}
+}
+@keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body>
+<div id="viewer" aria-label="3D model of the building" role="img"></div>
+<div id="hud">
+  <nav id="dock" class="glass" aria-label="Game controls">
+    <div class="dock-full">
+      <div id="picker" role="group" aria-label="Pick an object"><span class="later glabel" aria-hidden="true">Place</span></div>
+      <div class="scrollwrap"><div class="scroller">
+        <div id="laterGroup" role="group" aria-label="Later objects"></div>
+        <span class="sep" aria-hidden="true"></span>
+        <div class="tools">
+          <button type="button" class="tool" id="btnEdit" aria-label="Type an edit">Edit <kbd>/</kbd></button>
+          <button type="button" class="tool" id="btnReset">Reset <kbd>R</kbd></button>
+          <button type="button" class="tool" id="btnClear">Clear</button>
+        </div>
+      </div></div>
+      <button type="button" id="btnEscape" aria-describedby="escHint">Escape! <kbd>Space</kbd></button>
     </div>
-
-    <p class="hint glass" id="hint">Choose an object and get it out of the building</p>
-    <div class="chip" id="banner" role="status" hidden></div>
-    <aside class="card glass" id="card" aria-live="polite" hidden></aside>
-
-    <nav class="bar" aria-label="Actions">
-      <div><button class="pill glass" id="reset" type="button">RESET</button></div>
-      <div><button class="esc" id="primary" type="button">CHOOSE OBJECT</button></div>
-      <div class="r"><div class="views glass" id="views" aria-label="View"></div></div>
-    </nav>
-
-    <p class="source glass" id="source" hidden>Results from data/expected.json until the solver has these rules</p>
-
-    <div class="scrim" id="scrim" hidden></div>
-    <div class="dlg" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title" hidden></div>
-
-    <script type="module" src="/app/main.ts"></script>
-  </body>
+    <div class="dock-slim" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="slimText">Running</span></div>
+  </nav>
+  <div id="sample"></div>
+  <button type="button" id="summary" class="glass" aria-expanded="false" aria-controls="scorePanel"></button>
+  <div id="scorePanel" class="glass" role="region" aria-label="Scoreboard"></div>
+  <div id="note" role="status"></div>
+  <div id="banner" role="status"><div class="big">LEVEL COMPLETE</div><div class="sub" id="bannerSub">Every object got out of the building</div></div>
+  <div id="sheet" class="glass" role="region" aria-label="Fixes"></div>
+  <div id="editPanel" class="glass" role="dialog" aria-label="Type an edit">
+    <div class="ehead"><label for="editInput">Type an edit</label><button type="button" class="tool" id="editClose">Close <kbd>Esc</kbd></button></div>
+    <form class="row" id="editForm" autocomplete="off">
+      <input id="editInput" type="text" placeholder="For example: widen the lobby door to 1.6 m" />
+      <button type="submit" class="fixbtn">Apply</button>
+    </form>
+    <div class="quick" id="quick"></div>
+    <div id="jev" role="alert"></div>
+  </div>
+  <span id="escHint" hidden>Place an object first</span>
+</div>
+<script type="module" src="/app/main.ts"></script>
+</body>
 </html>
