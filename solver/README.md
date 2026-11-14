@@ -8,8 +8,8 @@
 
 ## Status
 
-`no_steps` (wheelchair), `corner_turn` (sofa; the glass cases run on it too) and
-`shortest_exit` (people, no smoke) are done. Every other rule is still a placeholder, so its
+`no_steps` (wheelchair), `corner_turn` (sofa; the glass cases run on it too),
+`shortest_exit` (people, no smoke) and `downward` (load) are done. Every other rule is still a placeholder, so its
 expected cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVERS` in
 `index.ts` puts it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
 
@@ -22,6 +22,8 @@ expected cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVER
   the corner check that uses it.
 - One file per rule: `no-steps.ts` gives the rule's edge kinds and its edge checks in order.
   A new walking rule (for example `clearance`) adds its own checks and calls `walk()`.
+- `downward.ts`: the load. It walks `supported_by` to a foundation and holds `cutOf()`, the
+  shaft-breaks-beam cut (also for `supply` later).
 - `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
   the edges walked on a pass, null on a fail.
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
