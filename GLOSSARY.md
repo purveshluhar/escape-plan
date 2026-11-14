@@ -19,9 +19,10 @@ Units are metres and kN.
 
 - **Chiller** (T1, `mep`, rule `clearance`): a big plant unit that must reach the truck on the street.
 - **Glass** (T1, `logistics`, rule `corner_turn`): a long glass panel that must turn corridor corners.
+- **Sofa** (T1, `logistics`, rule `corner_turn`): furniture that must turn corridor corners on its way out.
 - **Wheelchair** (T1, `accessibility`, rule `no_steps`): must reach an exit with no step.
 - **Load** (T1, `structure`, rule `downward`): gravity load that must reach a foundation through supporting members.
-- **People** (T2, `life_safety`, rule `shortest_exit`): walk the shortest path to an exit at a fixed speed.
+- **People** (T1 for the walk out, T2 for the race with smoke, `life_safety`, rule `shortest_exit`): walk the shortest path to an exit at a fixed speed.
 - **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and races the people.
 - **Water** (T2, `plumbing`, rule `downhill`): a drain that must fall all the way.
 - **Power** (T3, `electrical`, rule `supply`): electricity from its start node (the building's service entry) through a `panel` node to the kitchen.
@@ -34,9 +35,9 @@ Units are metres and kN.
 - **Box**: a node's plan rectangle: `x`, `y` of one corner, `width` along x, `depth` along y.
 - **Exit**: a node with `is_exit: true`.
 - **Invert** (T2): the elevation of a drain at a node.
-- **Edge**: a way between two nodes (`from`, `to`). Two-way, except `drain_route` and `supply`, which run from `from` to `to` only. Kinds: `door`, `opening`, `shaft`, `stair`, `elevator`, `ramp`, `step` (a change in floor level), `drain_route` (T2), `supply` (T3).
+- **Edge**: a way between two nodes (`from`, `to`). Two-way, except `drain_route` and `supply`, which run from `from` to `to` only. Kinds: `door`, `opening`, `shaft`, `stair`, `elevator`, `ramp`, `step` (a small level change at one edge, such as a sill), `drain_route` (T2), `supply` (T3).
 - **Clear width / clear height**: the free space through an edge.
-- **Step height**: the floor level change across an edge; 0 means level.
+- **Step height**: the small level change at one edge, such as a door sill; 0 means level. A change of floor is an edge between two levels.
 - **Corner a / corner b**: corridor widths before and after a 90-degree turn at an edge.
 - **Open** (T2): smoke can pass through the edge.
 - **Crosses**: the members an edge passes through (for example a shaft through a beam).
@@ -51,10 +52,10 @@ Units are metres and kN.
 ## Rules (which token, what passes)
 
 - **clearance**: the token's width and height fit through every edge on the path.
-- **corner_turn**: clearance, plus a panel of length L turns a corner only if L <= (a^(2/3) + b^(2/3))^(3/2), where a and b are the corridor widths.
-- **no_steps**: a path to an exit that uses no edge with a step.
+- **corner_turn**: clearance, plus a box of width w and length L turns a corner only if L <= L_max (formula in `contract/README.md`); for a thin panel this is (a^(2/3) + b^(2/3))^(3/2).
+- **no_steps**: a path to an exit with no `step` or `stair` edge and no step_height.
 - **downward**: follow `supported_by` down to a foundation; fail if any member on the chain is cut.
-- **shortest_exit** (T2): people take the shortest path to an exit.
+- **shortest_exit**: people take the exit with the fewest edges; clearance applies; time = edges walked.
 - **spread** (T2): smoke moves one open edge per time step.
 - **downhill** (T2): every drain route falls by at least 1 %; a crossed beam must be sleeved.
 - **supply** (T3): a path of `supply` edges from the start node through a `panel` node to the kitchen; fail if the only path is cut.
@@ -66,7 +67,7 @@ Units are metres and kN.
 - **Path**: the ids the token walked (member ids for `downward`).
 - **Blocked at**: the edge, node or member where the token failed.
 - **Needed / available**: the number the token needs there, and what the building gives.
-- **Time** (T2): time steps, for people and smoke.
+- **Time** (T1 for people walking out; T2 for smoke): edges walked or time steps.
 - **Reasons**: `too_narrow`, `too_low`, `cannot_turn`, `step`, `no_support`, `smoke_first` (T2), `uphill` (T2), `crosses_beam` (T2), `no_supply` (T3), `no_route`.
 
 ## Edits and AI
