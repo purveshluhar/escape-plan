@@ -1,77 +1,141 @@
-// Visual tokens shared by viewer/ and app/. Owner: P4. See the `arcade-look` skill and design/look.md.
-// Base look: a classic maze-arcade screen. Black ground, neon-blue double-line maze walls, pellet
-// trails for paths, chunky pixel type. Our own take on the genre: no borrowed characters, sprites,
-// names or sounds from any existing game.
+// Visual tokens shared by viewer/ and app/. Owner: P4. See design/look.md.
+// Look: Escape Plan Liquid Glass v2. A calm, light game surface: a pale frosted building, glass
+// panels for the UI, one blue accent, four character colours and two status colours. The board
+// is always a 3D isometric view (shaded, x-ray or exploded floors), never a plan.
+// Pixel type stays for a few moments only (wordmark, ESCAPE!, CONFLICT!, LEVEL COMPLETE).
 // Each discipline has a colour AND a glyph, so status never relies on colour alone.
+// Source: the "Escape Plan · Liquid Glass" design system (project/tokens.json, v2).
 import type { Discipline } from '../contract/types.ts';
 
-// ---------- Ground and maze ----------
+// ---------- Backdrop and building ----------
+// Export names are stable so viewer/ and app/ compile unchanged when values move.
 
-export const BACKGROUND = '#000000'; // arcade black
-export const GRID = '#0a0f3c'; // faint floor grid, sits just above black
-export const WALL = '#2a3cff'; // maze-blue edges of rooms, shafts and doors (drawn as a double line)
-export const WALL_INNER = '#0b1366'; // inner line of the double wall; fill of translucent boxes
-export const PELLET = '#ffc8b4'; // neutral pellets: unused route dots, decoration
+export const BACKGROUND = '#eef2f8'; // design system `bg`: page backdrop behind every glass layer
+export const GRID = '#c3cde2'; // `line-soft`: hairlines, unfocused floor outlines, the ground grid
+export const WALL = '#7184ae'; // `line`: building outlines and wall tops (3.1:1, graphics only)
+export const WALL_INNER = '#dfe5f1'; // `wall-face`: vertical faces and translucent fills
+export const WALL_TOP = 'rgba(255,255,255,0.72)'; // `wall-top`: slab top faces, lower floors read through
+export const ROUTE_DOT = '#2f5bff'; // available-route dots: `interactive` at ROUTE_DOT_OPACITY
+
+// ---------- Glass (UI chrome only, never over the board) ----------
+
+export const GLASS = 'rgba(255,255,255,0.62)'; // default panel fill, with GLASS_BLUR
+export const GLASS_STRONG = 'rgba(255,255,255,0.86)'; // raised or hovered glass, text over busy board
+export const GLASS_HI = 'rgba(255,255,255,0.95)'; // 1 px specular top rim
+export const GLASS_FALLBACK = 'rgba(255,255,255,0.94)'; // when backdrop-filter is not supported
+export const GLASS_BLUR = 'blur(24px) saturate(180%)'; // backdrop-filter for glass panels
+export const SHADOW_GLASS =
+  'inset 0 1px 0 rgba(255,255,255,0.95), inset 0 0 0 1px rgba(255,255,255,0.55), 0 1px 2px rgba(15,23,42,0.05), 0 12px 32px rgba(15,23,42,0.08)';
+
+// ---------- Accent: one filled control per state ----------
+
+export const ACCENT = '#2f5bff'; // fills the single primary action (ESCAPE!, APPLY, REPLAY), selection, focus
+export const ACCENT_DEEP = '#2146d6'; // pressed accent
+export const ON_ACCENT = '#ffffff'; // text on ACCENT, PASS and FAIL fills
 
 // ---------- Text ----------
 
-export const TEXT = '#ffffff';
-export const TEXT_MUTED = '#a9b0e0';
-export const SCORE = '#ffe600'; // headline numbers, READY / LEVEL COMPLETE
+export const TEXT = '#0f172a'; // `ink`: primary text, 15.9:1 on BACKGROUND
+export const TEXT_MUTED = '#475569'; // `ink-muted`: secondary text, 6.7:1
+export const TEXT_DIM = '#64748b'; // `ink-dim`: 16 px and up only (hints, disabled), 4.2:1
+export const SCORE = ACCENT; // headline moments in pixel type: READY, LEVEL COMPLETE
 
 // ---------- Status (never used for a discipline) ----------
 
-export const PASS = '#3dff8b';
-export const FAIL = '#ff2a3d';
+export const PASS = '#0e9f6e'; // `status-success`: icons and lines, always with a check and the word
+export const PASS_TINT = '#dcf5ea'; // ESCAPED badge fill
+export const PASS_INK = '#05603f'; // text on PASS_TINT
+export const FAIL = '#e5484d'; // `status-failure`: crosses, blocked dashes, alert borders
+export const FAIL_TINT = '#fde7e8'; // BLOCKED badge and callout fill
+export const FAIL_INK = '#b4232a'; // text on FAIL_TINT and the inspector headline
 
 // ---------- Disciplines ----------
+// Tier 1 colours are the design system's identity colours. Glyphs are drawn in `glyphInk` on the
+// colour, which reaches 4.5:1 for every discipline (design/tokens.test.ts checks it).
 
-export const DISCIPLINE_STYLE: Record<Discipline, { color: string; glyph: string; label: string }> = {
-  mep: { color: '#00f0ff', glyph: 'C', label: 'Chiller' }, // cyan
-  logistics: { color: '#ff9ce6', glyph: 'G', label: 'Glass' }, // pink
-  accessibility: { color: '#ffe600', glyph: 'W', label: 'Wheelchair' }, // arcade yellow
-  structure: { color: '#ffa733', glyph: 'L', label: 'Load' }, // orange
-  life_safety: { color: '#ffffff', glyph: 'P', label: 'People' }, // T2: white
-  fire: { color: '#b4b4c8', glyph: 'S', label: 'Smoke' }, // T2: smoke grey
-  plumbing: { color: '#5aa8ff', glyph: 'D', label: 'Water' }, // T2: water blue
-  electrical: { color: '#d4ff3a', glyph: 'E', label: 'Power' }, // T3: lime
+export const DISCIPLINE_STYLE: Record<Discipline, { color: string; glyph: string; label: string; glyphInk: string }> = {
+  mep: { color: '#0ea5c6', glyph: 'C', label: 'Chiller', glyphInk: TEXT }, // `id-chiller` teal
+  logistics: { color: '#e0479e', glyph: 'G', label: 'Glass', glyphInk: TEXT }, // `id-glass` magenta
+  accessibility: { color: '#ef7d1a', glyph: 'W', label: 'Wheelchair', glyphInk: TEXT }, // `id-wheelchair` orange
+  structure: { color: '#7c5cf0', glyph: 'L', label: 'Load', glyphInk: '#ffffff' }, // `id-structure` violet
+  life_safety: { color: '#334155', glyph: 'P', label: 'People', glyphInk: '#ffffff' }, // T2: slate
+  fire: { color: '#94a3b8', glyph: 'S', label: 'Smoke', glyphInk: TEXT }, // T2: smoke grey
+  plumbing: { color: '#0369a1', glyph: 'D', label: 'Water', glyphInk: '#ffffff' }, // T2: deep water blue
+  electrical: { color: '#ca8a04', glyph: 'E', label: 'Power', glyphInk: TEXT }, // T3: amber
 };
 
 // ---------- Type ----------
+// Press Start 2P for moments only; Atkinson Hyperlegible for every label and sentence;
+// JetBrains Mono for engineering numbers. All SIL OFL 1.1, from Google Fonts.
 
-// Press Start 2P (SIL Open Font License, Google Fonts) for headlines, scores and glyphs only.
-// Body text stays a clean sans so detail labels read on a projector.
 export const FONT_DISPLAY = '"Press Start 2P", "Courier New", monospace';
-export const FONT_BODY = '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif';
+export const FONT_BODY = '"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif';
+export const FONT_DATA = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 export const FONT_STYLESHEET =
-  'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Press+Start+2P&display=swap';
+  'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&family=Press+Start+2P&display=swap';
 
-// ---------- Paths: pellet trails ----------
-
-// A token's path is a trail of pellets in its discipline colour. The token eats them as it moves:
-// pellets ahead show the route, eaten pellets leave a thin glowing line behind.
-export const PATH = {
-  pelletSpacing: 0.6, // metres between pellets along the path
-  pelletRadius: 0.12, // metres
-  trailWidth: 0.08, // metres; the eaten line behind the token
-  glow: 0.6, // 0..1 additive glow strength, on paths and tokens only
-  tokenRadius: 0.45, // metres; the token disc that carries the glyph
+// Sizes at the 1920 x 1080 projector master (the 1366 laptop preset uses 15 body / 12 labels).
+export const TYPE = {
+  displayXl: 88, // LEVEL COMPLETE only
+  displayLg: 40, // ESCAPE!, CONFLICT!
+  displayMd: 24, // wordmark only
+  labelLg: 20, // names, secondary buttons; bold, uppercase, tracked 1.5 px
+  labelSm: 15, // badges, tabs; minimum label size
+  title: 30, // inspector headline
+  heading: 22,
+  bodyLg: 21,
+  body: 18, // minimum sentence size
+  dataXl: 42, // needs vs has
+  data: 20, // on-board callouts
 } as const;
+
+// ---------- Space and shape ----------
+
+export const SPACE = { s1: 4, s2: 8, s3: 12, s4: 16, s6: 24, s8: 32, s12: 48, s16: 64 } as const; // px, 8 px rhythm
+export const RADIUS = { sm: 10, md: 16, lg: 24, full: 9999 } as const; // px; buttons and badges are capsules
+
+// ---------- Board views (always 3D isometric) ----------
+
+export const VIEWS = ['shaded', 'xray', 'floors'] as const; // see design/flow.md
+export type View = (typeof VIEWS)[number];
+
+// ---------- Paths ----------
+// Available: accent dots. Selected: larger dots in the discipline colour. Travelled: solid line.
+// Blocked: solid up to blocked_at, FAIL dashes beyond. Proposed (Jev): ghost at GHOST_OPACITY.
+
+export const PATH = {
+  pelletSpacing: 0.6, // metres between route dots (key name read by viewer/)
+  pelletRadius: 0.12, // metres; route dot radius
+  trailWidth: 0.08, // metres; the travelled line behind the token
+  glow: 0, // no glow in this look; the key stays because viewer/ reads it
+  tokenRadius: 0.45, // metres; the token that carries the glyph
+} as const;
+
+export const ROUTE_DOT_OPACITY = 0.55; // available-route dots
+export const GHOST_OPACITY = 0.2; // proposed route and proposed geometry, before APPLY
+export const DIM_OPACITY = 0.6; // last run's statuses after an edit, until the next run
 
 // ---------- Motion and moments (design/look.md) ----------
 
 export const MOTION = {
-  secondsPerToken: 2, // travel time along a full path, ease-in-out (1.5-2.5 s)
-  staggerSeconds: 0.25, // start offset between tokens after Escape!
-  failShakeMs: 150, // one shake when a token hits blocked_at
-  failBlinkHz: 2, // red X blink rate; must stay at or under 3 flashes a second
+  secondsPerToken: 2, // travel time along a full path (1.5-2.5 s)
+  staggerSeconds: 0.25, // start offset between tokens after ESCAPE!
+  failShakeMs: 150, // shake when a token hits blocked_at (3 x 3 px, stepped)
+  failFreezeMs: 400, // everything holds before the fail is shown (`dur-beat`)
+  failBlinkHz: 2, // cross blink rate; must stay at or under MAX_FLASH_HZ
   failBlinkCount: 3,
-  winFlashHz: 2, // maze walls flash WALL <-> TEXT on LEVEL COMPLETE
+  winFlashHz: 2, // building outline blinks ACCENT <-> white on LEVEL COMPLETE
   winFlashCount: 4,
-  bannerHoldSeconds: 3,
+  bannerHoldSeconds: 2.4, // CONFLICT! banner hold before it docks into the card
+  pressMs: 120, // `dur-tick`
+  quickMs: 240, // `dur-quick`: hover, selection, panel slide
+  showMs: 1200, // `dur-show`: nothing important lasts less than this
 } as const;
 
-export const MAX_FLASH_HZ = 3; // photosensitivity limit from the arcade-look checklist
+export const EASE_GLASS = 'cubic-bezier(0.32, 0.72, 0, 1)'; // all UI motion
+export const EASE_PIXEL = 'steps(2, end)'; // sprite frames only
+
+export const MAX_FLASH_HZ = 3; // photosensitivity limit
 
 // ---------- Contrast helpers (WCAG 2.x) ----------
 

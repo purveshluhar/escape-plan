@@ -9,22 +9,24 @@ the demo script (`design/demo-script.md` when written).
 
 ## Status
 
-Base look locked: a maze-arcade screen (black ground, neon-blue double-line walls, pellet-trail
-paths, pixel type). Our own take on the genre: no characters, sprites, names, music or sound
-effects from any existing game.
+Look locked: **Liquid Glass v2** (light frosted building, glass UI chrome, one blue accent, pixel
+type for moments only). The board is always 3D isometric: shaded, x-ray or exploded floors.
 
-- `tokens.ts`: palette, discipline colours and glyphs, fonts, `PATH`, `MOTION`, `contrastRatio()`.
-- `tokens.test.ts`: every text and discipline colour is at least 4.5:1 on the background,
-  disciplines never reuse the pass or fail colour, nothing flashes more than 3 times a second.
-- `look.md`: the spec for paths, the fail moment, the edit moment and LEVEL COMPLETE.
-- `look-preview.html`: a fake 2D maze that runs the spec with the real tokens. Under
-  `npm run dev`, open http://localhost:5173/design/look-preview.html.
+- `tokens.ts`: palette, glass, discipline colours, glyphs and glyph ink, fonts, type sizes,
+  space, radius, views, `PATH`, `MOTION`, `GHOST_OPACITY`, `contrastRatio()`. Export names
+  are stable, so `viewer/` and `app/` compile unchanged when values move.
+- `tokens.test.ts`: text and badge contrast, glyph contrast, discipline colours never reuse the
+  pass, fail or accent colour, nothing flashes more than 3 times a second. One todo: four
+  discipline colours are under 3:1 on the light backdrop (see `look.md`).
+- `look.md`: the rules, route states and moments.
+- `flow.md`: the 12-sheet user flow, with asks for P1, P2 and P5. Clickable dummy linked there.
+- Screen preview: the clickable 12-sheet canvas linked in `flow.md` (3D isometric, Liquid Glass).
 
 ## Tier 1 first task
 
 Lock the discipline colours and glyphs in `design/tokens.ts`, the path style, and the fail and
-win moments. Use the `arcade-look` skill for the visual system and its screen checklist, and
-`demo-and-pitch` for the script. Every asset is self-made or properly licensed; record the
+win moments, following `look.md` and its colour rules. Use the `demo-and-pitch` skill for the
+script. Every asset is self-made or properly licensed; record the
 source of any third-party asset in this README.
 
 ## Third-party assets
@@ -32,4 +34,5 @@ source of any third-party asset in this README.
 | Asset | Source | Licence |
 |---|---|---|
 | Press Start 2P font (display) | Google Fonts, loaded at runtime, not stored in the repo | SIL Open Font License 1.1 |
-| IBM Plex Sans font (body) | Google Fonts, loaded at runtime, not stored in the repo | SIL Open Font License 1.1 |
+| Atkinson Hyperlegible font (body) | Google Fonts, loaded at runtime, not stored in the repo | SIL Open Font License 1.1 |
+| JetBrains Mono font (numbers) | Google Fonts, loaded at runtime, not stored in the repo | SIL Open Font License 1.1 |
