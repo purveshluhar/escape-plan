@@ -1,0 +1,39 @@
+name: Bug
+description: Something is wrong in the game, the solver or the data.
+labels: [needs-triage]
+body:
+  - type: dropdown
+    id: folder
+    attributes:
+      label: Where it shows
+      options: [solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), not sure]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The edits you made, in order, and the commit or tag.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should happen. Name the expected case in data/expected.json if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened. Paste the solver record or a screenshot.
+    validations:
+      required: true
+  - type: dropdown
+    id: breaks-tier1
+    attributes:
+      label: Does it break the tier 1 demo?
+      options: [yes, no, not sure]
+    validations:
+      required: true

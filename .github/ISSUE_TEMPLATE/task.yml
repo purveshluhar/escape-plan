@@ -1,0 +1,39 @@
+name: Task
+description: One piece of work for one owner folder.
+labels: [needs-triage]
+body:
+  - type: dropdown
+    id: folder
+    attributes:
+      label: Owner folder
+      options: [contract/ (P1), solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), docs or config (P1)]
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      options: [tier 1 (must ship), tier 2, tier 3]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What to build
+      description: One or two sentences. Use GLOSSARY.md terms.
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Acceptance check
+      description: How a person sees it is done. A command, an expected-case id in data/expected.json, or a screen to look at.
+      placeholder: "npm test passes and expected case widen-shaft is green"
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract impact
+      description: Does this need a change in contract/? If yes, P1 decides at a merge point.
+      value: "None"
