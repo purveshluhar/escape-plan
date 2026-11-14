@@ -3,11 +3,13 @@
 // add rules with the `solver-token` skill.
 import { RULES } from '../contract/types.ts';
 import type { Building, Edit, Rule, SolverResult, Token } from '../contract/types.ts';
+import { CORNER_TURN } from './corner-turn.ts';
 import { NO_STEPS } from './no-steps.ts';
 import { walk } from './search.ts';
 
 // A Map, not an object: a rule string from the data never reaches an Object.prototype member.
 const RULE_SOLVERS = new Map<Rule, (building: Building, token: Token) => SolverResult>([
+  ['corner_turn', (b, t) => walk(b, t, CORNER_TURN)],
   ['no_steps', (b, t) => walk(b, t, NO_STEPS)],
 ]);
 
