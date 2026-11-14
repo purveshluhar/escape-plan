@@ -56,6 +56,12 @@ Decisions are in [docs/adr/](docs/adr/), and terms in [GLOSSARY.md](GLOSSARY.md)
 
 ## Tiers and timeline
 
+[![Tier ladder: tiers, checkpoints and switch times](docs/plan-graph/tier-ladder.png)](docs/plan-graph.html)
+
+The full visual plan (when: tier ladder; how the parts connect; who owns each feature; what the audience sees: demo path) is
+[docs/plan-graph.html](docs/plan-graph.html). Open it in a browser; the PNGs are in
+[docs/plan-graph/](docs/plan-graph/).
+
 - **Tier 1 (must ship):** chiller, glass, wheelchair and load; live re-solve; the
   shaft-breaks-beam moment; the 3D cutaway. Tag `tier1-demo` at 17:00.
 - **Tier 2:** people and smoke race, Jev parsing, Cityweft backdrop, sound, water. Tag `tier2-demo` at 19:30.

@@ -1,5 +1,10 @@
 # Team plan
 
+Visual version for discussion: [plan-graph.html](plan-graph.html) (open in a browser), with PNGs
+in [plan-graph/](plan-graph/): [tier ladder](plan-graph/tier-ladder.png),
+[who builds what](plan-graph/who-builds-what.png), [feature owners](plan-graph/feature-owners.png),
+[demo path](plan-graph/demo-path.png). If the two disagree, this file wins.
+
 Five people, each coding with an AI agent. Build Saturday 12:00-22:00; Sunday is rehearsal and
 the 11:30 submit. Full scope is kept in three tiers. Each tier starts only when the one before
 it is green, so we never end with nothing working.
