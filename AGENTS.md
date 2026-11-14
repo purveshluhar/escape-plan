@@ -30,7 +30,7 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 |---|---|---|---|
 | P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `server/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests (later: the local server in `server/` with Jev parse, plan B and C, Jev votes and the phone sockets) |
 | P2 3D and animation | @justinjao | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
-| P3 Front-end, edits and AI | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
+| P3 Front-end and edits | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
 | P4 Designer and presenter | @minsookim1014, @jackwayfeel | `design/` | Icons, colours, path style, demo script |
 | P5 Domain modeller and tester | @kalunkuo | `data/` | `data/building.json`; `data/expected.json` for the 4 tier 1 tokens |
 
