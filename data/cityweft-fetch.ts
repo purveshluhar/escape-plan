@@ -1,0 +1,66 @@
+// Fetch the 120 Broadway block from Cityweft as a GLB. Owner: P5.
+// Run: node --env-file=.env data/cityweft-fetch.ts
+// Needs CITYWEFT_API_KEY in the git-ignored .env (never a VITE_ prefix, docs/adr/0008).
+// Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { buildRequest, describeStatus } from './cityweft-request.ts';
+
+const ENDPOINT = 'https://api.cityweft.com/v1/context';
+const CENTER = { lat: 40.7085, lon: -74.0108 }; // 120 Broadway, New York
+const SIZE_METRES = 150;
+const MAX_TRIES = 3;
+const OUT_DIR = new URL('./cityweft/', import.meta.url);
+
+const key = process.env.CITYWEFT_API_KEY;
+if (!key) {
+  console.error(describeStatus(401));
+  process.exit(1);
+}
+
+const body = buildRequest(CENTER, SIZE_METRES);
+
+async function post(): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+    });
+    if (res.status !== 503 || attempt === MAX_TRIES) return res;
+    const wait = Number(res.headers.get('Retry-After')) || 5;
+    console.error(`${describeStatus(503)} Waiting ${wait}s (try ${attempt} of ${MAX_TRIES}).`);
+    await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+  }
+}
+
+console.log(`Requesting a ${SIZE_METRES} m block around ${CENTER.lat}, ${CENTER.lon} ...`);
+const res = await post();
+if (!res.ok) {
+  console.error(describeStatus(res.status));
+  process.exit(1);
+}
+
+const { downloadUrl, spatialReference } = (await res.json()) as {
+  downloadUrl: string;
+  spatialReference: unknown;
+};
+
+// The download link is temporary, so fetch it now. It is not a Cityweft API call: send no key.
+const file = await fetch(downloadUrl);
+if (!file.ok) {
+  console.error(`Download failed with ${file.status}. Run the script again for a fresh link.`);
+  process.exit(1);
+}
+const glb = Buffer.from(await file.arrayBuffer());
+
+mkdirSync(OUT_DIR, { recursive: true });
+writeFileSync(new URL('block.glb', OUT_DIR), glb);
+writeFileSync(
+  new URL('meta.json', OUT_DIR),
+  JSON.stringify(
+    { center: CENTER, sizeMetres: SIZE_METRES, polygon: body.polygon, spatialReference, fetchedAt: new Date().toISOString() },
+    null,
+    2,
+  ),
+);
+console.log(`Saved data/cityweft/block.glb (${(glb.length / 1e6).toFixed(1)} MB) and meta.json.`);
