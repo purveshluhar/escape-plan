@@ -21,10 +21,10 @@ The solver decides pass or fail. It is deterministic and must answer all tokens 
      `size.length <= (a^(2/3) + b^(2/3))^(3/2)`;
    - `no_steps`: no edge with `kind: 'step'` or `step_height > 0`;
    - `downward`: walk `supported_by` from the start member; a member is cut if an edge that
-     crosses it has `clear_width > cuts_above_width`.
+     crosses it has `clear_width > cuts_above_width`, unless it is a `transfer_beam`.
 4. **Search.** Breadth-first search from `start` to `goal` (or to any `is_exit` node when
-   `goal` is null). Edges are usable both ways unless the rule says otherwise. Break ties by
-   id order, so the path is the same every run.
+   `goal` is null). Edges are two-way, except `drain_route` and `supply` (from to to only).
+   Visit neighbours in node id order, so the path is the same every run.
 5. **Build the record** (`SolverResult`):
    - pass: `path` from start to goal, `blocked_at`, `reason`, `needed`, `available` all `null`;
    - fail: search again with the filter off to find where the best path is blocked. Set

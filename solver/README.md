@@ -1,6 +1,6 @@
 # solver/
 
-**Owner:** P1 (purveshluhar).
+**Owner:** P1 (@purveshluhar).
 **Purpose:** decide pass or fail for every token. Deterministic, under 100 ms. No AI here.
 **Consumes:** `Building` (`data/building.json`) and an `Edit[]` list (`contract/types.ts`).
 **Produces:** `SolverResult[]`, one per token, matching `contract/schema/solver-output.schema.json`.

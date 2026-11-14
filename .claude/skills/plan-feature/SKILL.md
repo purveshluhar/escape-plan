@@ -21,7 +21,8 @@ asking anyone.
 3. If the plan has open questions, run `grill-the-plan` on it before step 4.
 4. Split the work into tickets. One ticket = one owner folder = about one hour or less.
    Each ticket has:
-   - owner folder and tier (labels `tier-1`, `tier-2`, `tier-3`);
+   - owner folder and tier (add the label `tier-1`, `tier-2` or `tier-3` by hand: the issue form
+     asks for the tier but does not label it);
    - what to build, in glossary terms;
    - one **acceptance check** a person can run: a command, an expected-case id in
      `data/expected.json`, or a screen to look at;

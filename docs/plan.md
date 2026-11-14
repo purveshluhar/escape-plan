@@ -8,7 +8,7 @@ it is green, so we never end with nothing working.
 
 | Role | Folder | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|---|
-| P1 Graph and solver lead (purveshluhar) | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water | Electrical |
+| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water | Electrical |
 | P2 3D and animation | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
 | P3 Front-end, edits and AI | `app/` | Edit buttons, reset, scoreboard, app state | Jev text-box parsing (or plan B) | Jev votes; phone controllers; voice |
 | P4 Designer and presenter | `design/` | Icons, colours, path style, script | Sound | LLM post-game report (with P3); final deck |
@@ -77,8 +77,9 @@ tier 2 upward. Tier 1 is never cut.
 
 ## Merges
 
-Small merges to `main` on the hour, every hour, about 10 minutes, P1 merging. `main` must always
-run the tier 1 demo. Before each merge, run the `review-merge` skill.
+Small merges to `main` on the hour, every hour, about 10 minutes, P1 merging. Each person works
+on a branch `p<N>/<topic>` and opens a PR. `main` must always run the tier 1 demo. Before each
+merge, run the `review-merge` skill.
 
 ## House rules
 

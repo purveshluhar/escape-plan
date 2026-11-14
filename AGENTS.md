@@ -12,12 +12,15 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 1. Read `contract/` first (`contract/README.md`, then `contract/types.ts`). Build against those types.
 2. Do not change `contract/`. P1 owns it. Changes happen only at a merge point. To ask for one, use the `contract-change` skill.
 3. Edit only your own folder (table below). Read other folders, and import from them, but leave their files alone.
-4. Run `npm test` before every merge. It must pass. `main` must always run the tier 1 demo.
+4. Run `npm run check` (typecheck, test, build) before every merge. It must pass. `npm test` alone
+   does not check types. `main` must always run the tier 1 demo.
 5. `data/expected.json` is the truth. When a test fails against it, the code is wrong until a human proves the expected case wrong. Never change an expected value to make code pass.
-6. No secrets in code. Keys go in a git-ignored `.env` only.
+6. No secrets in code. Keys go in a git-ignored `.env` only, never with a `VITE_` prefix (Vite
+   ships those to the browser). Calls that need a key go through a local server (ADR 0008).
 7. No Cityweft files in the repo. They live in git-ignored `private-context/` or `data/cityweft/`. Screenshots in the deck are fine.
 8. All building data is self-made and synthetic.
-9. Merge small, every hour, through P1. Never push a broken `main`.
+9. Work on a branch `p<N>/<topic>` (for example `p2/token-paths`), push it, and open a PR to
+   `main`. P1 merges PRs on the hour. Only P1 commits to `main`. Never push a broken `main`.
 10. Commit messages: Conventional Commits, plain ASCII (for example `feat(solver): add chiller clearance rule`).
 11. New dependencies need P1's OK first. Name the package and why.
 
@@ -25,13 +28,14 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 
 | Role | Person | Folder | Tier 1 job |
 |---|---|---|---|
-| P1 Graph and solver lead | purveshluhar | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests |
+| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests |
 | P2 3D and animation | P2 | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
-| P3 Front-end, edits and AI | P3 | `app/` | Edit buttons, reset, scoreboard, app state |
+| P3 Front-end, edits and AI | P3 | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
 | P4 Designer and presenter | P4 | `design/` | Icons, colours, path style, demo script |
 | P5 Domain modeller and tester | P5 | `data/` | `data/building.json`; `data/expected.json` for the 4 tier 1 tokens |
 
-Shared files outside these folders (root config, `docs/`, `.github/`, `.claude/`) belong to P1.
+Replace P2-P5 with GitHub handles when the team is set. Shared files outside these folders
+(root config, `docs/`, `.github/`, `.claude/`) belong to P1.
 Each folder's `README.md` says what it consumes and produces.
 
 ## Commands
@@ -41,6 +45,7 @@ Each folder's `README.md` says what it consumes and produces.
 | `npm ci` | Install exact versions from `package-lock.json`. |
 | `npm run dev` | Start the game at http://localhost:5173. |
 | `npm test` | Node's built-in test runner: contract, solver, data schema checks, and every `*.test.ts`. |
+| `npm run check` | Typecheck, test and build: the gate before every merge (CI runs it too). |
 | `npm run typecheck` | `tsc --noEmit` over all source (test files are not type-checked). |
 | `npm run build` | Production build into `dist/`. |
 
@@ -49,7 +54,8 @@ Import local files with the `.ts` extension, and use `import type` for types.
 
 ## Merge and tag rhythm
 
-- Every hour, on the hour: commit in your folder, run `npm test`, then P1 merges to `main` (about 10 minutes).
+- Every hour, on the hour: push your branch with `npm run check` green, open a PR, and P1 merges
+  the PRs to `main` (about 10 minutes).
 - Before a merge, run the `review-merge` skill.
 - Tags give known-good demo points: `tier1-demo` at 17:00, `tier2-demo` at 19:30.
 - If a merge breaks the tier 1 demo, revert it and demo from the last tag.

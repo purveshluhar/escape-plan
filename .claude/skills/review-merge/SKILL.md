@@ -14,17 +14,17 @@ description: Checks to run before an hourly merge to main, by the author and by 
    move it out, or get the owner's OK.
 3. `contract/` is unchanged, or the change was approved by P1 (`contract-change`).
 4. `data/expected.json` values are unchanged, unless you are P5 and checked them by hand.
-5. Run `npm ci` if `package.json` changed, then `npm test`, `npm run typecheck`, `npm run build`.
-   All pass.
+5. Run `npm ci` if `package.json` changed, then `npm run check` (typecheck, test, build). It passes.
 6. Run `npm run dev`, press **Escape!**, and walk the demo path. It still works.
 7. Search the diff for secrets and big files: no keys, no `.env`, no `*.glb`, no `*.3dm`, no
    Cityweft export, nothing over 5 MB.
 8. Commit messages are Conventional Commits in plain ASCII.
-9. Tell P1: branch name, what changed, the acceptance check you ran.
+9. Push your branch (`p<N>/<topic>`) and open a PR to `main` with the PR template filled in.
+   Tell P1 the PR number and the acceptance check you ran.
 
 ## Steps (P1, at the merge point)
 
-1. Merge the branches one at a time, smallest first. Run `npm test` after each.
+1. Merge the PRs one at a time, smallest first, after CI is green. Run `npm run check` on `main` after each.
 2. If one breaks the build or the demo, take it out and hand it back with the failing output.
 3. Push `main` only when `npm test` is green and the demo runs.
 4. At 17:00 and 19:30, tag the green `main`: `git tag tier1-demo` or `git tag tier2-demo`, then

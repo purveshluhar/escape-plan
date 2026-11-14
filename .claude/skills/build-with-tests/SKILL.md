@@ -18,7 +18,7 @@ human proves the expected case wrong.
      `viewer/layout.ts` and `app/scoreboard.ts`.
 3. Run `npm test` and see the new test go **red** for the right reason.
 4. Write the smallest code that makes it green. Stay inside your folder.
-5. Run `npm test` and `npm run typecheck`. Both must pass.
+5. Run `npm run check` (typecheck, test, build). It must pass.
 6. If a test against `data/expected.json` still fails and you think the expected value is
    wrong, stop. Tell P5 (and P1 for the solver) with the case id, the value, and your numbers.
    The expected value stays as it is until P5 changes it by hand.
@@ -33,5 +33,5 @@ human proves the expected case wrong.
 ## Done when
 
 - The new test went red first, then green.
-- `npm test` and `npm run typecheck` pass.
+- `npm run check` passes.
 - Only your folder changed.

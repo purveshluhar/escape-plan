@@ -14,8 +14,8 @@ the ground. Each trade checks its own path alone and late, and the clash shows u
 Escape Plan turns the building into a game. One building graph, one token per discipline.
 Press **Escape!** and every token races out. The chiller sticks in the plant shaft. The glass
 will not turn the corner. The wheelchair hits a step. Widen the shaft, and the chiller reaches
-the truck, but the shaft cuts beam B2 and the load turns red. Add a transfer beam and a ramp,
-and everything goes green: **LEVEL COMPLETE**.
+the truck, but the shaft cuts beam B2 and the load turns red. Add a transfer beam, a ramp at the
+terrace door, and widen the lobby corner, and everything goes green: **LEVEL COMPLETE**.
 
 A deterministic solver decides every pass or fail and shows the numbers. Jev (TypeSafe AI)
 turns typed or spoken edits into actions and gives each discipline a vote bubble. Cityweft can
@@ -31,9 +31,8 @@ cd escape-plan
 npm ci
 npm run dev      # http://localhost:5173
 npm test         # contract, solver, data schema checks
+npm run check    # typecheck + test + build: run before every merge
 ```
-
-`npm run typecheck` and `npm run build` are the other two checks CI runs.
 
 ## Folder map
 
