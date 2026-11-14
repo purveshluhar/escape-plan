@@ -5,6 +5,7 @@ import { RULES } from '../contract/types.ts';
 import type { Building, Edit, Rule, SolverResult, Token } from '../contract/types.ts';
 import { CLEARANCE } from './clearance.ts';
 import { CORNER_TURN } from './corner-turn.ts';
+import { downward } from './downward.ts';
 import { NO_STEPS } from './no-steps.ts';
 import { shortestExit } from './shortest-exit.ts';
 import { walk } from './search.ts';
@@ -14,6 +15,7 @@ const RULE_SOLVERS = new Map<Rule, (building: Building, token: Token) => SolverR
   ['clearance', (b, t) => walk(b, t, CLEARANCE)],
   ['corner_turn', (b, t) => walk(b, t, CORNER_TURN)],
   ['no_steps', (b, t) => walk(b, t, NO_STEPS)],
+  ['downward', downward],
   ['shortest_exit', shortestExit],
 ]);
 

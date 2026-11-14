@@ -9,10 +9,10 @@
 ## Status
 
 `no_steps` (wheelchair), `corner_turn` (sofa; the glass cases run on it too),
-`shortest_exit` (people, no smoke) and `clearance` (chiller) are done. Every other rule is
-still a placeholder, so its expected cases in `solver.test.ts` show as `todo`. Adding a rule
-to `RULE_SOLVERS` in `index.ts` puts it in `IMPLEMENTED_RULES` and turns its expected cases
-into real tests.
+`shortest_exit` (people, no smoke), `clearance` (chiller) and `downward` (load) are done.
+Every other rule is still a placeholder, so its expected cases in `solver.test.ts` show as
+`todo`. Adding a rule to `RULE_SOLVERS` in `index.ts` puts it in `IMPLEMENTED_RULES` and turns
+its expected cases into real tests.
 
 ## Files
 
@@ -26,6 +26,8 @@ into real tests.
   `clearance.ts` (chiller) does this with width and height only, and adds `shaft`.
 - `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
   the edges walked on a pass, null on a fail.
+- `downward.ts`: the load. It walks `supported_by` to a foundation and holds `cutOf()`, the
+  shaft-breaks-beam cut (also for `supply` later).
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
   over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
   and people tokens there are fixtures until P5 adds them to `data/`.
