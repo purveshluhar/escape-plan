@@ -103,7 +103,7 @@ lands after `data/building.json` gets an elevator node.
 
 ## Changing the contract
 
-Only P1 changes this folder, and only at an hourly merge point. Everyone is told first.
+Only P1 changes this folder, and only at a merge point. Everyone is told first.
 To ask for a change, use the `contract-change` skill (`.claude/skills/contract-change/SKILL.md`).
 A change must update `types.ts`, every schema that repeats the field or enum, and `examples.ts`
 together.
