@@ -34,6 +34,16 @@ export function shiftCenter(center: Center, northMetres: number, eastMetres: num
   };
 }
 
+// Where a lat/lon sits in the fetched block's local metres: x north and z east, measured from the
+// block's south-west corner (the frame the GLB and instances.json share; y is up). Checked by
+// drawing the GLB top-down: the Hudson is at small z, and the memorial pools line up on x.
+export function toLocal(point: Center, blockCentre: Center, sizeMetres: number): { x: number; z: number } {
+  return {
+    x: sizeMetres / 2 + (point.lat - blockCentre.lat) * METRES_PER_DEG_LAT,
+    z: sizeMetres / 2 + (point.lon - blockCentre.lon) * metresPerDegLon(blockCentre.lat),
+  };
+}
+
 // Area of a small lat/lon polygon (shoelace on a local flat projection), in km2.
 export function polygonAreaKm2(polygon: LatLon[]): number {
   const first = polygon[0];

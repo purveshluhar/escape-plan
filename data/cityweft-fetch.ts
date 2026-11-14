@@ -1,18 +1,23 @@
-// Fetch the 120 Broadway block from Cityweft as a GLB. Owner: P5.
+// Fetch the One World Trade Center block from Cityweft as a GLB plus instance points. Owner: P5.
 // Run: node --env-file=.env data/cityweft-fetch.ts
 // Needs CITYWEFT_API_KEY in the git-ignored .env (never a VITE_ prefix, docs/adr/0008).
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  buildInstancesRequest, buildRequest, describeStatus, extractInstances, shiftCenter,
+  buildInstancesRequest, buildRequest, describeStatus, extractInstances, shiftCenter, toLocal,
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
-const TARGET = { lat: 40.7085, lon: -74.0108 }; // 120 Broadway, New York: the building we play in
-// The block is centred south of the target so the bay (water) fills its south side. The viewer
-// camera looks from the north-east, so the missing north edge is never in view.
-const SOUTH_SHIFT_METRES = 350;
-const CENTER = shiftCenter(TARGET, -SOUTH_SHIFT_METRES, 0);
+const TARGET = { lat: 40.712742, lon: -74.013382 }; // One World Trade Center: the building we play in
+const MEMORIAL_POOLS = {
+  north: { lat: 40.712136, lon: -74.013186 }, // 9/11 Memorial north pool
+  south: { lat: 40.711083, lon: -74.013022 }, // 9/11 Memorial south pool
+};
+// The block is centred west and a little south of the target so the Hudson and the memorial fill
+// its west and south sides. The viewer camera sits north-east of the building looking south-west,
+// so the Hudson is behind the building and the short north and east edges are never in view.
+const OFFSET_METRES = { north: -100, east: -250 };
+const CENTER = shiftCenter(TARGET, OFFSET_METRES.north, OFFSET_METRES.east);
 const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 800; // a side; override in .env or the shell
 const MAX_TRIES = 3;
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
@@ -39,7 +44,7 @@ async function post(payload: object): Promise<Response> {
   }
 }
 
-console.log(`Requesting a ${SIZE_METRES} m block, centred ${SOUTH_SHIFT_METRES} m south of 120 Broadway ...`);
+console.log(`Requesting a ${SIZE_METRES} m block around One World Trade Center (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
 const res = await post(body);
 if (!res.ok) {
   console.error(describeStatus(res.status));
@@ -64,7 +69,18 @@ writeFileSync(new URL('block.glb', OUT_DIR), glb);
 writeFileSync(
   new URL('meta.json', OUT_DIR),
   JSON.stringify(
-    { target: TARGET, center: CENTER, southShiftMetres: SOUTH_SHIFT_METRES, sizeMetres: SIZE_METRES, polygon: body.polygon, spatialReference, fetchedAt: new Date().toISOString() },
+    {
+      target: TARGET,
+      center: CENTER,
+      offsetMetres: OFFSET_METRES,
+      sizeMetres: SIZE_METRES,
+      // where things sit in the block's local metres (x north, z east, origin south-west corner)
+      local: {
+        target: toLocal(TARGET, CENTER, SIZE_METRES),
+        memorialNorthPool: toLocal(MEMORIAL_POOLS.north, CENTER, SIZE_METRES),
+        memorialSouthPool: toLocal(MEMORIAL_POOLS.south, CENTER, SIZE_METRES),
+      },
+      polygon: body.polygon, spatialReference, fetchedAt: new Date().toISOString() },
     null,
     2,
   ),

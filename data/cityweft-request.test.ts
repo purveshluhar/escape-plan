@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, shiftCenter, MAX_AREA_KM2,
+  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, shiftCenter, toLocal, MAX_AREA_KM2,
 } from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
@@ -113,4 +113,14 @@ test('shiftCenter moves a point by metres north and east, and shifts back exactl
   assert.ok(Math.abs((east.lon - BROADWAY_120.lon) * 111_320 * Math.cos((40.7085 * Math.PI) / 180) - 100) < 1);
   const back = shiftCenter(south, 350, 0);
   assert.ok(Math.abs(back.lat - BROADWAY_120.lat) < 1e-9);
+});
+
+test('toLocal gives block metres: x north and z east from the south-west corner', () => {
+  const centre = { lat: 40.7127, lon: -74.0134 };
+  const at = (p: { lat: number; lon: number }) => toLocal(p, centre, 800);
+  assert.deepEqual(at(centre), { x: 400, z: 400 });
+  const north = at(shiftCenter(centre, 350, 0));
+  assert.ok(Math.abs(north.x - 750) < 1e-6 && Math.abs(north.z - 400) < 1e-6);
+  const east = at(shiftCenter(centre, 0, 100));
+  assert.ok(Math.abs(east.z - 500) < 1e-6 && Math.abs(east.x - 400) < 1e-6);
 });
