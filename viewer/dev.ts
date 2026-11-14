@@ -10,7 +10,9 @@ import { createViewer } from './index.ts';
 
 const building = buildingJson as Building;
 const expected = expectedJson as ExpectedFile;
-const viewer = createViewer(document.getElementById('viewer')!);
+const params = new URLSearchParams(location.search);
+// ?inset=372 mimics the app's floating side panel, to check the model centres left of it.
+const viewer = createViewer(document.getElementById('viewer')!, { insetRight: Number(params.get('inset')) || 0 });
 const source = document.getElementById('source')!;
 const buttons = document.getElementById('cases')!;
 
@@ -41,4 +43,4 @@ buttons.replaceChildren(...expected.cases.map((c) => {
   b.addEventListener('click', () => play(c.id));
   return b;
 }));
-play(new URLSearchParams(location.search).get('case') ?? 'base');
+play(params.get('case') ?? 'base');
