@@ -1,6 +1,6 @@
 # Escape Plan
 
-**Every discipline has to get out.**
+**No discipline gets left behind.**
 
 ## The problem
 
