@@ -24,7 +24,7 @@ Units are metres and kN.
 - **People** (T2, `life_safety`, rule `shortest_exit`): walk the shortest path to an exit at a fixed speed.
 - **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and races the people.
 - **Water** (T2, `plumbing`, rule `downhill`): a drain that must fall all the way.
-- **Power** (T3, `electrical`, rule `supply`): electricity from the service node through the panel to the kitchen.
+- **Power** (T3, `electrical`, rule `supply`): electricity from its start node (the building's service entry) through a `panel` node to the kitchen.
 
 ## Building graph
 
@@ -34,7 +34,7 @@ Units are metres and kN.
 - **Box**: a node's plan rectangle: `x`, `y` of one corner, `width` along x, `depth` along y.
 - **Exit**: a node with `is_exit: true`.
 - **Invert** (T2): the elevation of a drain at a node.
-- **Edge**: a way between two nodes (`from`, `to`). Kinds: `door`, `opening`, `shaft`, `stair`, `elevator`, `ramp`, `step` (a change in floor level), `drain_route` (T2), `supply` (T3).
+- **Edge**: a way between two nodes (`from`, `to`). Two-way, except `drain_route` and `supply`, which run from `from` to `to` only. Kinds: `door`, `opening`, `shaft`, `stair`, `elevator`, `ramp`, `step` (a change in floor level), `drain_route` (T2), `supply` (T3).
 - **Clear width / clear height**: the free space through an edge.
 - **Step height**: the floor level change across an edge; 0 means level.
 - **Corner a / corner b**: corridor widths before and after a 90-degree turn at an edge.
@@ -43,8 +43,9 @@ Units are metres and kN.
 - **Cuts above width**: if the edge's clear width grows above this value, every member it crosses is cut.
 - **Sleeved** (T2): a drain may pass through the members the edge crosses.
 - **Member**: a structural element: `column`, `beam`, `transfer_beam`, `foundation`.
-- **Supported by**: the members that hold a member up. A foundation has none.
-- **Transfer beam**: a beam added to carry load around a cut member.
+- **Supported by**: the members that hold a member up. A foundation has none; every other member has at least one.
+- **Member node**: the node where the viewer draws a member (optional `node` field).
+- **Transfer beam**: a beam that carries load around an opening. The `add_transfer_beam` edit turns a member into one; a transfer beam is never cut.
 - **Cut**: a member removed by a widened edge; nothing it supported is carried through it.
 
 ## Rules (which token, what passes)
@@ -56,7 +57,7 @@ Units are metres and kN.
 - **shortest_exit** (T2): people take the shortest path to an exit.
 - **spread** (T2): smoke moves one open edge per time step.
 - **downhill** (T2): every drain route falls by at least 1 %; a crossed beam must be sleeved.
-- **supply** (T3): a path from the service node through the panel to the kitchen; fail if the only path is cut.
+- **supply** (T3): a path of `supply` edges from the start node through a `panel` node to the kitchen; fail if the only path is cut.
 
 ## Solver output
 
@@ -70,7 +71,7 @@ Units are metres and kN.
 
 ## Edits and AI
 
-- **Edit ops**: `widen` (set a new clear width), `add_transfer_beam`, `add_ramp`, `close_door`, `add_sleeve` (T2), `reset`.
+- **Edit ops**: `widen` (set a new clear width; corner widths grow to at least that), `add_transfer_beam` (the member becomes a transfer beam), `add_ramp` (the edge becomes a ramp with no step), `close_door` (T2, the edge is no longer open), `add_sleeve` (T2), `reset`. Full table: `contract/README.md`.
 - **Source**: where an edit came from: `button`, `text` (T2), `voice` (T3), `phone` (T3).
 - **Jev**: TypeSafe AI's typed-decision model. It parses a sentence into an edit (T2) and votes per discipline (T3). It never decides pass or fail.
 - **Jev parse**: three typed answers about one sentence: which op, which target, what value, each with a confidence.

@@ -1,5 +1,7 @@
 # Triage labels
 
+_Adapted from the setup templates of [mattpocock/skills](https://github.com/mattpocock/skills)._
+
 The engineering skills speak in five canonical triage roles. This table maps each role to the
 label string in this repo's tracker. Create them with the commands in `issue-tracker.md`.
 

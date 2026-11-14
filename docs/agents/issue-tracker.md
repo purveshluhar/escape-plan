@@ -1,5 +1,7 @@
 # Issue tracker: GitHub
 
+_Adapted from the setup templates of [mattpocock/skills](https://github.com/mattpocock/skills)._
+
 Issues and specs for this repo live as GitHub issues in
 [purveshluhar/escape-plan](https://github.com/purveshluhar/escape-plan/issues). Use the `gh` CLI
 for all operations. `gh` infers the repo when run inside a clone.

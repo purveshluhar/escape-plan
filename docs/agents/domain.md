@@ -9,6 +9,9 @@ How agents use this repo's domain documentation. Layout: **single-context**.
 `-- contract/          the formats themselves (types.ts, schema/)
 ```
 
+Upstream skills from the public mattpocock/skills repo may look for `CONTEXT.md`. In this repo
+the same content is `GLOSSARY.md`; do not create a second file.
+
 ## Before exploring, read these
 
 - `GLOSSARY.md` at the repo root.
