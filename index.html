@@ -16,13 +16,29 @@
       li[data-status='fail'] { color: #ffb3c0; }
       #banner { font-size: 28px; font-weight: 800; color: #39ff88; }
       .note { opacity: 0.6; font-size: 12px; }
+      aside { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+      h1, h2 { margin: 0; }
+      h2 { font-size: 12px; letter-spacing: 0.12em; opacity: 0.7; font-weight: 700; }
+      .actions { display: flex; gap: 8px; }
+      #edits { display: grid; gap: 8px; }
+      button.edit { text-align: left; border-color: #5c7cff; color: #e8ecff; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      button.edit[aria-pressed='true']::before { content: '\2713  '; }
+      #reset { border-color: #8a93b8; color: #e8ecff; }
+      li .detail { font-size: 13px; opacity: 0.8; margin-top: 2px; }
     </style>
   </head>
   <body>
     <div id="viewer"></div>
     <aside>
       <h1>ESCAPE PLAN</h1>
-      <button id="escape">Escape!</button>
+      <div class="actions">
+        <button id="escape" type="button">Escape!</button>
+        <button id="reset" type="button">Reset</button>
+      </div>
+      <h2>EDITS</h2>
+      <div id="edits"></div>
+      <h2>SCOREBOARD</h2>
       <ul id="scoreboard"></ul>
       <div id="banner"></div>
       <p class="note">Starter build: the solver is a stub until P1 adds token rules.</p>
