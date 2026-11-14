@@ -33,7 +33,8 @@ token failed and why within five seconds.
 2. Build the plain readable version first: boxes, lines, labels. Then add glow and motion.
 3. Check it on the largest screen you have, from three metres away, or at 50 % zoom.
 4. Run the checklist below. Fix every "no" before you call it done.
-5. If at the 3D go/no-go (`docs/plan.md`) a token still does not read clearly moving through the cutaway, switch to 2D
+5. If at the 3D go/no-go (`docs/plan.md`) a token still does not read clearly moving through
+   the cutaway, switch to 2D
    stacked plans (one SVG per level) and keep 3D on a branch.
 
 ## Screen checklist

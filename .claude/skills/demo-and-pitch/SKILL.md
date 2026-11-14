@@ -33,8 +33,10 @@ Drop any sentence whose feature is not green at freeze.
 1. Write the script in `design/demo-script.md` from the beats above, with who clicks what.
 2. Each edit in the script must be an expected case in `data/expected.json`, so the demo
    cannot surprise you.
-3. Rehearse from the `tier1-demo` (or `tier2-demo`) tag on the presenting laptop. Time it.
-4. After feature freeze (gate 12 in `docs/plan.md`), record a raw screen capture of the full demo: the backup. Keep it on two machines.
+3. Rehearse from the `tier1-demo` (or `tier2-demo`) tag on the presenting laptop. Run
+   `git fetch --tags --force` first, because `tier1-demo` is re-tagged. Time it.
+4. At gate 12 in `docs/plan.md` (after feature freeze, gate 11), record a raw screen capture of
+   the full demo: the backup. Keep it on two machines.
 5. If anything fails live, switch to the backup without apology and keep talking.
 
 ## Judge Q&A

@@ -34,7 +34,7 @@ Claude Code loads them by name; any other agent can open the file and follow it.
 | The formats | `contract/README.md`, `contract/types.ts` |
 | A word | `GLOSSARY.md` |
 | Why something is the way it is | `docs/adr/` |
-| Tiers, times, cut order | `docs/plan.md` |
+| Tiers, gates, cut order | `docs/plan.md` |
 | Tickets and labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 
 ## Public tools worth installing (optional, each person's own choice)

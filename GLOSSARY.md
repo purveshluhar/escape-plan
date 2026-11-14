@@ -12,7 +12,8 @@ Units are metres and kN.
 - **Re-solve**: run the solver again on the building with all edits applied.
 - **LEVEL COMPLETE**: every token passes.
 - **Red X**: the mark drawn where a token is blocked (`blocked_at`).
-- **Tier**: a scope band. Tier 1 must ship; tier 2 and tier 3 start only when the tier before is green.
+- **Tier**: a scope band. Tier 1 must ship. Tier 2 starts when all of tier 1 is green; tier 3 starts when tier 2 is tagged.
+- **Gate**: one step in the ordered list in `docs/plan.md`. It is passed when its condition is green, not at a time. The **MVP gate** (wheelchair, sofa and people green) tags `tier1-demo`. **Feature freeze** (gate 11) allows fixes only.
 - **Expected case**: one hand-checked scenario in `data/expected.json`: a list of edits and the results a person checked.
 
 ## Tokens (tier)

@@ -30,7 +30,8 @@ description: Checks to run before a merge to main, by the author and by P1. Use 
 4. At a tag gate in `docs/plan.md`, tag the green `main`: `git tag tier1-demo` at the MVP gate,
    or `git tag tier2-demo` when tier 2 is done. Then `git push origin <tag>`. To re-tag
    `tier1-demo` when all of tier 1 is green, use `git tag -f tier1-demo` and
-   `git push -f origin tier1-demo`.
+   `git push -f origin tier1-demo`. Tell the team to run `git fetch --tags --force`, because a
+   plain `git fetch` keeps the old tag.
 
 ## Done when
 

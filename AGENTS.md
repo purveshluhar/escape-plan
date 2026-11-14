@@ -1,7 +1,7 @@
 # AGENTS.md - Escape Plan
 
-Escape Plan is a browser game built on one building graph. Each discipline plays a token (chiller,
-glass panel, wheelchair, load; later people, smoke, water, power) that must escape the building.
+Escape Plan is a browser game built on one building graph. Each discipline plays a token (wheelchair,
+sofa, people, chiller, glass panel, load; later smoke, water, power) that must escape the building.
 Every edit re-solves every token live. A deterministic solver decides pass or fail. It is a game,
 not a code check.
 
@@ -20,7 +20,8 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 7. No Cityweft files in the repo. They live in git-ignored `private-context/` or `data/cityweft/`. Screenshots in the deck are fine.
 8. All building data is self-made and synthetic.
 9. Work on a branch `p<N>/<topic>` (for example `p2/token-paths`), push it, and open a PR to
-   `main`. P1 merges PRs in small, frequent merges. Only P1 commits to `main`. Never push a broken `main`.
+   `main`. P1 merges PRs in small, frequent merges. Only P1 commits to `main`. Never push a
+   broken `main`.
 10. Commit messages: Conventional Commits, plain ASCII (for example `feat(solver): add chiller clearance rule`).
 11. New dependencies need P1's OK first. Name the package and why.
 

@@ -5,7 +5,7 @@ description: Stress-test a plan, spec or design with hard questions before anyon
 
 # Grill the plan
 
-Goal: find the decisions that will hurt at the MVP gate, while they are still cheap to change.
+Goal: find the decisions that will hurt at the next gate in `docs/plan.md`, while they are still cheap to change.
 
 ## Steps
 

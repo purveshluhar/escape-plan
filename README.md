@@ -59,9 +59,9 @@ Decisions are in [docs/adr/](docs/adr/), and terms in [GLOSSARY.md](GLOSSARY.md)
 
 ## Tiers and gates
 
-[![Tier ladder: tiers, checkpoints and switch times](docs/plan-graph/tier-ladder.png)](docs/plan-graph.html)
+[![Tier ladder (drawn on the old clock timeline)](docs/plan-graph/tier-ladder.png)](docs/plan-graph.html)
 
-The full visual plan (when: tier ladder; how the parts connect; who owns each feature; what the audience sees: demo path) is
+The full visual plan (tier ladder; how the parts connect; who owns each feature; what the audience sees: demo path) is
 [docs/plan-graph.html](docs/plan-graph.html). Open it in a browser; the PNGs are in
 [docs/plan-graph/](docs/plan-graph/). The graph still draws the old clock timeline; where it
 and [docs/plan.md](docs/plan.md) disagree, docs/plan.md wins.
