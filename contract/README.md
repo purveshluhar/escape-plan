@@ -25,10 +25,29 @@ Owner: **P1** (purveshluhar). Every folder builds against these files. Read them
   (a keyword parser). Accept it only when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8).
 - `Token.goal = null` means "any node with `is_exit: true`" (for rule `downward`: any foundation).
 - For rule `downward`, `Token.start` is a member id and `path` lists member ids.
+- Edges are two-way, except `drain_route` and `supply`, which run only from `from` to `to`.
+- `Member.node` (optional) is the node where the viewer draws a member, so the load's red X
+  has a place. A foundation has `supported_by: []`; every other member has at least one support.
+
+## Edit effects
+
+`applyEdits()` in `solver/index.ts` follows this table. Expected cases are checked against it.
+
+| op | target | value | Effect |
+|---|---|---|---|
+| `widen` | edge | metres | `clear_width = value`. `corner_a` and `corner_b`, where set, become at least `value`. |
+| `add_transfer_beam` | member | null | The member becomes `kind: 'transfer_beam'`. A transfer beam is never cut. |
+| `add_ramp` | edge | null | `kind = 'ramp'`, `step_height = 0`. |
+| `close_door` (T2) | edge | null | `open = false`. |
+| `add_sleeve` (T2) | edge | null | `sleeved = true`. |
+| `reset` | null | null | Back to `data/building.json`. |
+
+An edit whose target does not exist changes nothing.
 
 ## Changing the contract
 
 Only P1 changes this folder, and only at an hourly merge point. Everyone is told first.
 To ask for a change, use the `contract-change` skill (`.claude/skills/contract-change/SKILL.md`).
-A change must update `types.ts`, the matching schema and `examples.ts` together.
+A change must update `types.ts`, every schema that repeats the field or enum, and `examples.ts`
+together.
 `npm test` fails if a schema enum and a `types.ts` enum drift apart.

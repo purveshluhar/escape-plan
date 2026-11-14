@@ -70,6 +70,7 @@ export interface BuildingNode {
   invert?: number; // T2: drain elevation, metres
 }
 
+// Edges are two-way, except `drain_route` and `supply`, which run only from `from` to `to`.
 export interface Edge {
   id: Id;
   name: string;
@@ -91,7 +92,8 @@ export interface Member {
   id: Id;
   kind: MemberKind;
   level: Id; // Level.id
-  supported_by: Id[]; // Member.id list; [] only for a foundation
+  supported_by: Id[]; // Member.id list; [] for a foundation, non-empty for every other kind
+  node?: Id; // BuildingNode.id where the viewer draws it (for the load's red X)
 }
 
 export interface TokenSize {
@@ -148,7 +150,8 @@ export interface SolverResult {
 // ---------- 4.3 edits ----------
 
 export const EDIT_OPS = [
-  'widen', 'add_transfer_beam', 'add_ramp', 'close_door',
+  'widen', 'add_transfer_beam', 'add_ramp',
+  'close_door', // T2 (acts on `open`)
   'add_sleeve', // T2
   'reset',
 ] as const;
@@ -162,10 +165,16 @@ export const EDIT_SOURCES = [
 ] as const;
 export type EditSource = (typeof EDIT_SOURCES)[number];
 
+// What each op does (applyEdits in solver/ follows this; contract/README.md has the table):
+// widen <edge> <metres>: clear_width = value; corner_a and corner_b, where set, become at least value.
+// add_transfer_beam <member>: the member becomes kind 'transfer_beam'; a transfer beam is never cut.
+// add_ramp <edge>: kind = 'ramp', step_height = 0.
+// close_door <edge> (T2): open = false.   add_sleeve <edge> (T2): sleeved = true.
+// reset: back to data/building.json; target and value are null.
 export interface Edit {
   op: EditOp;
-  target: Id | null; // edge or member id; null for reset
-  value: number | null; // for widen: new clear_width in metres; null when unused
+  target: Id | null; // edge id, or member id for add_transfer_beam; null for reset
+  value: number | null; // widen: metres; null for every other op
   source: EditSource;
 }
 

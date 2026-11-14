@@ -10,7 +10,7 @@ const building = JSON.parse(readFileSync(new URL('../data/building.json', import
 test('a failed token shows its reason and where', () => {
   const [row] = scoreRows(building, [exampleResultFail]);
   assert.equal(row?.label, 'Chiller');
-  assert.equal(row?.detail, 'too_narrow at door-north');
+  assert.equal(row?.detail, 'too_narrow at plant-shaft');
 });
 
 test('LEVEL COMPLETE only when every token passes', () => {

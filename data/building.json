@@ -1,33 +1,33 @@
 {
   "note": "EXAMPLE building, self-made and tiny. P5 replaces it with building.json v1. Metres and kN.",
   "levels": [
-    { "id": "L1", "elevation": 0 },
-    { "id": "L2", "elevation": 4 }
+    {"id": "L1", "elevation": 0},
+    {"id": "L2", "elevation": 4}
   ],
   "nodes": [
-    { "id": "plant", "name": "Roof plant room", "level": "L2", "type": "plant", "box": { "x": 0, "y": 0, "width": 6, "depth": 5 }, "is_exit": false },
-    { "id": "lobby", "name": "Lobby", "level": "L1", "type": "lobby", "box": { "x": 0, "y": 0, "width": 6, "depth": 5 }, "is_exit": false },
-    { "id": "terrace", "name": "Terrace", "level": "L1", "type": "terrace", "box": { "x": 6, "y": 0, "width": 4, "depth": 5 }, "is_exit": false },
-    { "id": "corridor", "name": "North corridor", "level": "L1", "type": "corridor", "box": { "x": 0, "y": 5, "width": 10, "depth": 2 }, "is_exit": false },
-    { "id": "street", "name": "Street", "level": "L1", "type": "street", "box": { "x": 0, "y": 8, "width": 10, "depth": 4 }, "is_exit": true },
-    { "id": "truck", "name": "Truck", "level": "L1", "type": "truck", "box": { "x": 2, "y": 12, "width": 3, "depth": 8 }, "is_exit": false }
+    {"id": "plant", "name": "Roof plant room", "level": "L2", "type": "plant", "box": {"x": 0, "y": 0, "width": 6, "depth": 5}, "is_exit": false},
+    {"id": "lobby", "name": "Lobby", "level": "L1", "type": "lobby", "box": {"x": 0, "y": 0, "width": 6, "depth": 5}, "is_exit": false},
+    {"id": "terrace", "name": "Terrace", "level": "L1", "type": "terrace", "box": {"x": 6, "y": 0, "width": 4, "depth": 5}, "is_exit": false},
+    {"id": "corridor", "name": "North corridor", "level": "L1", "type": "corridor", "box": {"x": 0, "y": 5, "width": 10, "depth": 2}, "is_exit": false},
+    {"id": "street", "name": "Street", "level": "L1", "type": "street", "box": {"x": 0, "y": 8, "width": 10, "depth": 4}, "is_exit": true},
+    {"id": "truck", "name": "Truck", "level": "L1", "type": "truck", "box": {"x": 2, "y": 12, "width": 3, "depth": 8}, "is_exit": false}
   ],
   "edges": [
-    { "id": "plant-shaft", "name": "Plant shaft", "from": "plant", "to": "corridor", "kind": "shaft", "clear_width": 1.2, "clear_height": 3.0, "step_height": 0, "crosses": ["beam-b2"], "cuts_above_width": 1.5 },
-    { "id": "door-north", "name": "North door", "from": "corridor", "to": "street", "kind": "door", "clear_width": 2.0, "clear_height": 2.4, "step_height": 0 },
-    { "id": "curb", "name": "Curb to truck", "from": "street", "to": "truck", "kind": "opening", "clear_width": 2.5, "clear_height": 4.0, "step_height": 0 },
-    { "id": "lobby-door", "name": "Lobby door", "from": "lobby", "to": "corridor", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0, "corner_a": 1.2, "corner_b": 1.5 },
-    { "id": "terrace-door", "name": "Terrace door", "from": "terrace", "to": "lobby", "kind": "step", "clear_width": 0.9, "clear_height": 2.1, "step_height": 0.15 }
+    {"id": "plant-shaft", "name": "Plant shaft", "from": "plant", "to": "corridor", "kind": "shaft", "clear_width": 1.2, "clear_height": 3.0, "step_height": 0, "crosses": ["beam-b2"], "cuts_above_width": 1.5},
+    {"id": "door-north", "name": "North door", "from": "corridor", "to": "street", "kind": "door", "clear_width": 2.0, "clear_height": 2.4, "step_height": 0},
+    {"id": "curb", "name": "Curb to truck", "from": "street", "to": "truck", "kind": "opening", "clear_width": 2.5, "clear_height": 4.0, "step_height": 0},
+    {"id": "lobby-door", "name": "Lobby door", "from": "lobby", "to": "corridor", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0, "corner_a": 1.2, "corner_b": 1.5},
+    {"id": "terrace-door", "name": "Terrace door", "from": "terrace", "to": "lobby", "kind": "step", "clear_width": 0.9, "clear_height": 2.1, "step_height": 0.15}
   ],
   "members": [
-    { "id": "f1", "kind": "foundation", "level": "L1", "supported_by": [] },
-    { "id": "c1", "kind": "column", "level": "L1", "supported_by": ["f1"] },
-    { "id": "beam-b2", "kind": "beam", "level": "L2", "supported_by": ["c1"] }
+    {"id": "f1", "kind": "foundation", "level": "L1", "supported_by": [], "node": "corridor"},
+    {"id": "c1", "kind": "column", "level": "L1", "supported_by": ["f1"], "node": "corridor"},
+    {"id": "beam-b2", "kind": "beam", "level": "L2", "supported_by": ["c1"], "node": "plant"}
   ],
   "tokens": [
-    { "id": "chiller", "discipline": "mep", "start": "plant", "goal": "truck", "size": { "width": 1.6, "height": 2.0, "length": 2.4 }, "rule": "clearance" },
-    { "id": "glass", "discipline": "logistics", "start": "street", "goal": "lobby", "size": { "width": 0.05, "height": 2.2, "length": 4.0 }, "rule": "corner_turn" },
-    { "id": "wheelchair", "discipline": "accessibility", "start": "terrace", "goal": null, "size": { "width": 0.7, "height": 1.3, "length": 1.2 }, "rule": "no_steps" },
-    { "id": "load", "discipline": "structure", "start": "beam-b2", "goal": null, "size": { "width": 0, "height": 0, "length": 0 }, "rule": "downward" }
+    {"id": "chiller", "discipline": "mep", "start": "plant", "goal": "truck", "size": {"width": 1.6, "height": 2.0, "length": 2.4}, "rule": "clearance"},
+    {"id": "glass", "discipline": "logistics", "start": "street", "goal": "lobby", "size": {"width": 0.05, "height": 2.2, "length": 4.0}, "rule": "corner_turn"},
+    {"id": "wheelchair", "discipline": "accessibility", "start": "terrace", "goal": null, "size": {"width": 0.7, "height": 1.3, "length": 1.2}, "rule": "no_steps"},
+    {"id": "load", "discipline": "structure", "start": "beam-b2", "goal": null, "size": {"width": 0, "height": 0, "length": 0}, "rule": "downward"}
   ]
 }

@@ -21,7 +21,7 @@ token failed and why within five seconds.
   only for one beat (a short push-in on the block), then return.
 - **Token motion**: tokens travel their `path` in sequence, ease-in-out, about 1.5-2.5 s per
   token. On fail, the token stops at `blocked_at`, shakes once (150 ms), and a red X pops.
-- **Fail moment**: red X at `blocked_at` plus a label with the numbers ("needs 1.6 m, has 0.9 m").
+- **Fail moment**: red X at `blocked_at` plus a label with the numbers ("needs 1.6 m, has 1.2 m").
 - **Win moment**: all tokens green, then **LEVEL COMPLETE** full width, a short burst, a chime.
 - **Sound cues** (tier 2): one short sound each for go, fail, edit, win. Under 1 s, mixed low,
   with a mute button. Self-made or properly licensed; record the source in `design/README.md`.

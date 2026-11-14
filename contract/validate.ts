@@ -2,7 +2,8 @@
 // No extra package on purpose (see docs/adr/0006). Owner: P1.
 // Supported keywords: type, enum, const, required, properties, additionalProperties: false,
 // items, minItems, maxItems, minimum, maximum, minLength, oneOf, $ref (local or sibling file).
-// Using another keyword in a schema throws, so the checker never passes silently.
+// Every schema is walked once at load: an unsupported keyword, or additionalProperties other
+// than false, throws at import time, so a schema rule is never skipped silently.
 
 import building from './schema/building.schema.json' with { type: 'json' };
 import solverOutput from './schema/solver-output.schema.json' with { type: 'json' };
@@ -28,6 +29,24 @@ const KNOWN = new Set([
   'properties', 'additionalProperties', 'items', 'minItems', 'maxItems', 'minimum', 'maximum',
   'minLength', 'oneOf', '$ref',
 ]);
+
+function walk(node: unknown, file: string): void {
+  if (Array.isArray(node)) return node.forEach((n) => walk(n, file));
+  if (node === null || typeof node !== 'object') return;
+  const s = node as Schema;
+  for (const key of Object.keys(s)) {
+    if (!KNOWN.has(key)) throw new Error(`schema keyword not supported by validate.ts: ${key} (${file})`);
+  }
+  if ('additionalProperties' in s && s.additionalProperties !== false) {
+    throw new Error(`validate.ts supports only additionalProperties: false (${file})`);
+  }
+  for (const key of ['properties', '$defs'] as const) {
+    if (s[key]) Object.values(s[key] as Schema).forEach((n) => walk(n, file));
+  }
+  if (s.items) walk(s.items, file);
+  if (s.oneOf) walk(s.oneOf, file);
+}
+for (const [file, schema] of Object.entries(SCHEMAS)) walk(schema, file);
 
 // ref: "building.schema.json" or "jev.schema.json#/$defs/parse". Returns error strings; [] = valid.
 export function validate(ref: string, data: unknown): string[] {
@@ -61,13 +80,10 @@ function typeMatches(want: string, got: string): boolean {
 }
 
 function check(s: Schema, v: unknown, at: string, file: string, errors: string[]): void {
-  for (const key of Object.keys(s)) {
-    if (!KNOWN.has(key)) throw new Error(`schema keyword not supported by validate.ts: ${key} (${file})`);
-  }
+  // $ref and oneOf are applied, then the keywords beside them are applied too.
   if (typeof s.$ref === 'string') {
     const target = resolve(s.$ref, file);
     check(target.schema, v, at, target.file, errors);
-    return;
   }
   if (Array.isArray(s.oneOf)) {
     const passing = s.oneOf.filter((sub) => {
@@ -76,7 +92,6 @@ function check(s: Schema, v: unknown, at: string, file: string, errors: string[]
       return e.length === 0;
     }).length;
     if (passing !== 1) errors.push(`${at}: must match exactly one option (matched ${passing})`);
-    return;
   }
   const got = typeOf(v);
   if (s.type !== undefined) {
@@ -91,6 +106,7 @@ function check(s: Schema, v: unknown, at: string, file: string, errors: string[]
     errors.push(`${at}: ${JSON.stringify(v)} is not one of ${JSON.stringify(s.enum)}`);
   }
   if (typeof v === 'number') {
+    if (!Number.isFinite(v)) errors.push(`${at}: must be a finite number`);
     if (typeof s.minimum === 'number' && v < s.minimum) errors.push(`${at}: must be >= ${s.minimum}`);
     if (typeof s.maximum === 'number' && v > s.maximum) errors.push(`${at}: must be <= ${s.maximum}`);
   }
@@ -142,7 +158,30 @@ export function checkBuildingRefs(b: Building): string[] {
     if (!nodes.has(e.to)) errors.push(`edge "${e.id}": unknown to "${e.to}"`);
     for (const c of e.crosses ?? []) if (!members.has(c)) errors.push(`edge "${e.id}": unknown member "${c}"`);
   }
+  const memberById = new Map(b.members.map((m) => [m.id, m]));
+  for (const e of b.edges) if (e.from === e.to) errors.push(`edge "${e.id}": from and to are the same node`);
+  for (const m of b.members) {
+    if (m.node !== undefined && !nodes.has(m.node)) errors.push(`member "${m.id}": unknown node "${m.node}"`);
+    if (m.kind === 'foundation' && m.supported_by.length > 0) errors.push(`member "${m.id}": a foundation has no supports`);
+    if (m.kind !== 'foundation' && m.supported_by.length === 0) errors.push(`member "${m.id}": needs supported_by`);
+  }
+  // A support cycle would make a downward walk loop forever.
+  const state = new Map<string, 'open' | 'done'>();
+  const visit = (id: string, trail: string[]): void => {
+    if (state.get(id) === 'done') return;
+    if (state.get(id) === 'open') {
+      errors.push(`support cycle: ${[...trail, id].join(' -> ')}`);
+      return;
+    }
+    state.set(id, 'open');
+    for (const s of memberById.get(id)?.supported_by ?? []) visit(s, [...trail, id]);
+    state.set(id, 'done');
+  };
+  for (const m of b.members) visit(m.id, []);
   for (const t of b.tokens) {
+    if (t.rule === 'downward' && t.goal !== null && memberById.get(t.goal)?.kind !== 'foundation') {
+      errors.push(`token "${t.id}": a downward goal must be a foundation`);
+    }
     const startPool = t.rule === 'downward' ? members : nodes;
     if (!startPool.has(t.start)) errors.push(`token "${t.id}": unknown start "${t.start}"`);
     if (t.goal !== null && !(t.rule === 'downward' ? members : nodes).has(t.goal)) {
