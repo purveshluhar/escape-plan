@@ -16,8 +16,9 @@ test('solve returns one schema-valid record per token', () => {
   assert.deepEqual(validate('solver-output.schema.json', results), []);
 });
 
-test('a pass record has every block field null', () => {
-  for (const r of solve(building)) {
+test('a pass record has every block field null, a fail has a reason', () => {
+  const runs = [solve(building), ...expected.cases.map((c) => solve(building, c.edits))];
+  for (const r of runs.flat()) {
     if (r.status === 'pass') assert.deepEqual([r.blocked_at, r.reason, r.needed, r.available], [null, null, null, null]);
     else assert.ok(r.reason, `${r.token}: a fail needs a reason`);
   }

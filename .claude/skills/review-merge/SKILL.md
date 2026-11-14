@@ -26,7 +26,7 @@ description: Checks to run before an hourly merge to main, by the author and by 
 
 1. Merge the PRs one at a time, smallest first, after CI is green. Run `npm run check` on `main` after each.
 2. If one breaks the build or the demo, take it out and hand it back with the failing output.
-3. Push `main` only when `npm test` is green and the demo runs.
+3. Push `main` only when `npm run check` is green and the demo runs.
 4. At 17:00 and 19:30, tag the green `main`: `git tag tier1-demo` or `git tag tier2-demo`, then
    `git push origin <tag>`.
 

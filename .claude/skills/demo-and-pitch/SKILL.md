@@ -45,7 +45,7 @@ Drop any sentence whose feature is not green at freeze.
 | Is this a code check? | No. It is a game, not a code check. It shows path clashes early so the right expert looks. |
 | Does AI decide? | No. A deterministic solver decides every pass or fail and shows the numbers. Jev turns words into edits and gives vote bubbles. |
 | How did 5 people build this in 10 hours? | AI agents built against one frozen contract, hourly merges, and hand-checked test cases as the truth. |
-| Can I use it? | MIT, a sample building, browser-only. No Cityweft data is in the repo; plug in your own context. |
+| Can I use it? | MIT, a sample building, runs in the browser (tier 1 needs no server). No Cityweft data is in the repo; plug in your own context. |
 
 ## Done when
 

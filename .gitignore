@@ -162,3 +162,15 @@ private-context/
 *.dxf
 *.skp
 *.stl
+*.rvt
+*.rfa
+*.dwg
+*.usdz
+*.blend
+*.3ds
+*.ply
+*.step
+*.stp
+*.e57
+*.las
+*.laz

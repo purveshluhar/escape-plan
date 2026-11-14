@@ -40,6 +40,16 @@ function walk(node: unknown, file: string): void {
   if ('additionalProperties' in s && s.additionalProperties !== false) {
     throw new Error(`validate.ts supports only additionalProperties: false (${file})`);
   }
+  // A keyword with the wrong value type would switch its rule off, so it throws too.
+  const bad = (key: string, ok: boolean) => {
+    if (key in s && !ok) throw new Error(`schema keyword ${key} has the wrong value type (${file})`);
+  };
+  for (const key of ['minItems', 'maxItems', 'minimum', 'maximum', 'minLength']) bad(key, typeof s[key] === 'number');
+  for (const key of ['enum', 'required', 'oneOf']) bad(key, Array.isArray(s[key]));
+  for (const key of ['properties', '$defs']) bad(key, typeof s[key] === 'object' && s[key] !== null && !Array.isArray(s[key]));
+  bad('items', typeof s.items === 'object' && s.items !== null && !Array.isArray(s.items));
+  bad('type', typeof s.type === 'string' || Array.isArray(s.type));
+  bad('$ref', typeof s.$ref === 'string');
   for (const key of ['properties', '$defs'] as const) {
     if (s[key]) Object.values(s[key] as Schema).forEach((n) => walk(n, file));
   }

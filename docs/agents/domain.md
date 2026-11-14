@@ -1,5 +1,7 @@
 # Domain docs
 
+_Adapted from the setup templates of [mattpocock/skills](https://github.com/mattpocock/skills)._
+
 How agents use this repo's domain documentation. Layout: **single-context**.
 
 ```

@@ -33,11 +33,11 @@ The solver decides pass or fail. It is deterministic and must answer all tokens 
      `no_route`.
 6. **Turn the tests on.** Add the rule to `IMPLEMENTED_RULES` in `solver/index.ts`. Its cases in
    `data/expected.json` stop being `todo` and run for real.
-7. Run `npm test`. Debug by hand against the numbers: the expected case is the truth.
+7. Run `npm run check`. Debug by hand against the numbers: the expected case is the truth.
 8. Add one unit test per edge case you hit (exactly equal width, a node with no edges).
 
 ## Done when
 
 - The rule is in `IMPLEMENTED_RULES` and every expected case for its token is green.
-- `npm test` passes and the solver output still matches `solver-output.schema.json`.
+- `npm run check` passes and the solver output still matches `solver-output.schema.json`.
 - `solve()` on the demo building takes under 100 ms.

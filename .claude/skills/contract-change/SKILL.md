@@ -26,9 +26,9 @@ against it, so one local edit breaks four people. You propose; P1 changes.
 4. Tell P1 in chat, with the issue number. Keep building with a local stand-in type inside
    your own folder until it lands. Mark the stand-in `// TODO(contract #<n>)`.
 5. At the merge point P1 updates `types.ts`, the schema and `examples.ts` together, runs
-   `npm test`, and announces the change. Then delete your stand-in and import the real type.
+   `npm run check`, and announces the change. Then delete your stand-in and import the real type.
 
 ## Done when
 
-- The change is in `contract/` on `main`, `npm test` passes, and the team was told.
+- The change is in `contract/` on `main`, `npm run check` passes, and the team was told.
 - No folder keeps its own copy of the type.
