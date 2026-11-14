@@ -18,6 +18,14 @@ They are not real answers. Replace them with v1.
 - Self-made and synthetic data only. No Cityweft files here: they go in git-ignored
   `data/cityweft/` or `private-context/`.
 
+## Cityweft block (tier 2)
+
+`node --env-file=.env data/cityweft-fetch.ts` fetches a 150 m block around 120 Broadway as a GLB
+into git-ignored `data/cityweft/` (`block.glb` and `meta.json`). It needs `CITYWEFT_API_KEY` in the
+git-ignored `.env`, never with a `VITE_` prefix. `cityweft-request.ts` holds the pure request
+builder that `cityweft-request.test.ts` checks. Nothing from `data/cityweft/` is ever committed
+(`docs/adr/0004`).
+
 ## Tier 1 first task
 
 `building.json` v1 and `expected.json` for the four tier 1 tokens (chiller, glass, wheelchair,
