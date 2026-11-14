@@ -43,14 +43,42 @@ test('shortest_exit uses door, opening, ramp, step and stair, never shaft or ele
 });
 
 test('people walk a step sill and a stair: no step check', () => {
-  assert.equal(shortestExit(oneEdge({ kind: 'step', step_height: 0.15 }), people).status, 'pass');
-  assert.equal(shortestExit(oneEdge({ kind: 'door', step_height: 0.15 }), people).status, 'pass');
+  for (const kind of ['step', 'door', 'stair'] as const) {
+    assert.equal(shortestExit(oneEdge({ kind, step_height: 0.15 }), people).status, 'pass', kind);
+  }
 });
 
 test('width and height apply; equal passes', () => {
   assert.deepEqual(record(oneEdge({ clear_width: 0.5 })), ['fail', ['s'], 'e', 'too_narrow', 0.6, 0.5, null]);
   assert.deepEqual(record(oneEdge({ clear_height: 1.9 })), ['fail', ['s'], 'e', 'too_low', 2.0, 1.9, null]);
   assert.equal(shortestExit(oneEdge({ clear_width: 0.6, clear_height: 2.0 }), people).status, 'pass');
+  // Too narrow and too low at once: width is checked first.
+  assert.deepEqual(record(oneEdge({ clear_width: 0.5, clear_height: 1.9 })), ['fail', ['s'], 'e', 'too_narrow', 0.6, 0.5, null]);
+});
+
+test('parallel edges: one wide edge is enough; with none, the lowest edge id is named', () => {
+  const b = oneEdge({ id: 'e2', clear_width: 0.5 });
+  b.edges.push(edge('e1', 's', 'x', { clear_width: 0.4 }));
+  assert.deepEqual(record(b), ['fail', ['s'], 'e1', 'too_narrow', 0.6, 0.4, null]);
+  b.edges.push(edge('e3', 's', 'x'));
+  assert.deepEqual(record(b), ['pass', ['s', 'x'], null, null, null, null, 1]);
+});
+
+test('a door into an elevator-type node: the car check applies, too_narrow at the node', () => {
+  const b: Building = {
+    levels, nodes: [node('s'), { ...node('car'), type: 'elevator', box: { x: 0, y: 0, width: 0.5, depth: 0.5 } }, node('x', true)],
+    edges: [edge('e1', 's', 'car'), edge('e2', 'car', 'x')], members: [], tokens: [people],
+  };
+  assert.deepEqual(record(b), ['fail', ['s'], 'car', 'too_narrow', 0.6, 0.5, null]);
+});
+
+test('a set goal is honoured over a nearer exit', () => {
+  const b: Building = {
+    levels, nodes: [node('s'), node('a'), node('g'), node('x', true)],
+    edges: [edge('e1', 's', 'x'), edge('e2', 's', 'a'), edge('e3', 'a', 'g')], members: [], tokens: [people],
+  };
+  const r = shortestExit(b, { ...people, goal: 'g' });
+  assert.deepEqual([r.status, r.path, r.time], ['pass', ['s', 'a', 'g'], 2]);
 });
 
 test('pass: time is the number of edges walked', () => {
@@ -98,6 +126,10 @@ test('fail: the first block on the checks-off shortest path, time null', () => {
     levels, nodes: [node('s'), node('a'), node('x', true)],
     edges: [edge('e1', 's', 'a'), edge('e2', 'a', 'x', { clear_height: 1.8 })], members: [], tokens: [people],
   };
+  assert.deepEqual(record(b), ['fail', ['s', 'a'], 'e2', 'too_low', 2.0, 1.8, null]);
+  // Two blocked routes: the record names the block on the shorter one, not the longer one.
+  b.nodes.push(node('c'), node('d'));
+  b.edges.push(edge('e3', 's', 'c'), edge('e4', 'c', 'd'), edge('e5', 'd', 'x', { clear_width: 0.5 }));
   assert.deepEqual(record(b), ['fail', ['s', 'a'], 'e2', 'too_low', 2.0, 1.8, null]);
 });
 
