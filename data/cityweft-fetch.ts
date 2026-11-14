@@ -1,4 +1,4 @@
-// Fetch the One World Trade Center block from Cityweft as a GLB plus instance points. Owner: P5.
+// Fetch the 432 Park Avenue block from Cityweft as a GLB plus instance points. Owner: P5.
 // Run: node --env-file=.env data/cityweft-fetch.ts
 // Needs CITYWEFT_API_KEY in the git-ignored .env (never a VITE_ prefix, docs/adr/0008).
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
@@ -8,17 +8,14 @@ import {
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
-const TARGET = { lat: 40.712742, lon: -74.013382 }; // One World Trade Center: the building we play in
-const MEMORIAL_POOLS = {
-  north: { lat: 40.712136, lon: -74.013186 }, // 9/11 Memorial north pool
-  south: { lat: 40.711083, lon: -74.013022 }, // 9/11 Memorial south pool
-};
-// The block is centred west and a little south of the target so the Hudson and the memorial fill
-// its west and south sides. The viewer camera sits north-east of the building looking south-west,
-// so the Hudson is behind the building and the short north and east edges are never in view.
-const OFFSET_METRES = { north: -100, east: -250 };
+const TARGET = { lat: 40.761635, lon: -73.971802 }; // 432 Park Avenue: the building we play in
+const CENTRAL_PARK_CORNER = { lat: 40.76444, lon: -73.97333 }; // Grand Army Plaza, the park's south-east corner
+// A smaller block, shifted north and a touch west of the target so a little of Central Park (north
+// of 59th Street, west of Fifth Avenue) fills its north-west corner. The viewer camera sits
+// north-east of the building looking south-west, so that corner is up and to the left.
+const OFFSET_METRES = { north: 162, east: -10 };
 const CENTER = shiftCenter(TARGET, OFFSET_METRES.north, OFFSET_METRES.east);
-const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 800; // a side; override in .env or the shell
+const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 500; // a side; override in .env or the shell
 const MAX_TRIES = 3;
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
 
@@ -44,7 +41,7 @@ async function post(payload: object): Promise<Response> {
   }
 }
 
-console.log(`Requesting a ${SIZE_METRES} m block around One World Trade Center (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
+console.log(`Requesting a ${SIZE_METRES} m block around 432 Park Avenue (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
 const res = await post(body);
 if (!res.ok) {
   console.error(describeStatus(res.status));
@@ -77,8 +74,7 @@ writeFileSync(
       // where things sit in the block's local metres (x north, z east, origin south-west corner)
       local: {
         target: toLocal(TARGET, CENTER, SIZE_METRES),
-        memorialNorthPool: toLocal(MEMORIAL_POOLS.north, CENTER, SIZE_METRES),
-        memorialSouthPool: toLocal(MEMORIAL_POOLS.south, CENTER, SIZE_METRES),
+        centralParkCorner: toLocal(CENTRAL_PARK_CORNER, CENTER, SIZE_METRES),
       },
       polygon: body.polygon, spatialReference, fetchedAt: new Date().toISOString() },
     null,
