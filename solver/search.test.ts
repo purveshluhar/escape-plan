@@ -32,6 +32,13 @@ test('elevator car: a 0.7 x 1.2 wheelchair rides a 1.0 x 1.4 car, a 0.9 x 2.2 so
   });
 });
 
+test('elevator car: when the edge into the car fails too, the edge is the first block', () => {
+  const car = node('car', { type: 'elevator', box: { x: 0, y: 0, width: 0.5, depth: 0.5 } });
+  const b = building([node('s'), car, exit('x')], [edge('in', 's', 'car', { kind: 'elevator', clear_width: 0.1 }), edge('out', 'car', 'x')]);
+  const got = walk(b, token(), RULE);
+  assert.deepEqual([got.blocked_at, got.reason, got.needed, got.available, got.path], ['in', 'too_narrow', 0.7, 0.1, ['s']]);
+});
+
 test('elevator car: a token turned 90 degrees fits, and an exact fit rides', () => {
   const car = node('car', { type: 'elevator', box: { x: 0, y: 0, width: 1.0, depth: 1.4 } });
   assert.equal(carCheck(car, token({ size: { width: 1.3, height: 1, length: 0.9 } })), null);

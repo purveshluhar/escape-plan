@@ -5,11 +5,12 @@ import { heightCheck, widthCheck } from './search.ts';
 import type { EdgeCheck, WalkRule } from './search.ts';
 
 // A stair's `available` is the elevation difference of the levels of its two nodes.
-export const stepCheck: EdgeCheck = (edge, _token, building) => {
+// A node or level that is not in the building counts as elevation 0; checkBuildingRefs rejects that data.
+export const stepCheck: EdgeCheck = (edge, _token, site) => {
   if (edge.kind === 'stair') {
     const elevation = (nodeId: string): number => {
-      const level = building.nodes.find((n) => n.id === nodeId)?.level;
-      return building.levels.find((l) => l.id === level)?.elevation ?? 0;
+      const level = site.nodes.get(nodeId)?.level;
+      return (level === undefined ? undefined : site.levels.get(level)?.elevation) ?? 0;
     };
     return { at: edge.id, reason: 'step', needed: 0, available: Math.abs(elevation(edge.to) - elevation(edge.from)) };
   }

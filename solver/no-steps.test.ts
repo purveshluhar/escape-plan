@@ -54,6 +54,13 @@ test('a step edge blocks: needed 0, available its step_height', () => {
 
 test('a stair blocks: available is the elevation difference of its two levels', () => {
   assert.deepEqual(block({ kind: 'stair' }), ['fail', 'e', 'step', 0, 3]);
+  // Walked down, between two levels that are both above 0: from L3 (5 m) to an exit on L2 (3 m).
+  const down = oneEdge({ kind: 'stair' });
+  down.levels.push({ id: 'L3', elevation: 5 });
+  down.nodes[0]!.level = 'L3';
+  down.edges[0] = { ...down.edges[0]!, from: 'x', to: 's' };
+  const r = walk(down, wheelchair, NO_STEPS);
+  assert.deepEqual([r.reason, r.needed, r.available], ['step', 0, 2]);
 });
 
 test('any edge with step_height > 0 blocks; a level ramp, door or opening passes', () => {

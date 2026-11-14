@@ -1,7 +1,7 @@
 // Search core for every walking rule (contract/README.md, "Rule details"). A rule file gives the
 // edge kinds it may use and its edge checks in order; this file builds the token's graph, runs
 // the breadth-first search, checks the elevator car, and builds the SolverResult.
-import type { Building, BuildingNode, Edge, EdgeKind, Id, Reason, SolverResult, Token } from '../contract/types.ts';
+import type { Building, BuildingNode, Edge, EdgeKind, Id, Level, Reason, SolverResult, Token } from '../contract/types.ts';
 
 // drain_route and supply carry no walking token.
 export type WalkKind = Exclude<EdgeKind, 'drain_route' | 'supply'>;
@@ -14,8 +14,14 @@ export interface Block {
   available: number;
 }
 
+// The building's nodes and levels by id, built once per walk, for checks to look up.
+export interface Site {
+  nodes: ReadonlyMap<Id, BuildingNode>;
+  levels: ReadonlyMap<Id, Level>;
+}
+
 // One check at one edge: null when the token gets through.
-export type EdgeCheck = (edge: Edge, token: Token, building: Building) => Block | null;
+export type EdgeCheck = (edge: Edge, token: Token, site: Site) => Block | null;
 
 export interface WalkRule {
   kinds: readonly WalkKind[]; // the rule's row in the edge-kind table
@@ -55,7 +61,7 @@ interface Hop {
 const byId = (a: Id, b: Id): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // An edge whose end is not a node is left out.
-function buildGraph(building: Building, nodes: Map<Id, BuildingNode>, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
+function buildGraph(building: Building, nodes: ReadonlyMap<Id, BuildingNode>, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
   const hops = new Map<Id, Map<Id, Edge[]>>();
   const add = (from: Id, to: Id, edge: Edge): void => {
     const out = hops.get(from) ?? new Map<Id, Edge[]>();
@@ -81,11 +87,11 @@ function buildGraph(building: Building, nodes: Map<Id, BuildingNode>, kinds: rea
 // The first block on one hop, or null when some edge of the hop passes and the node it enters
 // passes the car check. With no passing edge, the block is the first failing check of the
 // lowest-id edge.
-function hopBlock(hop: Hop, nodes: Map<Id, BuildingNode>, token: Token, building: Building, rule: WalkRule): Block | null {
+function hopBlock(hop: Hop, site: Site, token: Token, rule: WalkRule): Block | null {
   let first: Block | null = null;
   let passed = false;
   for (const edge of hop.edges) {
-    const block = rule.checks.reduce<Block | null>((found, check) => found ?? check(edge, token, building), null);
+    const block = rule.checks.reduce<Block | null>((found, check) => found ?? check(edge, token, site), null);
     if (block === null) {
       passed = true;
       break;
@@ -93,7 +99,7 @@ function hopBlock(hop: Hop, nodes: Map<Id, BuildingNode>, token: Token, building
     first ??= block;
   }
   if (!passed) return first;
-  const node = nodes.get(hop.to);
+  const node = site.nodes.get(hop.to);
   return node ? carCheck(node, token) : null;
 }
 
@@ -103,7 +109,7 @@ function hopBlock(hop: Hop, nodes: Map<Id, BuildingNode>, token: Token, building
 function search(
   graph: Map<Id, Hop[]>,
   token: Token,
-  nodes: Map<Id, BuildingNode>,
+  nodes: ReadonlyMap<Id, BuildingNode>,
   passes: (hop: Hop) => boolean,
 ): Id[] | null {
   if (!nodes.has(token.start)) return null;
@@ -115,8 +121,8 @@ function search(
     const id = queue[head]!;
     if (isGoal(id)) {
       const path = [id];
-      for (let at = parent.get(id); at !== undefined; at = parent.get(at)) path.unshift(at);
-      return path;
+      for (let at = parent.get(id); at !== undefined; at = parent.get(at)) path.push(at);
+      return path.reverse();
     }
     for (const hop of graph.get(id) ?? []) {
       if (seen.has(hop.to) || !passes(hop)) continue;
@@ -143,8 +149,9 @@ function fail(token: Token, path: Id[], block: Block | null): SolverResult {
 // Solve one walking token: pass with its shortest path, or the fail record from the contract.
 export function walk(building: Building, token: Token, rule: WalkRule): SolverResult {
   const nodes = new Map(building.nodes.map((n) => [n.id, n]));
+  const site: Site = { nodes, levels: new Map(building.levels.map((l) => [l.id, l])) };
   const graph = buildGraph(building, nodes, rule.kinds);
-  const blockOn = (hop: Hop): Block | null => hopBlock(hop, nodes, token, building, rule);
+  const blockOn = (hop: Hop): Block | null => hopBlock(hop, site, token, rule);
 
   const path = search(graph, token, nodes, (hop) => blockOn(hop) === null);
   if (path) return { token: token.id, status: 'pass', path, blocked_at: null, reason: null, needed: null, available: null };
