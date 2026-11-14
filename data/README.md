@@ -20,21 +20,23 @@ They are not real answers. Replace them with v1.
 
 ## Cityweft block (tier 2)
 
-`node --env-file=.env data/cityweft-fetch.ts` fetches an 800 m block (override with
+`node --env-file=.env data/cityweft-fetch.ts` fetches an 800 m block around One World Trade Center (override with
 `CITYWEFT_SIZE_M`) into git-ignored `data/cityweft/`. It needs `CITYWEFT_API_KEY` in the
 git-ignored `.env`, never with a `VITE_` prefix. Nothing from `data/cityweft/` is ever committed
 (`docs/adr/0004`).
 
-- The block is centred 350 m south of 120 Broadway so the bay (water) fills its south side. 120
-  Broadway lands about 400 m east and 50 m from the north edge.
+- The block is centred west and a little south of One World Trade Center (offset 250 m west,
+  100 m south) so the Hudson and the 9/11 Memorial fill its west and south sides. `meta.json`
+  records where the tower and both memorial pools land (`local`). The pools are real water squares
+  in the GLB.
 - `block.glb` holds buildings, surface (roads, paths, gardens, water), barriers (fence, wall) and
   terrain. `meta.json` records the target, centre, size and polygon.
 - The GLB export leaves instances out (tested: an empty placeholder), so a second small request
   saves them as points in `instances.json`: `type` (tree, bench, busStop, picnicTable, hydrant,
   sculpture, ...), `x`, `y`, `z`, `height` (metres), `rotation` (radians). Trees ask for
   `treeSource: hybrid`, which the docs recommend.
-- Frame (inferred from where the water falls): x east, y up, z south, origin at the north-west
-  corner. The GLB and `instances.json` share it.
+- Frame (checked by drawing the GLB top-down): x north, y up, z east, origin at the south-west
+  corner of the block. The GLB and `instances.json` share it.
 - `cityweft-request.ts` holds the pure builders that `cityweft-request.test.ts` checks.
 - Size grows fast: about 10 MB at 300 m and 63 MB at 800 m.
 
