@@ -6,7 +6,7 @@ body:
     id: folder
     attributes:
       label: Owner folder
-      options: [contract/ (P1), solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), docs or config (P1)]
+      options: [contract/ (P1), solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), jev/ (P1), docs or config (P1)]
     validations:
       required: true
   - type: dropdown

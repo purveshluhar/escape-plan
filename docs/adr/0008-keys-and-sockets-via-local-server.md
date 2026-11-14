@@ -1,6 +1,6 @@
 # 0008. Keys and phone sockets go through a small local server
 
-Status: accepted (2026-11-14)
+Status: accepted (2026-11-14); who writes the Jev calls is superseded by 0009
 
 ## Context
 

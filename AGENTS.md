@@ -28,7 +28,7 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 
 | Role | Person | Folder | Tier 1 job |
 |---|---|---|---|
-| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests |
+| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `jev/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests (later: tier 2 Jev parse, tier 3 Jev votes) |
 | P2 3D and animation | P2 | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
 | P3 Front-end, edits and AI | P3 | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
 | P4 Designer and presenter | P4 | `design/` | Icons, colours, path style, demo script |
@@ -51,7 +51,7 @@ Each folder's `README.md` says what it consumes and produces.
 
 Tests are `<folder>/*.test.ts`, run by `node --test` (Node 22.18+ runs TypeScript directly).
 Import local files with the `.ts` extension, and use `import type` for types.
-`viewer/`, `app/` and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
+`viewer/`, `app/` (except `app/server/`) and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
 there. Typecheck loads Node types for the tests, so it does not catch this.
 
 ## Merge and tag rhythm

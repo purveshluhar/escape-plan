@@ -13,13 +13,15 @@ it is green, so we never end with nothing working.
 
 | Role | Folder | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|---|
-| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water | Electrical |
+| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/`, `jev/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water; Jev parse (or plan B) | Electrical; Jev votes |
 | P2 3D and animation | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
-| P3 Front-end, edits and AI | `app/` | Edit buttons, reset, scoreboard, app state | Jev text-box parsing (or plan B) | Jev votes; phone controllers; voice |
+| P3 Front-end, edits and AI | `app/` | Edit buttons, reset, scoreboard, app state | Text box and "Did you mean" buttons for Jev edits | Vote bubbles; phone controllers; voice |
 | P4 Designer and presenter | `design/` | Icons, colours, path style, script | Sound | LLM post-game report (with P3); final deck |
 | P5 Domain modeller and tester | `data/` | `building.json`; `expected.json` for the 4 tokens | Cityweft export; expected cases for people, smoke and water | Electrical data; Q&A prep |
 
 Humans keep: the contract, the expected results, the merge, the look, and the demo script.
+
+P1 owns the Jev work (parse, votes, plan B) in `jev/`; P3 owns the screens that show it (ADR 0009).
 
 ## Tiers
 

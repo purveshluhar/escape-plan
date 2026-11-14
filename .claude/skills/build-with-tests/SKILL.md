@@ -1,6 +1,6 @@
 ---
 name: build-with-tests
-description: Write or change code red-first, with tests against data/expected.json and the contract. Use for any code change in solver/, viewer/, app/, design/ or data/.
+description: Write or change code red-first, with tests against data/expected.json and the contract. Use for any code change in solver/, viewer/, app/, design/, data/ or jev/.
 ---
 
 # Build with tests

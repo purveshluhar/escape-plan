@@ -41,7 +41,8 @@ npm run check    # typecheck + test + build: run before every merge
 | `contract/` | P1 | Shared TypeScript types and JSON Schemas. Read first. |
 | `solver/` | P1 | Deterministic pass or fail per token. |
 | `viewer/` | P2 | three.js isometric cutaway and token paths. |
-| `app/` | P3 | Game shell: edits, scoreboard, Jev, phones. |
+| `app/` | P3 | Game shell: edits, scoreboard, phones. |
+| `jev/` | P1 | Jev and plan B calls: text to edit, votes (tier 2 and 3). |
 | `design/` | P4 | Colours, icons, motion, sound, demo script. |
 | `data/` | P5 | `building.json` and the hand-checked `expected.json`. |
 | `docs/` | P1 | Plan, ADRs, agent docs. |

@@ -1,8 +1,9 @@
 # app/
 
 **Owner:** P3.
-**Purpose:** the game shell: app state, edit buttons, reset, scoreboard. Later Jev parsing (T2),
-Jev votes and phone controllers (T3).
+**Purpose:** the game shell: app state, edit buttons, reset, scoreboard. Later the text box and
+"Did you mean" buttons for Jev edits (T2), vote bubbles and phone controllers (T3). The Jev calls
+themselves are P1's, in `jev/` (ADR 0009).
 **Consumes:** `solve()` from `solver/`, `createViewer()` from `viewer/`, `data/building.json`.
 **Produces:** the page (`index.html` + `app/main.ts`, both P3's) and `Edit` objects (`contract/types.ts`).
 Pure logic (`app/scoreboard.ts`) is tested in `app/scoreboard.test.ts`.
@@ -14,7 +15,8 @@ Starter: an Escape! button, a scoreboard and a LEVEL COMPLETE banner.
 ## Tier 1 first task
 
 Edit buttons that push `Edit` objects (`widen`, `add_transfer_beam`, `add_ramp`, `close_door`,
-`reset`) and re-solve on every edit. Jev go/no-go is at 13:00: no key means plan B (a general
-LLM with the same typed answers) or plan C (keyword parser and buttons). Same `JevParse` shape.
+`reset`) and re-solve on every edit. The Jev go/no-go is at 13:00 (P1's call): no key means plan B
+(a general LLM with the same typed answers) or plan C (keyword parser and buttons). The app gets
+the same `JevParse` shape either way.
 Keys go in `.env` only, never in code and never with a `VITE_` prefix. A Jev or LLM call that
 needs a key, and the T3 phone sockets, go through a small local server in `app/server/` (ADR 0008).

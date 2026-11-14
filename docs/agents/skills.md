@@ -22,7 +22,7 @@ Claude Code loads them by name; any other agent can open the file and follow it.
 |---|---|---|---|---|---|
 | P1 Solver and contract | `plan-feature`, `grill-the-plan` | `contract-change` (owner) | `solver-token`, `build-with-tests` | `review-merge` (merges) | `demo-and-pitch` (Q&A: "does AI decide?") |
 | P2 Viewer | `plan-feature` | `arcade-look` | `build-with-tests` | `review-merge` | `demo-and-pitch` (backup recording) |
-| P3 App and AI | `plan-feature`, `grill-the-plan` | `contract-change` (Jev, phones) | `build-with-tests` | `review-merge` | `demo-and-pitch` (run guide) |
+| P3 App and AI screens | `plan-feature`, `grill-the-plan` | `contract-change` (phones) | `build-with-tests` | `review-merge` | `demo-and-pitch` (run guide) |
 | P4 Design and pitch | `grill-the-plan` | `arcade-look` (owner) | `build-with-tests` (design/tokens.ts) | `review-merge` | `demo-and-pitch` (owner) |
 | P5 Data and tests | `grill-the-plan` | `contract-change` (data fields) | `build-with-tests` (expected cases) | `review-merge` | `demo-and-pitch` (Q&A) |
 
