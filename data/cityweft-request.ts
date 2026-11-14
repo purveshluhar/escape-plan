@@ -11,7 +11,7 @@ export interface Center {
 
 export interface ContextRequest {
   polygon: LatLon[];
-  settings: { geometry: string[]; upAxis: 'Y' | 'Z'; crs: 'local' };
+  settings: { geometry: string[]; upAxis: 'Y' | 'Z'; crs: 'local'; treeSource: 'hybrid' };
   export: { format: 'glb' };
 }
 
@@ -25,6 +25,14 @@ const METRES_PER_DEG_LON_AT_EQUATOR = 111_320;
 
 const metresPerDegLon = (lat: number): number =>
   METRES_PER_DEG_LON_AT_EQUATOR * Math.cos((lat * Math.PI) / 180);
+
+// Move a point by metres north (negative = south) and east (negative = west).
+export function shiftCenter(center: Center, northMetres: number, eastMetres: number): Center {
+  return {
+    lat: center.lat + northMetres / METRES_PER_DEG_LAT,
+    lon: center.lon + eastMetres / metresPerDegLon(center.lat),
+  };
+}
 
 // Area of a small lat/lon polygon (shoelace on a local flat projection), in km2.
 export function polygonAreaKm2(polygon: LatLon[]): number {
@@ -64,48 +72,64 @@ export function buildRequest(center: Center, sizeMetres: number): ContextRequest
   }
   return {
     polygon,
-    settings: { geometry: [...GEOMETRY], upAxis: 'Y', crs: 'local' },
+    // hybrid = detected canopy with measured heights; the docs recommend it over the default.
+    settings: { geometry: [...GEOMETRY], upAxis: 'Y', crs: 'local', treeSource: 'hybrid' },
     export: { format: 'glb' },
   };
 }
 
-// The GLB export leaves trees out, so they come from a second request: same polygon, JSON back.
-export interface TreesRequest {
+// The GLB export leaves instances (trees, benches, bus stops, hydrants, picnic tables) out, so
+// they come from a second request: same polygon, JSON points back.
+export interface InstancesRequest {
   polygon: LatLon[];
-  settings: { geometry: ['instances']; upAxis: 'Y' | 'Z'; crs: 'local' };
+  settings: { geometry: ['instances']; upAxis: 'Y' | 'Z'; crs: 'local'; treeSource: 'hybrid' };
 }
 
-export function buildTreesRequest(center: Center, sizeMetres: number): TreesRequest {
+export function buildInstancesRequest(center: Center, sizeMetres: number): InstancesRequest {
   const { polygon, settings } = buildRequest(center, sizeMetres);
-  return { polygon, settings: { geometry: ['instances'], upAxis: settings.upAxis, crs: settings.crs } };
+  return {
+    polygon,
+    settings: { geometry: ['instances'], upAxis: settings.upAxis, crs: settings.crs, treeSource: settings.treeSource },
+  };
 }
 
-// A tree point in the same local metres as the GLB (y is up).
-export interface Tree {
+// A street-level point in the same local metres as the GLB (y is up). `type` is Cityweft's
+// instanceType: tree, bench, busStop, picnicTable, hydrant, sculpture, ...
+export interface Instance {
+  type: string;
   x: number;
   y: number;
   z: number;
-  height: number;
+  height: number; // metres
+  rotation: number; // radians about the up axis
 }
 
-const DEFAULT_TREE_HEIGHT = 10; // metres, when Cityweft gives none
+const DEFAULT_HEIGHT: Record<string, number> = { tree: 10 };
+const FALLBACK_HEIGHT = 1; // metres, for any other type when Cityweft gives none
 
-// Pulls tree points out of a /v1/context JSON response. Anything unexpected gives fewer trees.
-export function extractTrees(response: unknown): Tree[] {
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+// Pulls instance points out of a /v1/context JSON response. Anything unexpected gives fewer points.
+export function extractInstances(response: unknown): Instance[] {
   const geometry = (response as { geometry?: unknown } | undefined)?.geometry;
   if (!Array.isArray(geometry)) return [];
-  const trees: Tree[] = [];
+  const out: Instance[] = [];
   for (const group of geometry) {
     if (group?.type !== 'instances' || !Array.isArray(group.nodes)) continue;
     for (const n of group.nodes) {
-      if (n?.instanceType !== 'tree') continue;
-      const { x, y, z } = n;
-      if (![x, y, z].every((v) => typeof v === 'number' && Number.isFinite(v))) continue;
-      const height = typeof n.height === 'number' && Number.isFinite(n.height) ? n.height : DEFAULT_TREE_HEIGHT;
-      trees.push({ x, y, z, height });
+      const type = n?.instanceType;
+      if (typeof type !== 'string' || !finite(n.x) || !finite(n.y) || !finite(n.z)) continue;
+      out.push({
+        type,
+        x: n.x,
+        y: n.y,
+        z: n.z,
+        height: finite(n.height) ? n.height : (DEFAULT_HEIGHT[type] ?? FALLBACK_HEIGHT),
+        rotation: finite(n.rotation) ? n.rotation : 0,
+      });
     }
   }
-  return trees;
+  return out;
 }
 
 // What to tell the person at the terminal. Never includes the key.

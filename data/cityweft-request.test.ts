@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildRequest, buildTreesRequest, describeStatus, extractTrees, polygonAreaKm2, MAX_AREA_KM2,
+  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, shiftCenter, MAX_AREA_KM2,
 } from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
@@ -59,14 +59,19 @@ test('status messages say what to do, and never echo a key', () => {
   assert.match(describeStatus(500), /500/);
 });
 
-test('the trees request is the same polygon, instances only, as JSON (no export)', () => {
-  const trees = buildTreesRequest(BROADWAY_120, 300);
-  assert.deepEqual(trees.polygon, buildRequest(BROADWAY_120, 300).polygon);
-  assert.deepEqual(trees.settings.geometry, ['instances']);
-  assert.equal('export' in trees, false);
+test('both requests ask for hybrid trees (the docs recommend it)', () => {
+  assert.equal(buildRequest(BROADWAY_120, 300).settings.treeSource, 'hybrid');
+  assert.equal(buildInstancesRequest(BROADWAY_120, 300).settings.treeSource, 'hybrid');
 });
 
-test('extractTrees keeps tree points and drops everything else', () => {
+test('the instances request is the same polygon, instances only, as JSON (no export)', () => {
+  const req = buildInstancesRequest(BROADWAY_120, 300);
+  assert.deepEqual(req.polygon, buildRequest(BROADWAY_120, 300).polygon);
+  assert.deepEqual(req.settings.geometry, ['instances']);
+  assert.equal('export' in req, false);
+});
+
+test('extractInstances keeps every valid point with its type and drops bad ones', () => {
   const response = {
     geometry: [
       { type: 'buildings', geometryType: 'meshes', meshes: [] },
@@ -74,22 +79,38 @@ test('extractTrees keeps tree points and drops everything else', () => {
         type: 'instances',
         geometryType: 'nodes',
         nodes: [
-          { instanceType: 'tree', x: 1, y: 2, z: 3, height: 15, descriptor: { type: 'tree' } },
-          { instanceType: 'bench', x: 9, y: 9, z: 9, height: 1, descriptor: { type: 'bench' } },
+          { instanceType: 'tree', x: 1, y: 2, z: 3, height: 15, rotation: 0.5 },
+          { instanceType: 'bench', x: 9, y: 8, z: 7, height: 1, rotation: 2 },
           { instanceType: 'tree', x: 'bad', y: 2, z: 3, height: 15 },
-          { instanceType: 'tree', x: 4, y: 5, z: 6, descriptor: { type: 'tree' } },
+          { instanceType: 'tree', x: 4, y: 5, z: 6 },
+          { instanceType: 'hydrant', x: 7, y: 7, z: 7 },
+          { x: 1, y: 1, z: 1 },
         ],
       },
     ],
   };
-  assert.deepEqual(extractTrees(response), [
-    { x: 1, y: 2, z: 3, height: 15 },
-    { x: 4, y: 5, z: 6, height: 10 },
+  assert.deepEqual(extractInstances(response), [
+    { type: 'tree', x: 1, y: 2, z: 3, height: 15, rotation: 0.5 },
+    { type: 'bench', x: 9, y: 8, z: 7, height: 1, rotation: 2 },
+    { type: 'tree', x: 4, y: 5, z: 6, height: 10, rotation: 0 },
+    { type: 'hydrant', x: 7, y: 7, z: 7, height: 1, rotation: 0 },
   ]);
 });
 
-test('extractTrees on an unexpected response gives no trees, never throws', () => {
-  assert.deepEqual(extractTrees(undefined), []);
-  assert.deepEqual(extractTrees({ geometry: 'nope' }), []);
-  assert.deepEqual(extractTrees({ geometry: [] }), []);
+test('extractInstances on an unexpected response gives nothing, never throws', () => {
+  assert.deepEqual(extractInstances(undefined), []);
+  assert.deepEqual(extractInstances({ geometry: 'nope' }), []);
+  assert.deepEqual(extractInstances({ geometry: [] }), []);
+});
+
+test('shiftCenter moves a point by metres north and east, and shifts back exactly', () => {
+  const south = shiftCenter(BROADWAY_120, -350, 0);
+  assert.ok(south.lat < BROADWAY_120.lat);
+  assert.equal(south.lon, BROADWAY_120.lon);
+  assert.ok(Math.abs((BROADWAY_120.lat - south.lat) * 111_132 - 350) < 1);
+  const east = shiftCenter(BROADWAY_120, 0, 100);
+  assert.ok(east.lon > BROADWAY_120.lon);
+  assert.ok(Math.abs((east.lon - BROADWAY_120.lon) * 111_320 * Math.cos((40.7085 * Math.PI) / 180) - 100) < 1);
+  const back = shiftCenter(south, 350, 0);
+  assert.ok(Math.abs(back.lat - BROADWAY_120.lat) < 1e-9);
 });
