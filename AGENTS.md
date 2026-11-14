@@ -20,7 +20,7 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 7. No Cityweft files in the repo. They live in git-ignored `private-context/` or `data/cityweft/`. Screenshots in the deck are fine.
 8. All building data is self-made and synthetic.
 9. Work on a branch `p<N>/<topic>` (for example `p2/token-paths`), push it, and open a PR to
-   `main`. P1 merges PRs on the hour. Only P1 commits to `main`. Never push a broken `main`.
+   `main`. P1 merges PRs in small, frequent merges. Only P1 commits to `main`. Never push a broken `main`.
 10. Commit messages: Conventional Commits, plain ASCII (for example `feat(solver): add chiller clearance rule`).
 11. New dependencies need P1's OK first. Name the package and why.
 
@@ -28,11 +28,11 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 
 | Role | Person | Folder | Tier 1 job |
 |---|---|---|---|
-| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `server/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests (later: the local server in `server/` with Jev parse, plan B and C, Jev votes and the phone sockets) |
+| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `server/` | Contract; MVP first: wheelchair, sofa and people walk out; then chiller, glass, load rules; re-solve; tests (later: the local server in `server/` with Jev parse, plan B and C, Jev votes and the phone sockets) |
 | P2 3D and animation | @justinjao | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
 | P3 Front-end and edits | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
 | P4 Designer and presenter | @minsookim1014, @jackwayfeel | `design/` | Icons, colours, path style, demo script |
-| P5 Domain modeller and tester | @kalunkuo | `data/` | `data/building.json`; `data/expected.json` for the 4 tier 1 tokens |
+| P5 Domain modeller and tester | @kalunkuo | `data/` | `data/building.json`; `data/expected.json` for the 4 tokens, plus the sofa and people tokens and their expected cases |
 
 @minsookim1014 and @jackwayfeel share P3 and P4 and work on both roles together.
 Shared files outside these folders (root config, `docs/`, `.github/`, `.claude/`) belong to P1.
@@ -59,12 +59,14 @@ Node only; browser code never imports it.
 
 ## Merge and tag rhythm
 
-- Every hour, on the hour: push your branch with `npm run check` green, open a PR, and P1 merges
-  the PRs to `main` (about 10 minutes).
+- Small, frequent merges: push your branch with `npm run check` green, open a PR, and P1 merges
+  the PRs to `main` (about 10 minutes each).
 - Before a merge, run the `review-merge` skill.
-- Tags give known-good demo points: `tier1-demo` at 17:00, `tier2-demo` at 19:30.
+- Tags give known-good demo points: `tier1-demo` at the MVP gate (re-tagged when all of tier 1 is
+  green), `tier2-demo` when tier 2 is done.
 - If a merge breaks the tier 1 demo, revert it and demo from the last tag.
-- Tiers, checkpoints and switch times: `docs/plan.md`.
+- Tier 2 starts when all of tier 1 is green. Tier 3 starts when tier 2 is tagged.
+- Tiers, gates and switch conditions: `docs/plan.md`.
 
 ## First prompt for your agent
 
@@ -88,7 +90,7 @@ role, is `docs/agents/skills.md`.
 | `build-with-tests` | You write or change code: red test first, against `data/expected.json`. |
 | `solver-token` | P1 adds a token rule to the solver. |
 | `arcade-look` | You build or judge anything on screen: colour, glow, camera, motion, sound. |
-| `review-merge` | Before an hourly merge. |
+| `review-merge` | Before a merge to `main`. |
 | `demo-and-pitch` | Demo script, backup recording, judge Q&A. |
 
 Decisions are in `docs/adr/`. Words are in `GLOSSARY.md`. Use the glossary's terms.

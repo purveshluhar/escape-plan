@@ -13,7 +13,7 @@ Claude Code loads them by name; any other agent can open the file and follow it.
 | Design | `contract-change` | A contract change proposal for P1 |
 | Build | `build-with-tests` | Red-first tests, green code, own folder only |
 | Build | `solver-token` | One token rule, its expected cases green |
-| Review | `review-merge` | A clean hourly merge, or a revert |
+| Review | `review-merge` | A clean merge, or a revert |
 | Demo | `demo-and-pitch` | Script, backup recording, Q&A answers |
 
 ## By role
