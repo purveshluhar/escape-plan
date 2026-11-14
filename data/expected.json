@@ -1,0 +1,37 @@
+{
+  "note": "EXAMPLE skeleton, not real answers. P5 replaces every case with hand-checked results for data/building.json.",
+  "cases": [
+    {
+      "id": "base",
+      "description": "Base building, no edits.",
+      "edits": [],
+      "expect": [
+        { "token": "chiller", "status": "fail", "blocked_at": "plant-shaft", "reason": "too_narrow" },
+        { "token": "glass", "status": "fail", "blocked_at": "lobby-door", "reason": "cannot_turn" },
+        { "token": "wheelchair", "status": "fail", "blocked_at": "terrace-door", "reason": "step" },
+        { "token": "load", "status": "pass" }
+      ]
+    },
+    {
+      "id": "widen-shaft",
+      "description": "Widen the plant shaft to 2 m: the chiller escapes, but the shaft cuts beam B2.",
+      "edits": [{ "op": "widen", "target": "plant-shaft", "value": 2.0, "source": "button" }],
+      "expect": [
+        { "token": "chiller", "status": "pass", "path": ["plant", "corridor", "street", "truck"] },
+        { "token": "load", "status": "fail", "blocked_at": "beam-b2", "reason": "no_support" }
+      ]
+    },
+    {
+      "id": "widen-shaft-and-transfer-beam",
+      "description": "Widen the shaft, then add a transfer beam at B2: the load is carried again.",
+      "edits": [
+        { "op": "widen", "target": "plant-shaft", "value": 2.0, "source": "button" },
+        { "op": "add_transfer_beam", "target": "beam-b2", "value": null, "source": "button" }
+      ],
+      "expect": [
+        { "token": "chiller", "status": "pass" },
+        { "token": "load", "status": "pass" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "building.schema.json",
+  "title": "Building (data/building.json)",
+  "description": "Contract 4.1. Metres and kN. Self-made data only. T2/T3 fields are optional.",
+  "type": "object",
+  "required": [
+    "levels",
+    "nodes",
+    "edges",
+    "members",
+    "tokens"
+  ],
+  "properties": {
+    "note": {
+      "type": "string"
+    },
+    "levels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/level"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/member"
+      }
+    },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/token"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "level": {
+      "type": "object",
+      "required": [
+        "id",
+        "elevation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "elevation": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "box": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "width",
+        "depth"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "level",
+        "type",
+        "box",
+        "is_exit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "room",
+            "corridor",
+            "plant",
+            "shaft",
+            "stair",
+            "elevator",
+            "terrace",
+            "lobby",
+            "street",
+            "truck",
+            "panel",
+            "kitchen"
+          ]
+        },
+        "box": {
+          "$ref": "#/$defs/box"
+        },
+        "is_exit": {
+          "type": "boolean"
+        },
+        "invert": {
+          "type": "number",
+          "description": "T2: drain elevation, metres"
+        }
+      },
+      "additionalProperties": false
+    },
+    "edge": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "from",
+        "to",
+        "kind",
+        "clear_width",
+        "clear_height",
+        "step_height"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "door",
+            "opening",
+            "shaft",
+            "stair",
+            "elevator",
+            "ramp",
+            "step",
+            "drain_route",
+            "supply"
+          ],
+          "description": "drain_route is T2, supply is T3"
+        },
+        "clear_width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "clear_height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "step_height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "corner_a": {
+          "type": "number",
+          "minimum": 0
+        },
+        "corner_b": {
+          "type": "number",
+          "minimum": 0
+        },
+        "open": {
+          "type": "boolean",
+          "description": "T2: smoke passes through"
+        },
+        "crosses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cuts_above_width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sleeved": {
+          "type": "boolean",
+          "description": "T2: a drain may pass the members it crosses"
+        }
+      },
+      "additionalProperties": false
+    },
+    "member": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "level",
+        "supported_by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "column",
+            "beam",
+            "transfer_beam",
+            "foundation"
+          ]
+        },
+        "level": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supported_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "size": {
+      "type": "object",
+      "required": [
+        "width",
+        "height",
+        "length"
+      ],
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "length": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "token": {
+      "type": "object",
+      "required": [
+        "id",
+        "discipline",
+        "start",
+        "goal",
+        "size",
+        "rule"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discipline": {
+          "enum": [
+            "mep",
+            "logistics",
+            "accessibility",
+            "structure",
+            "life_safety",
+            "fire",
+            "plumbing",
+            "electrical"
+          ]
+        },
+        "start": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "size": {
+          "$ref": "#/$defs/size"
+        },
+        "rule": {
+          "enum": [
+            "clearance",
+            "corner_turn",
+            "no_steps",
+            "downward",
+            "shortest_exit",
+            "spread",
+            "downhill",
+            "supply"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jev.schema.json",
+  "title": "Jev parse (T2) and votes (T3)",
+  "description": "Contract 4.3. Plan B (LLM) and plan C (keyword parser) return the same shapes.",
+  "$defs": {
+    "parse_request": {
+      "type": "object",
+      "required": [
+        "text",
+        "ops",
+        "targets",
+        "value_range"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "widen",
+              "add_transfer_beam",
+              "add_ramp",
+              "close_door",
+              "add_sleeve",
+              "reset"
+            ]
+          }
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 255,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "value_range": {
+          "type": "object",
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "parse": {
+      "type": "object",
+      "required": [
+        "op",
+        "target",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "type": "object",
+          "required": [
+            "choice",
+            "confidence"
+          ],
+          "properties": {
+            "choice": {
+              "enum": [
+                "widen",
+                "add_transfer_beam",
+                "add_ramp",
+                "close_door",
+                "add_sleeve",
+                "reset"
+              ]
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "target": {
+          "type": "object",
+          "required": [
+            "choice",
+            "confidence"
+          ],
+          "properties": {
+            "choice": {
+              "type": "string",
+              "minLength": 1
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "score",
+                "confidence"
+              ],
+              "properties": {
+                "score": {
+                  "type": "number"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "vote_request": {
+      "type": "object",
+      "required": [
+        "discipline",
+        "edit",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "discipline": {
+          "enum": [
+            "mep",
+            "logistics",
+            "accessibility",
+            "structure",
+            "life_safety",
+            "fire",
+            "plumbing",
+            "electrical"
+          ]
+        },
+        "edit": {
+          "$ref": "edits.schema.json#/$defs/edit"
+        },
+        "before": {
+          "$ref": "solver-output.schema.json#/$defs/result"
+        },
+        "after": {
+          "$ref": "solver-output.schema.json#/$defs/result"
+        }
+      },
+      "additionalProperties": false
+    },
+    "vote": {
+      "type": "object",
+      "required": [
+        "token",
+        "discipline",
+        "vote",
+        "confidence"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discipline": {
+          "enum": [
+            "mep",
+            "logistics",
+            "accessibility",
+            "structure",
+            "life_safety",
+            "fire",
+            "plumbing",
+            "electrical"
+          ]
+        },
+        "vote": {
+          "enum": [
+            "accept",
+            "object",
+            "review"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

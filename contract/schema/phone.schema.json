@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phone.schema.json",
+  "title": "Phone messages (T3)",
+  "description": "Contract 4.3. JSON over WebSocket on the local network.",
+  "$defs": {
+    "to_app": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "token"
+          ],
+          "properties": {
+            "type": {
+              "const": "join"
+            },
+            "token": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "token"
+          ],
+          "properties": {
+            "type": {
+              "const": "escape"
+            },
+            "token": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "token",
+            "vote"
+          ],
+          "properties": {
+            "type": {
+              "const": "vote"
+            },
+            "token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "vote": {
+              "enum": [
+                "accept",
+                "object",
+                "review"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "to_phone": {
+      "type": "object",
+      "required": [
+        "type",
+        "result"
+      ],
+      "properties": {
+        "type": {
+          "const": "result"
+        },
+        "result": {
+          "$ref": "solver-output.schema.json#/$defs/result"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

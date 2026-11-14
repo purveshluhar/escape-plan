@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "solver-output.schema.json",
+  "title": "Solver output",
+  "description": "Contract 4.2. A JSON array with one record per token.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/result"
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "required": [
+        "token",
+        "status",
+        "path",
+        "blocked_at",
+        "reason",
+        "needed",
+        "available"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail"
+          ]
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "blocked_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "too_narrow",
+            "too_low",
+            "cannot_turn",
+            "step",
+            "no_support",
+            "smoke_first",
+            "uphill",
+            "crosses_beam",
+            "no_supply",
+            "no_route",
+            null
+          ]
+        },
+        "needed": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "available": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "T2: people and smoke only"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

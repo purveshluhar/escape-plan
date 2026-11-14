@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "expected.schema.json",
+  "title": "Expected results (data/expected.json)",
+  "description": "P5's hand-checked truth. Each case applies edits to data/building.json; expect lists only the fields checked by hand.",
+  "type": "object",
+  "required": [
+    "cases"
+  ],
+  "properties": {
+    "note": {
+      "type": "string"
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "case": {
+      "type": "object",
+      "required": [
+        "id",
+        "description",
+        "edits",
+        "expect"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "edits": {
+          "type": "array",
+          "items": {
+            "$ref": "edits.schema.json#/$defs/edit"
+          }
+        },
+        "expect": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expected_result"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "expected_result": {
+      "type": "object",
+      "required": [
+        "token",
+        "status"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail"
+          ]
+        },
+        "blocked_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "too_narrow",
+            "too_low",
+            "cannot_turn",
+            "step",
+            "no_support",
+            "smoke_first",
+            "uphill",
+            "crosses_beam",
+            "no_supply",
+            "no_route",
+            null
+          ]
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
