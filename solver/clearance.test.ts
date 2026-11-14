@@ -47,7 +47,7 @@ test('clearance is implemented', () => {
 
 test('clearance uses door, opening, ramp, step, stair, elevator and shaft, never drain_route or supply', () => {
   assert.deepEqual([...CLEARANCE.kinds].sort(), ['door', 'elevator', 'opening', 'ramp', 'shaft', 'stair', 'step']);
-  for (const kind of ['door', 'opening', 'ramp', 'step', 'stair', 'shaft'] as const) {
+  for (const kind of ['door', 'opening', 'ramp', 'step', 'stair', 'elevator', 'shaft'] as const) {
     assert.equal(walk(oneEdge({ kind }), chiller, CLEARANCE).status, 'pass', kind);
   }
   for (const kind of ['drain_route', 'supply'] as const) {
@@ -56,6 +56,8 @@ test('clearance uses door, opening, ramp, step, stair, elevator and shaft, never
 });
 
 test('steps and stairs do not block the chiller', () => {
+  // oneEdge puts s on L2 (4 m) and x on L1 (0 m), so this stair climbs a whole floor.
+  assert.equal(walk(oneEdge({ kind: 'stair' }), chiller, CLEARANCE).status, 'pass');
   assert.equal(walk(oneEdge({ kind: 'step', step_height: 0.15 }), chiller, CLEARANCE).status, 'pass');
   assert.equal(walk(oneEdge({ kind: 'door', step_height: 0.02 }), chiller, CLEARANCE).status, 'pass');
 });
@@ -121,8 +123,9 @@ test('demo building: a low north door gives too_low past the shaft', () => {
   assert.deepEqual([r.status, r.path, r.blocked_at, r.reason, r.needed, r.available], ['fail', ['plant', 'corridor'], 'door-north', 'too_low', 2.0, 1.9]);
 });
 
-test('every expected chiller case in data/expected.json names the chiller', () => {
-  // Guard: the expected cases run in solver.test.ts; this proves there are chiller cases to run.
-  const ids = expected.cases.filter((c) => c.expect.some((e) => e.token === 'chiller')).map((c) => c.id);
-  assert.deepEqual(ids, ['base', 'widen-shaft', 'widen-shaft-and-transfer-beam', 'full-demo']);
+test('data/expected.json has the ticket chiller cases', () => {
+  // Guard: the expected cases run in solver.test.ts; this proves the ticket's chiller cases are there.
+  // P5 may add more chiller cases; they run there too.
+  const ids = new Set(expected.cases.filter((c) => c.expect.some((e) => e.token === 'chiller')).map((c) => c.id));
+  for (const id of ['base', 'widen-shaft', 'widen-shaft-and-transfer-beam', 'full-demo']) assert.ok(ids.has(id), id);
 });
