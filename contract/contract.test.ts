@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { SCHEMAS, checkBuildingRefs, validate } from './validate.ts';
 import * as T from './types.ts';
 import * as X from './examples.ts';
@@ -73,6 +74,20 @@ test('building reference checks catch broken graphs', () => {
   const loop = structuredClone(base);
   loop.edges = [{ id: 'e', name: 'E', from: 'a', to: 'a', kind: 'door', clear_width: 1, clear_height: 2, step_height: 0 }];
   assert.ok(checkBuildingRefs(loop).some((e) => e.includes('same node')));
+});
+
+const readBuilding = (): T.Building =>
+  JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as T.Building;
+
+test('an edge that joins two levels must be a level-change kind', () => {
+  const b = readBuilding();
+  const door = b.edges.find((e) => e.id === 'door-north')!;
+  door.to = b.nodes.find((n) => n.level === 'L2')!.id;
+  assert.deepEqual(checkBuildingRefs(b), ['edge "door-north": joins L1 and L2 but is a door']);
+});
+
+test('data/building.json passes the reference checks', () => {
+  assert.deepEqual(checkBuildingRefs(readBuilding()), []);
 });
 
 test('validator rejects bad data', () => {
