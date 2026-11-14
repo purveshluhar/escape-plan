@@ -23,18 +23,19 @@ export const WIDEN_FIXTURE_OFFICE_DOOR: Edit = { op: 'widen', target: 'fixture-o
 
 // A new building: `base` plus the fixture office, its door, the sofa and people. `base` is not changed.
 export function withMvpFixture(base: Building): Building {
+  const b = structuredClone(base);
   return {
-    ...structuredClone(base),
+    ...b,
     nodes: [
-      ...structuredClone(base.nodes),
+      ...b.nodes,
       { id: 'fixture-office', name: 'Office', level: 'L1', type: 'room', box: { x: 0, y: 8.4, width: 6, depth: 12 }, is_exit: false },
     ],
     edges: [
-      ...structuredClone(base.edges),
+      ...b.edges,
       { id: 'fixture-office-door', name: 'Office door', from: 'fixture-office', to: 'corridor', kind: 'door', clear_width: 0.5, clear_height: 2.1, step_height: 0 },
     ],
     tokens: [
-      ...structuredClone(base.tokens.filter((t) => t.id !== FIXTURE_SOFA.id && t.id !== FIXTURE_PEOPLE.id)),
+      ...b.tokens.filter((t) => t.id !== FIXTURE_SOFA.id && t.id !== FIXTURE_PEOPLE.id),
       structuredClone(FIXTURE_SOFA), structuredClone(FIXTURE_PEOPLE),
     ],
   };
