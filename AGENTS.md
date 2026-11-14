@@ -28,14 +28,16 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 
 | Role | Person | Folder | Tier 1 job |
 |---|---|---|---|
-| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `jev/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests (later: tier 2 Jev parse, tier 3 Jev votes) |
-| P2 3D and animation | P2 | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
-| P3 Front-end, edits and AI | P3 | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
-| P4 Designer and presenter | P4 | `design/` | Icons, colours, path style, demo script |
-| P5 Domain modeller and tester | P5 | `data/` | `data/building.json`; `data/expected.json` for the 4 tier 1 tokens |
+| P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `server/` | Contract; chiller, glass, wheelchair, load rules; re-solve; tests (later: the local server in `server/` with Jev parse, plan B and C, Jev votes and the phone sockets) |
+| P2 3D and animation | @justinjao | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
+| P3 Front-end, edits and AI | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
+| P4 Designer and presenter | @minsookim1014, @jackwayfeel | `design/` | Icons, colours, path style, demo script |
+| P5 Domain modeller and tester | @kalunkuo | `data/` | `data/building.json`; `data/expected.json` for the 4 tier 1 tokens |
 
-Replace P2-P5 with GitHub handles when the team is set. Shared files outside these folders
-(root config, `docs/`, `.github/`, `.claude/`) belong to P1.
+@minsookim1014 and @jackwayfeel share P3 and P4 and work on both roles together.
+Shared files outside these folders (root config, `docs/`, `.github/`, `.claude/`) belong to P1.
+When the first `server/` code lands, P1 adds `server/` to the test globs in `package.json` and to
+`include` in `tsconfig.json`.
 Each folder's `README.md` says what it consumes and produces.
 
 ## Commands
@@ -51,8 +53,9 @@ Each folder's `README.md` says what it consumes and produces.
 
 Tests are `<folder>/*.test.ts`, run by `node --test` (Node 22.18+ runs TypeScript directly).
 Import local files with the `.ts` extension, and use `import type` for types.
-`viewer/`, `app/` (except `app/server/`) and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
-there. Typecheck loads Node types for the tests, so it does not catch this.
+`viewer/`, `app/` and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
+there. Typecheck loads Node types for the tests, so it does not catch this. `server/` runs in
+Node only; browser code never imports it.
 
 ## Merge and tag rhythm
 

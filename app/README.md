@@ -1,9 +1,10 @@
 # app/
 
-**Owner:** P3.
+**Owner:** P3 (@minsookim1014 and @jackwayfeel).
 **Purpose:** the game shell: app state, edit buttons, reset, scoreboard. Later the text box and
-"Did you mean" buttons for Jev edits (T2), vote bubbles and phone controllers (T3). The Jev calls
-themselves are P1's, in `jev/` (ADR 0009).
+"Did you mean" buttons for Jev edits (T2), vote bubbles, phone controllers and voice (T3). P3
+wires these screens to P1's local server in `server/` (ADR 0008), which makes the Jev, plan B and
+plan C calls and runs the phone sockets.
 **Consumes:** `solve()` from `solver/`, `createViewer()` from `viewer/`, `data/building.json`.
 **Produces:** the page (`index.html` + `app/main.ts`, both P3's) and `Edit` objects (`contract/types.ts`).
 Pure logic (`app/scoreboard.ts`) is tested in `app/scoreboard.test.ts`.
@@ -19,4 +20,5 @@ Edit buttons that push `Edit` objects (`widen`, `add_transfer_beam`, `add_ramp`,
 (a general LLM with the same typed answers) or plan C (keyword parser and buttons). The app gets
 the same `JevParse` shape either way.
 Keys go in `.env` only, never in code and never with a `VITE_` prefix. A Jev or LLM call that
-needs a key, and the T3 phone sockets, go through a small local server in `app/server/` (ADR 0008).
+needs a key, and the T3 phone sockets, go through P1's local server in `server/` (ADR 0008).
+Browser code never imports `server/`.

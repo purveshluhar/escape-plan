@@ -6,7 +6,7 @@ body:
     id: folder
     attributes:
       label: Where it shows
-      options: [solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), jev/ (P1), not sure]
+      options: [solver/ (P1), viewer/ (P2), app/ (P3), design/ (P4), data/ (P5), server/ (P1), not sure]
     validations:
       required: true
   - type: textarea

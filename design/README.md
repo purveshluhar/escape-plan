@@ -1,6 +1,6 @@
 # design/
 
-**Owner:** P4.
+**Owner:** P4 (@minsookim1014 and @jackwayfeel).
 **Purpose:** the look and the story: colours, icons, path style, motion, sound, demo script, deck.
 **Consumes:** the disciplines in `contract/types.ts`.
 **Produces:** `design/tokens.ts` (colours, glyphs, fonts, path and motion values that `viewer/`

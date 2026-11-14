@@ -1,6 +1,6 @@
 # data/
 
-**Owner:** P5.
+**Owner:** P5 (@kalunkuo).
 **Purpose:** the building and the truth.
 **Produces:**
 - `building.json`: the building graph (`contract/schema/building.schema.json`).

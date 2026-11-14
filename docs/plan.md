@@ -13,15 +13,17 @@ it is green, so we never end with nothing working.
 
 | Role | Folder | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|---|
-| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/`, `jev/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water; Jev parse (or plan B) | Electrical; Jev votes |
-| P2 3D and animation | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
-| P3 Front-end, edits and AI | `app/` | Edit buttons, reset, scoreboard, app state | Text box and "Did you mean" buttons for Jev edits | Vote bubbles; phone controllers; voice |
-| P4 Designer and presenter | `design/` | Icons, colours, path style, script | Sound | LLM post-game report (with P3); final deck |
-| P5 Domain modeller and tester | `data/` | `building.json`; `expected.json` for the 4 tokens | Cityweft export; expected cases for people, smoke and water | Electrical data; Q&A prep |
+| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/`, `server/` | Contract; chiller, glass, wheelchair, load; re-solve; tests | People and smoke race; water; local server; Jev parse (or plan B or C) | Electrical; Jev votes; phone sockets in the server |
+| P2 3D and animation (@justinjao) | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
+| P3 Front-end, edits and AI (@minsookim1014, @jackwayfeel) | `app/` | Edit buttons, reset, scoreboard, app state | Text box and "Did you mean" buttons for Jev edits | Vote bubbles; phone controllers; voice |
+| P4 Designer and presenter (@minsookim1014, @jackwayfeel) | `design/` | Icons, colours, path style, script | Sound | LLM post-game report (with P3); final deck |
+| P5 Domain modeller and tester (@kalunkuo) | `data/` | `building.json`; `expected.json` for the 4 tokens | Cityweft export; expected cases for people, smoke and water | Electrical data; Q&A prep |
 
 Humans keep: the contract, the expected results, the merge, the look, and the demo script.
 
-P1 owns the Jev work (parse, votes, plan B) in `jev/`; P3 owns the screens that show it (ADR 0009).
+P1 owns the Jev work (parse, plan B and C, votes) and the small local server in `server/` (ADR 0008).
+P3 owns the screens that use it and wires them to that server. @minsookim1014 and @jackwayfeel
+share P3 and P4 and work on both roles together.
 
 ## Tiers
 

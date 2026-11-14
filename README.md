@@ -36,13 +36,15 @@ npm run check    # typecheck + test + build: run before every merge
 
 ## Folder map
 
+Roles: P1 @purveshluhar, P2 @justinjao, P3 and P4 @minsookim1014 and @jackwayfeel (together, on both roles), P5 @kalunkuo.
+
 | Folder | Owner | What it is |
 |---|---|---|
 | `contract/` | P1 | Shared TypeScript types and JSON Schemas. Read first. |
 | `solver/` | P1 | Deterministic pass or fail per token. |
 | `viewer/` | P2 | three.js isometric cutaway and token paths. |
-| `app/` | P3 | Game shell: edits, scoreboard, phones. |
-| `jev/` | P1 | Jev and plan B calls: text to edit, votes (tier 2 and 3). |
+| `app/` | P3 | Game shell: edits, scoreboard, text box, phone controllers. |
+| `server/` | P1 | Small local server: keys, Jev and plan B or C calls, votes, phone sockets (tier 2 and 3). |
 | `design/` | P4 | Colours, icons, motion, sound, demo script. |
 | `data/` | P5 | `building.json` and the hand-checked `expected.json`. |
 | `docs/` | P1 | Plan, ADRs, agent docs. |

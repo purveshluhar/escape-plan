@@ -1,6 +1,6 @@
 # viewer/
 
-**Owner:** P2.
+**Owner:** P2 (@justinjao).
 **Purpose:** draw the building as an isometric 3D cutaway and animate each token's path.
 **Consumes:** `Building` and `SolverResult[]` (`contract/types.ts`), colours from `design/tokens.ts`.
 **Produces:** `createViewer(container)` returning `{ show(building, results) }` (`viewer/index.ts`).
