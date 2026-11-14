@@ -20,7 +20,8 @@ They are not real answers. Replace them with v1.
 
 ## Cityweft block (tier 2)
 
-`node --env-file=.env data/cityweft-fetch.ts` fetches a 150 m block around 120 Broadway as a GLB
+`node --env-file=.env data/cityweft-fetch.ts` fetches a 150 m block around 120 Broadway (every
+geometry type: buildings, ground, barriers, trees and street items, infrastructure, terrain) as a GLB
 into git-ignored `data/cityweft/` (`block.glb` and `meta.json`). It needs `CITYWEFT_API_KEY` in the
 git-ignored `.env`, never with a `VITE_` prefix. `cityweft-request.ts` holds the pure request
 builder that `cityweft-request.test.ts` checks. Nothing from `data/cityweft/` is ever committed

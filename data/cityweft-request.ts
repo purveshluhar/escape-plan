@@ -17,6 +17,9 @@ export interface ContextRequest {
 
 export const MAX_AREA_KM2 = 10; // Cityweft rejects a larger polygon with a 400
 
+// Everything Cityweft can generate: instances are trees and street items, topography is terrain.
+const GEOMETRY = ['buildings', 'surface', 'barriers', 'instances', 'infrastructure', 'topography'];
+
 const METRES_PER_DEG_LAT = 111_132;
 const METRES_PER_DEG_LON_AT_EQUATOR = 111_320;
 
@@ -61,7 +64,7 @@ export function buildRequest(center: Center, sizeMetres: number): ContextRequest
   }
   return {
     polygon,
-    settings: { geometry: ['buildings', 'surface', 'barriers'], upAxis: 'Y', crs: 'local' },
+    settings: { geometry: [...GEOMETRY], upAxis: 'Y', crs: 'local' },
     export: { format: 'glb' },
   };
 }

@@ -29,9 +29,11 @@ test('polygon is a square about 150 m a side, centred on the point', () => {
   assert.ok(Math.abs(lon - BROADWAY_120.lon) < 1e-9);
 });
 
-test('asks for a local-metre glb with buildings, surface and barriers only', () => {
+test('asks for a local-metre glb with every geometry type, trees and terrain included', () => {
   const body = buildRequest(BROADWAY_120, 150);
-  assert.deepEqual(body.settings.geometry, ['buildings', 'surface', 'barriers']);
+  assert.deepEqual(body.settings.geometry, [
+    'buildings', 'surface', 'barriers', 'instances', 'infrastructure', 'topography',
+  ]);
   assert.equal(body.settings.upAxis, 'Y');
   assert.equal(body.settings.crs, 'local');
   assert.deepEqual(body.export, { format: 'glb' });
