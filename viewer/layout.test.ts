@@ -8,11 +8,19 @@ import {
 import type { Building, SolverResult } from '../contract/types.ts';
 
 test('one box per node, sitting on its level', () => {
-  const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
-  const boxes = nodeBoxes(b);
-  assert.equal(boxes.length, b.nodes.length);
-  const plant = boxes.find((x) => x.id === 'plant');
-  assert.deepEqual(plant?.center, [3, 4 + STOREY_HEIGHT / 2, 2.5]);
+  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
+  const elevation = new Map(real.levels.map((l) => [l.id, l.elevation]));
+  const boxes = nodeBoxes(real);
+  assert.equal(boxes.length, real.nodes.length);
+  for (const n of real.nodes) {
+    const box = boxes.find((x) => x.id === n.id);
+    const floor = elevation.get(n.level) ?? 0;
+    assert.deepEqual(box?.center, [n.box.x + n.box.width / 2, floor + STOREY_HEIGHT / 2, n.box.y + n.box.depth / 2], n.id);
+    assert.deepEqual(box?.size, [n.box.width, STOREY_HEIGHT, n.box.depth], n.id);
+  }
+  // A fixed answer from the small fixture below, so a wrong formula still fails and the test
+  // does not move when data/building.json does.
+  assert.deepEqual(nodeBoxes(b).find((x) => x.id === 'up')?.center, [3, 4 + STOREY_HEIGHT / 2, 2]);
 });
 
 // Small two-level building of our own, so these tests do not move when data/building.json does.
