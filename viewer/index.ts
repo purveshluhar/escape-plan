@@ -1,65 +1,351 @@
-// Viewer: draws the building and colours each node by token results. Owner: P2.
-// Starter: translucent boxes and an isometric orthographic camera. Paths, red X and
-// LEVEL COMPLETE are P2's tier 1 task (see viewer/README.md and the `arcade-look` skill).
+// Viewer: draws the building as an isometric maze-arcade cutaway and animates every token. Owner: P2.
+// The look is design/look.md: double-line walls, pellet trails the token eats, a disc token with
+// its glyph, a shake and a blinking red X on fail, LEVEL COMPLETE and a wall flash on win.
 import * as THREE from 'three';
+import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Building, SolverResult } from '../contract/types.ts';
-import { BACKGROUND } from '../design/tokens.ts';
-import { nodeBoxes } from './layout.ts';
+import {
+  BACKGROUND, DISCIPLINE_STYLE, FAIL, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET, GRID, MOTION, PATH,
+  SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
+} from '../design/tokens.ts';
+import { failText, labelSides } from './labels.ts';
+import { cumulativeLengths, easeInOut, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, type Vec3 } from './layout.ts';
 
 export interface Viewer {
   show(building: Building, results: SolverResult[]): void;
 }
 
+const WALL_GAP = 0.15; // metres between the bright outer and dim inner line of a wall
+const FILL_OPACITY = 0.25;
+const FLAT_HEIGHT: Partial<Record<string, number>> = { street: 0.15, truck: 2.6 }; // not storey boxes
+const VIEW_MARGIN = 1.2;
+const CAMERA_DIR = new THREE.Vector3(1, 1, 1).normalize(); // fixed isometric angle
+const SHAKE_METRES = 0.25;
+// The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
+const X_LIFT = -48; // pixels
+const UP = new THREE.Vector3(0, 1, 0);
+
+interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
+interface TrailPiece { from: number; len: number; core: THREE.Mesh; glow: THREE.Mesh }
+
+interface Run {
+  points: Vec3[];
+  cum: number[];
+  total: number;
+  stopAt: number;
+  fail: boolean;
+  delay: number; // seconds after show() before this token starts
+  pellets: Pellet[];
+  trail: TrailPiece[];
+  token: THREE.Group;
+  x: { obj: CSS2DObject; at: THREE.Vector3 } | null;
+  reachedAt: number | null; // token-local seconds when it reached its stop
+}
+
 export function createViewer(container: HTMLElement): Viewer {
+  injectStyles();
+  if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(BACKGROUND);
+  renderer.autoClear = false;
+  renderer.domElement.style.display = 'block';
   container.appendChild(renderer.domElement);
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(BACKGROUND);
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 500);
-  const group = new THREE.Group();
-  scene.add(group, new THREE.AmbientLight(0xffffff, 0.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-  sun.position.set(20, 40, 10);
-  scene.add(sun);
+  const labels = new CSS2DRenderer();
+  labels.domElement.className = 'ep-labels';
+  container.appendChild(labels.domElement);
+  const banner = document.createElement('div');
+  banner.className = 'ep-banner';
+  banner.textContent = 'LEVEL COMPLETE';
+  container.appendChild(banner);
 
-  function resize(): void {
+  const world = new THREE.Scene(); // building and grid
+  const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+
+  const wallMat = new THREE.LineBasicMaterial({ color: WALL });
+  const innerMat = new THREE.LineBasicMaterial({ color: WALL_INNER });
+  const fillMat = new THREE.MeshBasicMaterial({ color: WALL_INNER, transparent: true, opacity: FILL_OPACITY, depthWrite: false });
+  const dimMat = new THREE.MeshBasicMaterial({ color: TEXT_MUTED, transparent: true, opacity: 0.3 });
+  const geo = {
+    pellet: new THREE.SphereGeometry(PATH.pelletRadius, 12, 8),
+    pelletGlow: new THREE.SphereGeometry(PATH.pelletRadius * 2.5, 12, 8),
+    trail: new THREE.CylinderGeometry(PATH.trailWidth / 2, PATH.trailWidth / 2, 1, 8).translate(0, 0.5, 0),
+    trailGlow: new THREE.CylinderGeometry(PATH.trailWidth * 1.5, PATH.trailWidth * 1.5, 1, 8).translate(0, 0.5, 0),
+    tokenGlow: new THREE.SphereGeometry(PATH.tokenRadius * 2, 20, 14),
+  };
+  const shared = new Set<object>([wallMat, innerMat, fillMat, dimMat, ...Object.values(geo)]);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const bounds = new THREE.Box3();
+  let runs: Run[] = [];
+  let t0 = performance.now();
+  let allDone = 0;
+  let win = false;
+
+  function drawBuilding(b: Building): void {
+    clear(world, shared);
+    const nodes = new Map(b.nodes.map((n) => [n.id, n]));
+    for (const box of nodeBoxes(b)) {
+      const flat = FLAT_HEIGHT[nodes.get(box.id)?.type ?? ''];
+      const [w, , d] = box.size;
+      const h = flat ?? STOREY_HEIGHT;
+      const y = box.center[1] - STOREY_HEIGHT / 2 + h / 2;
+      const outer = new THREE.BoxGeometry(w, h, d);
+      const fill = new THREE.Mesh(outer, fillMat);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(outer), wallMat);
+      const inner = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(
+          Math.max(w - 2 * WALL_GAP, 0.01), Math.max(h - 2 * WALL_GAP, 0.01), Math.max(d - 2 * WALL_GAP, 0.01),
+        )),
+        innerMat,
+      );
+      for (const o of [fill, edges, inner]) o.position.set(box.center[0], y, box.center[2]);
+      world.add(fill, edges, inner);
+    }
+    bounds.setFromObject(world);
+    const centre = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3());
+    const span = 2 * Math.ceil((Math.max(size.x, size.z) + 12) / 2);
+    const grid = new THREE.GridHelper(span, span, GRID, GRID);
+    grid.position.set(Math.round(centre.x), -0.01, Math.round(centre.z));
+    world.add(grid);
+  }
+
+  function buildRuns(b: Building, results: SolverResult[]): void {
+    clear(fx, shared);
+    runs = [];
+    results.forEach((r, i) => {
+      const token = b.tokens.find((t) => t.id === r.token);
+      if (!token) return;
+      const style = DISCIPLINE_STYLE[token.discipline];
+      const route = tokenRoute(b, r, i);
+      const cum = cumulativeLengths(route.points);
+      const total = cum[cum.length - 1] ?? 0;
+      const color = new THREE.Color(style.color);
+      const core = new THREE.MeshBasicMaterial({ color });
+      const glow = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: PATH.glow * 0.35, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+
+      const pellets: Pellet[] = [];
+      for (let d = PATH.pelletSpacing; d < total - 1e-6; d += PATH.pelletSpacing) {
+        const p = pointAt(route.points, cum, d);
+        const pellet = { d, core: new THREE.Mesh(geo.pellet, core), glow: new THREE.Mesh(geo.pelletGlow, glow) };
+        pellet.core.position.set(...p);
+        pellet.glow.position.set(...p);
+        fx.add(pellet.core, pellet.glow);
+        pellets.push(pellet);
+      }
+
+      const trail: TrailPiece[] = [];
+      for (let s = 0; s + 1 < route.points.length; s++) {
+        const a = new THREE.Vector3(...route.points[s]!);
+        const dir = new THREE.Vector3(...route.points[s + 1]!).sub(a);
+        const len = dir.length();
+        if (len < 1e-6) continue;
+        const piece = { from: cum[s]!, len, core: new THREE.Mesh(geo.trail, core), glow: new THREE.Mesh(geo.trailGlow, glow) };
+        for (const m of [piece.core, piece.glow]) {
+          m.position.copy(a);
+          m.quaternion.setFromUnitVectors(UP, dir.normalize());
+          m.visible = false;
+          fx.add(m);
+        }
+        trail.push(piece);
+      }
+
+      const tokenGroup = new THREE.Group();
+      tokenGroup.add(new THREE.Mesh(geo.tokenGlow, glow));
+      const disc = document.createElement('div');
+      disc.className = 'ep-token';
+      disc.innerHTML = `<i style="--c:${style.color}" title="${style.label}">${style.glyph}</i>`;
+      tokenGroup.add(new CSS2DObject(disc));
+      tokenGroup.position.set(...(route.points[0] ?? [0, 0, 0]));
+      fx.add(tokenGroup);
+
+      let x: Run['x'] = null;
+      const words = failText(b, r);
+      if (route.blocked && words) {
+        const el = document.createElement('div');
+        el.className = 'ep-fail side-right';
+        el.innerHTML = '<div class="ep-x"></div><div class="ep-card"><b></b><span></span></div>';
+        el.querySelector('b')!.textContent = words.title;
+        el.querySelector('span')!.textContent = words.detail;
+        const obj = new CSS2DObject(el);
+        obj.position.set(...route.blocked);
+        obj.visible = false;
+        fx.add(obj);
+        x = { obj, at: new THREE.Vector3(...route.blocked) };
+      }
+
+      for (const p of route.points) bounds.expandByPoint(new THREE.Vector3(...p));
+      runs.push({
+        points: route.points, cum, total, stopAt: route.stopAt, fail: r.status === 'fail',
+        delay: runs.length * MOTION.staggerSeconds, pellets, trail, token: tokenGroup, x, reachedAt: null,
+      });
+    });
+    allDone = Math.max(0, runs.length - 1) * MOTION.staggerSeconds + MOTION.secondsPerToken;
+  }
+
+  function fit(): void {
     const w = container.clientWidth || 800;
     const h = container.clientHeight || 600;
-    const view = 18;
-    const aspect = w / h;
-    camera.left = -view * aspect;
-    camera.right = view * aspect;
-    camera.top = view;
-    camera.bottom = -view;
-    camera.updateProjectionMatrix();
     renderer.setSize(w, h);
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  function show(building: Building): void {
-    group.clear();
-    for (const box of nodeBoxes(building)) {
-      const geometry = new THREE.BoxGeometry(...box.size);
-      const mesh = new THREE.Mesh(
-        geometry,
-        new THREE.MeshStandardMaterial({ color: 0x2a3a66, transparent: true, opacity: 0.35 }),
-      );
-      mesh.position.set(...box.center);
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geometry),
-        new THREE.LineBasicMaterial({ color: 0x5c7cff }),
-      );
-      edges.position.copy(mesh.position);
-      group.add(mesh, edges);
+    labels.setSize(w, h);
+    if (bounds.isEmpty()) return;
+    const centre = bounds.getCenter(new THREE.Vector3());
+    camera.position.copy(centre).addScaledVector(CAMERA_DIR, 150);
+    camera.lookAt(centre);
+    camera.updateMatrixWorld();
+    let hx = 0;
+    let hy = 0;
+    const { min, max } = bounds;
+    for (const cx of [min.x, max.x]) for (const cy of [min.y, max.y]) for (const cz of [min.z, max.z]) {
+      const v = new THREE.Vector3(cx, cy, cz).applyMatrix4(camera.matrixWorldInverse);
+      hx = Math.max(hx, Math.abs(v.x));
+      hy = Math.max(hy, Math.abs(v.y));
     }
-    const bounds = new THREE.Box3().setFromObject(group);
-    const center = bounds.getCenter(new THREE.Vector3());
-    camera.position.set(center.x + 30, center.y + 30, center.z + 30); // isometric view
-    camera.lookAt(center);
-    renderer.render(scene, camera);
+    const aspect = w / h;
+    const half = Math.max(hy, hx / aspect) * VIEW_MARGIN;
+    camera.left = -half * aspect;
+    camera.right = half * aspect;
+    camera.top = half;
+    camera.bottom = -half;
+    camera.updateProjectionMatrix();
+
+    const xs = runs.flatMap((r) => (r.x ? [r.x] : []));
+    const sides = labelSides(xs.map(({ at }) => {
+      const v = at.clone().project(camera);
+      return [(v.x + 1) * w / 2, (1 - v.y) * h / 2];
+    }));
+    xs.forEach(({ obj }, i) => {
+      obj.element.classList.toggle('side-left', sides[i] === 'left');
+      obj.element.classList.toggle('side-right', sides[i] !== 'left');
+    });
+  }
+
+  function update(run: Run, local: number): void {
+    const p = Math.min(1, Math.max(0, local / MOTION.secondsPerToken));
+    const along = easeInOut(p) * run.total;
+    const d = Math.min(run.stopAt, along);
+    if (run.reachedAt === null && local >= 0 && (p >= 1 || along >= run.stopAt - 1e-6)) {
+      run.reachedAt = local;
+      if (run.fail) {
+        if (run.x) run.x.obj.visible = true;
+        for (const pellet of run.pellets) {
+          if (pellet.d > run.stopAt + 1e-6) {
+            pellet.core.material = dimMat;
+            pellet.glow.visible = false;
+          }
+        }
+      }
+    }
+    for (const pellet of run.pellets) {
+      const ahead = pellet.d > d;
+      pellet.core.visible = ahead;
+      pellet.glow.visible = ahead && pellet.core.material !== dimMat;
+    }
+    for (const piece of run.trail) {
+      const len = Math.min(piece.len, Math.max(0, d - piece.from));
+      for (const m of [piece.core, piece.glow]) {
+        m.visible = len > 1e-4;
+        m.scale.y = Math.max(len, 1e-4);
+      }
+    }
+    run.token.position.set(...pointAt(run.points, run.cum, d));
+    const since = run.reachedAt === null ? Infinity : (local - run.reachedAt) * 1000;
+    if (run.fail && since < MOTION.failShakeMs && !reduced) {
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      run.token.position.addScaledVector(right, Math.sin((since / MOTION.failShakeMs) * Math.PI * 4) * SHAKE_METRES);
+    }
+  }
+
+  function frame(now: number): void {
+    const t = reduced ? allDone + 60 : (now - t0) / 1000;
+    for (const run of runs) update(run, t - run.delay);
+    if (win && t >= allDone) {
+      const since = t - allDone;
+      const period = 1 / MOTION.winFlashHz;
+      const flashing = !reduced && since < period * MOTION.winFlashCount;
+      wallMat.color.set(flashing && since % period < period / 2 ? TEXT : WALL);
+      banner.classList.add('on');
+      banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
+    }
+    renderer.clear();
+    renderer.render(world, camera);
+    renderer.clearDepth();
+    renderer.render(fx, camera);
+    labels.render(fx, camera);
+  }
+
+  new ResizeObserver(fit).observe(container);
+  renderer.setAnimationLoop(frame);
+
+  function show(building: Building, results: SolverResult[]): void {
+    drawBuilding(building);
+    buildRuns(building, results);
+    win = results.length > 0 && results.every((r) => r.status === 'pass');
+    wallMat.color.set(WALL);
+    banner.classList.remove('on', 'small');
+    fit();
+    t0 = performance.now();
   }
 
   return { show };
+}
+
+// Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
+// (three only removes a label's element when the label itself, not its parent, is removed).
+function clear(scene: THREE.Scene, shared: Set<object>): void {
+  scene.traverse((o) => {
+    if (o instanceof CSS2DObject) o.element.remove();
+    if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
+      if (!shared.has(o.geometry)) o.geometry.dispose();
+      const mats: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) if (!shared.has(m)) m.dispose();
+    }
+  });
+  scene.clear();
+}
+
+let styled = false;
+function injectStyles(): void {
+  if (styled) return;
+  styled = true;
+  if (!document.querySelector(`link[href="${FONT_STYLESHEET}"]`)) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = FONT_STYLESHEET;
+    document.head.appendChild(link);
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+.ep-labels { position: absolute; inset: 0; pointer-events: none; }
+.ep-token, .ep-fail { width: 0; height: 0; }
+.ep-token i { position: absolute; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--c); color: ${BACKGROUND}; font: 16px ${FONT_DISPLAY};
+  font-style: normal; box-shadow: 0 0 14px var(--c); }
+.ep-x { position: absolute; top: ${X_LIFT}px; width: 0; height: 0; animation: ep-pop 0.25s ease-out,
+  ep-blink ${1 / MOTION.failBlinkHz}s steps(1, end) 0.25s ${MOTION.failBlinkCount}; }
+.ep-x::before, .ep-x::after { content: ''; position: absolute; width: 50px; height: 9px; border-radius: 5px;
+  background: ${FAIL}; box-shadow: 0 0 12px ${FAIL}; transform: translate(-50%, -50%) rotate(45deg); }
+.ep-x::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.ep-card { position: absolute; top: ${X_LIFT}px; transform: translateY(-50%); white-space: nowrap; background: ${BACKGROUND};
+  border: 2px solid ${FAIL}; border-radius: 4px; padding: 7px 10px; animation: ep-fade 0.25s ease-out; }
+.side-right .ep-card { left: 36px; }
+.side-left .ep-card { right: 36px; }
+.ep-card b { display: block; font: 12px/1.3 ${FONT_DISPLAY}; color: ${FAIL}; white-space: pre; }
+.ep-card span { display: block; margin-top: 4px; font: 600 15px/1.3 ${FONT_BODY}; color: ${TEXT}; }
+.ep-banner { position: absolute; left: 0; right: 0; top: 50%; text-align: center; pointer-events: none;
+  font: clamp(24px, 5vw, 64px) ${FONT_DISPLAY}; color: ${SCORE}; text-shadow: 0 0 18px ${SCORE};
+  opacity: 0; transform: translateY(-50%) scale(0.6); transition: opacity 0.3s, transform 0.3s, top 0.4s, font-size 0.4s; }
+.ep-banner.on { opacity: 1; transform: translateY(-50%) scale(1); }
+.ep-banner.on.small { top: 32px; font-size: 20px; }
+@keyframes ep-pop { from { transform: scale(0); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
+@keyframes ep-blink { 50% { opacity: 0; } }
+@keyframes ep-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ep-x, .ep-card { animation: none; } .ep-banner { transition: none; } }
+`;
+  document.head.appendChild(style);
 }

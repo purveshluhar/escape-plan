@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Escape Plan viewer dev</title>
+    <style>
+      body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; display: grid;
+        grid-template-rows: auto 1fr; height: 100vh; }
+      header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #0a0f3c; }
+      button { font: 600 13px system-ui, sans-serif; padding: 8px 12px; background: transparent; color: #ffe600;
+        border: 2px solid #2a3cff; border-radius: 4px; cursor: pointer; }
+      button[aria-pressed='true'] { background: #0b1366; }
+      #source { font-size: 13px; color: #a9b0e0; }
+      #viewer { position: relative; min-height: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>VIEWER DEV</strong>
+      <span id="cases"></span>
+      <span id="source"></span>
+    </header>
+    <div id="viewer"></div>
+    <script type="module" src="./dev.ts"></script>
+  </body>
+</html>
