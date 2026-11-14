@@ -1,7 +1,8 @@
 # 0009. MVP first: wheelchair, sofa and people walk out; the rules are written down in full
 
-Status: accepted (2026-11-14). Supersedes the tier 1 definition and the clock times in 0005.
-It does not change the tier names or the tag names.
+Status: accepted (2026-11-14). Supersedes the tier 1 definition and the clock times in 0005,
+the 13:00 merge and the hourly merge point in 0003, and the 19:30 wifi go/no-go time in 0008. It
+does not change the tier names or the tag names.
 
 ## Context
 
@@ -25,6 +26,7 @@ order; then the team dropped the timeline from the plan.
   switches to plan B or C if there is no key or calls take over 2 s; phones fall back to a
   stage-only demo if the venue wifi blocks local sockets. Tier 2 starts when every tier 1 token
   is green (the re-tagged `tier1-demo`); tier 3 starts after `tier2-demo`.
+- Merges are small and frequent, not on the hour. `contract/` changes at any such merge point.
 - The contract README gets a rule-details section: an edge-kind table per rule, the corner rule
   with the token's width, an elevator-car fit check, fewest-edges search with node-id ties, the
   first block on the shortest unchecked path, and a needed/available table.
