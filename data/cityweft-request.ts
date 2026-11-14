@@ -69,6 +69,45 @@ export function buildRequest(center: Center, sizeMetres: number): ContextRequest
   };
 }
 
+// The GLB export leaves trees out, so they come from a second request: same polygon, JSON back.
+export interface TreesRequest {
+  polygon: LatLon[];
+  settings: { geometry: ['instances']; upAxis: 'Y' | 'Z'; crs: 'local' };
+}
+
+export function buildTreesRequest(center: Center, sizeMetres: number): TreesRequest {
+  const { polygon, settings } = buildRequest(center, sizeMetres);
+  return { polygon, settings: { geometry: ['instances'], upAxis: settings.upAxis, crs: settings.crs } };
+}
+
+// A tree point in the same local metres as the GLB (y is up).
+export interface Tree {
+  x: number;
+  y: number;
+  z: number;
+  height: number;
+}
+
+const DEFAULT_TREE_HEIGHT = 10; // metres, when Cityweft gives none
+
+// Pulls tree points out of a /v1/context JSON response. Anything unexpected gives fewer trees.
+export function extractTrees(response: unknown): Tree[] {
+  const geometry = (response as { geometry?: unknown } | undefined)?.geometry;
+  if (!Array.isArray(geometry)) return [];
+  const trees: Tree[] = [];
+  for (const group of geometry) {
+    if (group?.type !== 'instances' || !Array.isArray(group.nodes)) continue;
+    for (const n of group.nodes) {
+      if (n?.instanceType !== 'tree') continue;
+      const { x, y, z } = n;
+      if (![x, y, z].every((v) => typeof v === 'number' && Number.isFinite(v))) continue;
+      const height = typeof n.height === 'number' && Number.isFinite(n.height) ? n.height : DEFAULT_TREE_HEIGHT;
+      trees.push({ x, y, z, height });
+    }
+  }
+  return trees;
+}
+
 // What to tell the person at the terminal. Never includes the key.
 export function describeStatus(status: number): string {
   switch (status) {

@@ -3,11 +3,11 @@
 // Needs CITYWEFT_API_KEY in the git-ignored .env (never a VITE_ prefix, docs/adr/0008).
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { buildRequest, describeStatus } from './cityweft-request.ts';
+import { buildRequest, buildTreesRequest, describeStatus, extractTrees } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
 const CENTER = { lat: 40.7085, lon: -74.0108 }; // 120 Broadway, New York
-const SIZE_METRES = 150;
+const SIZE_METRES = 300;
 const MAX_TRIES = 3;
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
 
@@ -19,12 +19,12 @@ if (!key) {
 
 const body = buildRequest(CENTER, SIZE_METRES);
 
-async function post(): Promise<Response> {
+async function post(payload: object): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     if (res.status !== 503 || attempt === MAX_TRIES) return res;
     const wait = Number(res.headers.get('Retry-After')) || 5;
@@ -34,7 +34,7 @@ async function post(): Promise<Response> {
 }
 
 console.log(`Requesting a ${SIZE_METRES} m block around ${CENTER.lat}, ${CENTER.lon} ...`);
-const res = await post();
+const res = await post(body);
 if (!res.ok) {
   console.error(describeStatus(res.status));
   process.exit(1);
@@ -64,3 +64,13 @@ writeFileSync(
   ),
 );
 console.log(`Saved data/cityweft/block.glb (${(glb.length / 1e6).toFixed(1)} MB) and meta.json.`);
+
+// The GLB export leaves trees out, so they come as JSON points from a second, small request.
+const treesRes = await post(buildTreesRequest(CENTER, SIZE_METRES));
+if (!treesRes.ok) {
+  console.error(`Trees: ${describeStatus(treesRes.status)} The GLB is saved; run again for trees.`);
+  process.exit(1);
+}
+const trees = extractTrees(await treesRes.json());
+writeFileSync(new URL('trees.json', OUT_DIR), JSON.stringify(trees));
+console.log(`Saved data/cityweft/trees.json (${trees.length} trees).`);

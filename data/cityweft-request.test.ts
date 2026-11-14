@@ -1,7 +1,9 @@
 // Cityweft request builder: the polygon and settings we send to /v1/context. No network here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRequest, describeStatus, polygonAreaKm2, MAX_AREA_KM2 } from './cityweft-request.ts';
+import {
+  buildRequest, buildTreesRequest, describeStatus, extractTrees, polygonAreaKm2, MAX_AREA_KM2,
+} from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
 
@@ -55,4 +57,39 @@ test('status messages say what to do, and never echo a key', () => {
   assert.match(describeStatus(402), /balance|subscription/i);
   assert.match(describeStatus(503), /retry/i);
   assert.match(describeStatus(500), /500/);
+});
+
+test('the trees request is the same polygon, instances only, as JSON (no export)', () => {
+  const trees = buildTreesRequest(BROADWAY_120, 300);
+  assert.deepEqual(trees.polygon, buildRequest(BROADWAY_120, 300).polygon);
+  assert.deepEqual(trees.settings.geometry, ['instances']);
+  assert.equal('export' in trees, false);
+});
+
+test('extractTrees keeps tree points and drops everything else', () => {
+  const response = {
+    geometry: [
+      { type: 'buildings', geometryType: 'meshes', meshes: [] },
+      {
+        type: 'instances',
+        geometryType: 'nodes',
+        nodes: [
+          { instanceType: 'tree', x: 1, y: 2, z: 3, height: 15, descriptor: { type: 'tree' } },
+          { instanceType: 'bench', x: 9, y: 9, z: 9, height: 1, descriptor: { type: 'bench' } },
+          { instanceType: 'tree', x: 'bad', y: 2, z: 3, height: 15 },
+          { instanceType: 'tree', x: 4, y: 5, z: 6, descriptor: { type: 'tree' } },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(extractTrees(response), [
+    { x: 1, y: 2, z: 3, height: 15 },
+    { x: 4, y: 5, z: 6, height: 10 },
+  ]);
+});
+
+test('extractTrees on an unexpected response gives no trees, never throws', () => {
+  assert.deepEqual(extractTrees(undefined), []);
+  assert.deepEqual(extractTrees({ geometry: 'nope' }), []);
+  assert.deepEqual(extractTrees({ geometry: [] }), []);
 });
