@@ -1,28 +1,37 @@
 {
-  "note": "EXAMPLE building, self-made and tiny. P5 replaces it with building.json v1. Metres and kN.",
+  "note": "432 Park Avenue slice, building.json v1. Self-made: boxes are simplified from our own reading of an approximate public-diagram model (kept out of the repo), not surveyed. Three levels stand for tower levels 1 (lobby), 10 (residential) and 19 (open mechanical band), stacked closer than real. Plan coordinates are the tower footprint, 28.5 m square, in metres from one corner. Metres and kN.",
   "levels": [
     {"id": "L1", "elevation": 0},
-    {"id": "L2", "elevation": 4}
+    {"id": "L2", "elevation": 9.4488},
+    {"id": "L3", "elevation": 14.1732}
   ],
   "nodes": [
-    {"id": "plant", "name": "Roof plant room", "level": "L2", "type": "plant", "box": {"x": 0, "y": 0, "width": 6, "depth": 5}, "is_exit": false},
-    {"id": "lobby", "name": "Lobby", "level": "L1", "type": "lobby", "box": {"x": 0, "y": 0, "width": 6, "depth": 5}, "is_exit": false},
-    {"id": "terrace", "name": "Terrace", "level": "L1", "type": "terrace", "box": {"x": 6, "y": 0, "width": 4, "depth": 5}, "is_exit": false},
-    {"id": "corridor", "name": "North corridor", "level": "L1", "type": "corridor", "box": {"x": 0, "y": 5, "width": 10, "depth": 2}, "is_exit": false},
-    {"id": "street", "name": "Street", "level": "L1", "type": "street", "box": {"x": 0, "y": 8, "width": 10, "depth": 4}, "is_exit": true},
-    {"id": "truck", "name": "Truck", "level": "L1", "type": "truck", "box": {"x": 2, "y": 12, "width": 3, "depth": 8}, "is_exit": false}
+    {"id": "plant", "name": "Mechanical level plant", "level": "L3", "type": "plant", "box": {"x": 8.44, "y": 8.7, "width": 11.62, "depth": 11.7}, "is_exit": false},
+    {"id": "lobby", "name": "Lobby", "level": "L1", "type": "lobby", "box": {"x": 0, "y": 0, "width": 14.25, "depth": 8.4}, "is_exit": false},
+    {"id": "terrace", "name": "Terrace", "level": "L1", "type": "terrace", "box": {"x": 14.25, "y": 0, "width": 14.25, "depth": 8.4}, "is_exit": false},
+    {"id": "corridor", "name": "North service corridor", "level": "L1", "type": "corridor", "box": {"x": 0, "y": 20.4, "width": 28.5, "depth": 3}, "is_exit": false},
+    {"id": "street", "name": "Street", "level": "L1", "type": "street", "box": {"x": 0, "y": 24.4, "width": 28.5, "depth": 5}, "is_exit": true},
+    {"id": "truck", "name": "Truck", "level": "L1", "type": "truck", "box": {"x": 12.5, "y": 29.4, "width": 3, "depth": 8}, "is_exit": false},
+    {"id": "core-l10", "name": "Level 10 core lobby", "level": "L2", "type": "lobby", "box": {"x": 8.44, "y": 8.7, "width": 11.62, "depth": 11.7}, "is_exit": false},
+    {"id": "unit1-living", "name": "Unit 1 living room", "level": "L2", "type": "room", "box": {"x": 13.67, "y": 0.9, "width": 13.93, "depth": 7.8}, "is_exit": false},
+    {"id": "unit2-living", "name": "Unit 2 living room", "level": "L2", "type": "room", "box": {"x": 12.85, "y": 20.4, "width": 14.7, "depth": 7.15}, "is_exit": false},
+    {"id": "unit3-living", "name": "Unit 3 living room", "level": "L2", "type": "room", "box": {"x": 0.95, "y": 20.4, "width": 11.7, "depth": 7.15}, "is_exit": false}
   ],
   "edges": [
     {"id": "plant-shaft", "name": "Plant shaft", "from": "plant", "to": "corridor", "kind": "shaft", "clear_width": 1.2, "clear_height": 3.0, "step_height": 0, "crosses": ["beam-b2"], "cuts_above_width": 1.5},
     {"id": "door-north", "name": "North door", "from": "corridor", "to": "street", "kind": "door", "clear_width": 2.0, "clear_height": 2.4, "step_height": 0},
     {"id": "curb", "name": "Curb to truck", "from": "street", "to": "truck", "kind": "opening", "clear_width": 2.5, "clear_height": 4.0, "step_height": 0},
     {"id": "lobby-door", "name": "Lobby door", "from": "lobby", "to": "corridor", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0, "corner_a": 1.2, "corner_b": 1.5},
-    {"id": "terrace-door", "name": "Terrace door", "from": "terrace", "to": "lobby", "kind": "step", "clear_width": 0.9, "clear_height": 2.1, "step_height": 0.15}
+    {"id": "terrace-door", "name": "Terrace door", "from": "terrace", "to": "lobby", "kind": "step", "clear_width": 0.9, "clear_height": 2.1, "step_height": 0.15},
+    {"id": "core-lift", "name": "Lift to Level 10", "from": "lobby", "to": "core-l10", "kind": "elevator", "clear_width": 1.2, "clear_height": 2.4, "step_height": 0},
+    {"id": "unit1-door", "name": "Unit 1 door", "from": "core-l10", "to": "unit1-living", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0},
+    {"id": "unit2-door", "name": "Unit 2 door", "from": "core-l10", "to": "unit2-living", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0},
+    {"id": "unit3-door", "name": "Unit 3 door", "from": "core-l10", "to": "unit3-living", "kind": "door", "clear_width": 1.0, "clear_height": 2.4, "step_height": 0}
   ],
   "members": [
     {"id": "f1", "kind": "foundation", "level": "L1", "supported_by": [], "node": "corridor"},
     {"id": "c1", "kind": "column", "level": "L1", "supported_by": ["f1"], "node": "corridor"},
-    {"id": "beam-b2", "kind": "beam", "level": "L2", "supported_by": ["c1"], "node": "plant"}
+    {"id": "beam-b2", "kind": "beam", "level": "L3", "supported_by": ["c1"], "node": "plant"}
   ],
   "tokens": [
     {"id": "chiller", "discipline": "mep", "start": "plant", "goal": "truck", "size": {"width": 1.6, "height": 2.0, "length": 2.4}, "rule": "clearance"},
