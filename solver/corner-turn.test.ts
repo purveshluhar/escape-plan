@@ -45,8 +45,8 @@ test('L_max with w = 0 matches (a^(2/3) + b^(2/3))^(3/2): 3.8105 for 1.2 and 1.5
 });
 
 test('L_max counts the width: glass and sofa numbers from the plan', () => {
-  near(lMax(1.2, 1.5, 0.05), 3.71, 0.005, 'glass at lobby-door');
-  near(lMax(1.6, 1.6, 0.05), 4.43, 0.005, 'glass after widen 1.6');
+  near(lMax(1.2, 1.5, 0.05), 3.7102, 0.0005, 'glass at lobby-door');
+  near(lMax(1.6, 1.6, 0.05), 4.4255, 0.0005, 'glass after widen 1.6');
   near(lMax(1.2, 1.5, 0.9), 1.997, 0.0005, 'sofa at lobby-door');
   assert.ok(lMax(1.2, 1.5, 0.9) < lMax(1.2, 1.5, 0.5), 'a wider token has a shorter L_max');
 });
@@ -55,6 +55,15 @@ test('L_max is 0, not below, when the token is wider than a leg of the corner', 
   assert.equal(lMax(1.2, 1.5, 1.6), 0);
   assert.equal(lMax(1.2, 0.5, 0.9), 0);
   assert.equal(lMax(0, 1.5, 0.1), 0);
+  // Just past the 1.2 m leg, the samples alone would still give about 0.35.
+  assert.equal(lMax(1.2, 1.5, 1.202), 0);
+  assert.ok(lMax(1.2, 1.5, 1.2) > 0, 'exactly as wide as the leg is not wider');
+});
+
+test('L_max is the minimum over the 0.1 degree samples, not the exact minimum', () => {
+  // The exact minimum for a 0.9 m sofa is about 1.9967345; the sampled one about 1.9967350.
+  assert.ok(lMax(1.2, 1.5, 0.9) > 1.9967348);
+  assert.equal(record({}, sofa(1.9967348))[0], 'pass');
 });
 
 test('a sofa that is too long for the corner fails cannot_turn: needed its length, available L_max', () => {
@@ -70,6 +79,7 @@ test('a length equal to L_max passes', () => {
 });
 
 test('the corner is checked only when both corner_a and corner_b are set', () => {
+  assert.equal(record({ corner_a: null as unknown as number }, sofa(10))[0], 'pass', 'null counts as not set');
   assert.equal(record({ corner_b: undefined }, sofa(10))[0], 'pass');
   assert.equal(record({ corner_a: undefined }, sofa(10))[0], 'pass');
   assert.equal(record({ corner_a: undefined, corner_b: undefined }, sofa(10))[0], 'pass');
@@ -129,7 +139,7 @@ test('demo building: glass cannot turn at lobby-door (L_max about 3.71 < 4.0), a
   const glass = (edits: Parameters<typeof solve>[1]) => solve(demo, edits).find((r) => r.token === 'glass')!;
   const base = glass([]);
   assert.deepEqual([base.status, base.path, base.blocked_at, base.reason, base.needed], ['fail', ['street', 'corridor'], 'lobby-door', 'cannot_turn', 4.0]);
-  near(base.available!, 3.71, 0.005, 'available');
+  near(base.available!, 3.7102, 0.0005, 'available');
   const widened = glass([{ op: 'widen', target: 'lobby-door', value: 1.6, source: 'button' }]);
   assert.deepEqual([widened.status, widened.path], ['pass', ['street', 'corridor', 'lobby']]);
 });

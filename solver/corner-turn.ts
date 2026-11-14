@@ -12,15 +12,19 @@ const ANGLES = Array.from({ length: 899 }, (_, i) => {
 
 // The longest token of width w that turns from a corridor a wide into one b wide:
 // min over t of a / cos t + b / sin t - w / (sin t * cos t). With w = 0 this is
-// (a^(2/3) + b^(2/3))^(3/2). A token wider than a leg makes the minimum negative; it is 0 then.
+// (a^(2/3) + b^(2/3))^(3/2). A token wider than a leg makes the true minimum negative, so
+// L_max is 0 then. The width test comes first: just past a leg's width the 0.1 degree samples
+// stay above 0 and would let a short token through.
 export function lMax(a: number, b: number, w: number): number {
+  if (w > Math.min(a, b)) return 0;
   let min = Infinity;
   for (const { sin, cos } of ANGLES) min = Math.min(min, a / cos + b / sin - w / (sin * cos));
   return Math.max(0, min);
 }
 
 export const cornerCheck: EdgeCheck = (edge, token) => {
-  if (edge.corner_a === undefined || edge.corner_b === undefined) return null;
+  // Not set (absent, or null in hand-written JSON): no corner at this edge.
+  if (typeof edge.corner_a !== 'number' || typeof edge.corner_b !== 'number') return null;
   const available = lMax(edge.corner_a, edge.corner_b, token.size.width);
   return token.size.length <= available
     ? null

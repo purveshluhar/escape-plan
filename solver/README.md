@@ -9,7 +9,7 @@
 ## Status
 
 `no_steps` (wheelchair) is done.
-`corner_turn` (sofa, glass) is done.
+`corner_turn` (sofa; the glass cases run on it too) is done.
 Every other rule is still a placeholder, so its expected cases in
 `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVERS` in `index.ts` puts it in
 `IMPLEMENTED_RULES` and turns its expected cases into real tests.
