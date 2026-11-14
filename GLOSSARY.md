@@ -22,7 +22,7 @@ Units are metres and kN.
 - **Sofa** (T1, `logistics`, rule `corner_turn`): furniture that must turn corridor corners on its way out.
 - **Wheelchair** (T1, `accessibility`, rule `no_steps`): must reach an exit with no step.
 - **Load** (T1, `structure`, rule `downward`): gravity load that must reach a foundation through supporting members.
-- **People** (T1 for the walk out, T2 for the race with smoke, `life_safety`, rule `shortest_exit`): walk the shortest path to an exit at a fixed speed.
+- **People** (T1 for the walk out, T2 for the race with smoke, `life_safety`, rule `shortest_exit`): walk the path with the fewest edges to an exit.
 - **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and races the people.
 - **Water** (T2, `plumbing`, rule `downhill`): a drain that must fall all the way.
 - **Power** (T3, `electrical`, rule `supply`): electricity from its start node (the building's service entry) through a `panel` node to the kitchen.
@@ -53,7 +53,7 @@ Units are metres and kN.
 
 - **clearance**: the token's width and height fit through every edge on the path.
 - **corner_turn**: clearance, plus a box of width w and length L turns a corner only if L <= L_max (formula in `contract/README.md`); for a thin panel this is (a^(2/3) + b^(2/3))^(3/2).
-- **no_steps**: a path to an exit with no `step` or `stair` edge and no step_height.
+- **no_steps**: a path to an exit with no `step` or `stair` edge and no step_height above 0.
 - **downward**: follow `supported_by` down to a foundation; fail if any member on the chain is cut.
 - **shortest_exit**: people take the exit with the fewest edges; clearance applies; time = edges walked.
 - **spread** (T2): smoke moves one open edge per time step.

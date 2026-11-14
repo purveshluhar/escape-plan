@@ -1,6 +1,6 @@
 ---
 name: solver-token
-description: Add or fix one token rule in solver/ (clearance, corner_turn, no_steps, downward, then T2/T3 rules). Use when P1 implements a token, or a solver expected case fails.
+description: Add or fix one token rule in solver/ (no_steps, corner_turn, shortest_exit, clearance, downward, then T2/T3 rules). Use when P1 implements a token, or a solver expected case fails.
 ---
 
 # Add a token rule to the solver

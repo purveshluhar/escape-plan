@@ -81,9 +81,27 @@ const readBuilding = (): T.Building =>
 
 test('an edge that joins two levels must be a level-change kind', () => {
   const b = readBuilding();
-  const door = b.edges.find((e) => e.id === 'door-north')!;
-  door.to = b.nodes.find((n) => n.level === 'L2')!.id;
+  const door = b.edges.find((e) => e.id === 'door-north');
+  const upstairs = b.nodes.find((n) => n.level === 'L2');
+  assert.ok(door && upstairs, 'data/building.json needs edge door-north and a node on L2');
+  door.to = upstairs.id;
   assert.deepEqual(checkBuildingRefs(b), ['edge "door-north": joins L1 and L2 but is a door']);
+});
+
+test('stair, elevator, shaft, ramp, drain_route and supply may join two levels', () => {
+  for (const kind of ['stair', 'elevator', 'shaft', 'ramp', 'drain_route', 'supply'] as const) {
+    const b: T.Building = {
+      levels: [{ id: 'L1', elevation: 0 }, { id: 'L2', elevation: 4 }],
+      nodes: [
+        { id: 'down', name: 'Down', level: 'L1', type: 'elevator', box: { x: 0, y: 0, width: 2, depth: 2 }, is_exit: true },
+        { id: 'up', name: 'Up', level: 'L2', type: 'elevator', box: { x: 0, y: 0, width: 2, depth: 2 }, is_exit: false },
+      ],
+      edges: [{ id: 'e', name: 'E', from: 'up', to: 'down', kind, clear_width: 1, clear_height: 2.4, step_height: 0 }],
+      members: [],
+      tokens: [],
+    };
+    assert.deepEqual(checkBuildingRefs(b), [], kind);
+  }
 });
 
 test('data/building.json passes the reference checks', () => {

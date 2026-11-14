@@ -5,11 +5,11 @@ It does not change the tier names or the tag names.
 
 ## Context
 
-The solver is a stub (`IMPLEMENTED_RULES` is empty in `solver/index.ts`). P5 generates the real
-building from the contract. The contract left holes a generated building would fall through:
-no rule said which edge kinds a token may use, `step_height` had two meanings, and the corner
-formula ignored a token's width. A grilling of P1's plan set the order; then the team dropped
-the timeline from the plan.
+The solver is a stub (`IMPLEMENTED_RULES` is empty in `solver/index.ts`). P5 builds the real
+building from the contract (building.json v1 has landed). The contract left holes a generated
+building would fall through: no rule said which edge kinds a token may use, `step_height` had
+two meanings, and the corner formula ignored a token's width. A grilling of P1's plan set the
+order; then the team dropped the timeline from the plan.
 
 ## Decision
 
