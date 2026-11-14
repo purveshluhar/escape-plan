@@ -8,11 +8,12 @@
 
 ## Status
 
-`no_steps` (wheelchair), `corner_turn` (sofa; the glass cases run on it too),
-`shortest_exit` (people, no smoke), `clearance` (chiller) and `downward` (load) are done.
-Every other rule is still a placeholder, so its expected cases in `solver.test.ts` show as
-`todo`. Adding a rule to `RULE_SOLVERS` in `index.ts` puts it in `IMPLEMENTED_RULES` and turns
-its expected cases into real tests.
+Every tier 1 rule is done: `no_steps` (wheelchair), `corner_turn` (sofa and glass),
+`shortest_exit` (people, no smoke), `clearance` (chiller) and `downward` (load). The full-demo
+edits give LEVEL COMPLETE (`level-complete.test.ts`). The tier 2 and 3 rules are still
+placeholders, so their expected cases in `solver.test.ts` show as `todo`. Adding a rule to
+`RULE_SOLVERS` in `index.ts` puts it in `IMPLEMENTED_RULES` and turns its expected cases into
+real tests.
 
 ## Files
 
@@ -31,6 +32,11 @@ its expected cases into real tests.
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
   over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
   and people tokens there are fixtures until P5 adds them to `data/`.
+- `level-complete.test.ts`: the tier 1 gate (P1-19). The glass record at `lobby-door`, every tier 1
+  rule implemented, and the full-demo edits giving LEVEL COMPLETE in any order, with each fix
+  needed. It also runs the full demo with the sofa and people fixture.
+- `mvp-fixture.ts`: the sofa and people fixture for the two test files above. Delete it when P5's
+  tokens and cases land in `data/`.
 
 ## Tier 1 first task
 
