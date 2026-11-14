@@ -24,6 +24,9 @@ expected cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVER
   A new walking rule (for example `corner_turn`) adds its own check and calls `walk()`.
 - `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
   the edges walked on a pass, null on a fail.
+- `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
+  over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
+  and people tokens there are fixtures until P5 adds them to `data/`.
 
 ## Tier 1 first task
 
