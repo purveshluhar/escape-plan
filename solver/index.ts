@@ -1,10 +1,22 @@
 // Solver: building + edits in, one SolverResult per token out. Deterministic, under 100 ms.
-// Owner: P1. STARTER: applyEdits follows the edit table in contract/README.md, but no token rule
-// is implemented yet (IMPLEMENTED_RULES is empty). Add rules with the `solver-token` skill.
-import type { Building, Edit, Rule, SolverResult } from '../contract/types.ts';
+// Owner: P1. applyEdits follows the edit table in contract/README.md. Each rule has its own file;
+// add rules with the `solver-token` skill.
+import { RULES } from '../contract/types.ts';
+import type { Building, Edit, Rule, SolverResult, Token } from '../contract/types.ts';
+import { CORNER_TURN } from './corner-turn.ts';
+import { NO_STEPS } from './no-steps.ts';
+import { shortestExit } from './shortest-exit.ts';
+import { walk } from './search.ts';
+
+// A Map, not an object: a rule string from the data never reaches an Object.prototype member.
+const RULE_SOLVERS = new Map<Rule, (building: Building, token: Token) => SolverResult>([
+  ['corner_turn', (b, t) => walk(b, t, CORNER_TURN)],
+  ['no_steps', (b, t) => walk(b, t, NO_STEPS)],
+  ['shortest_exit', shortestExit],
+]);
 
 // Rules this solver really answers. solver.test.ts checks expected.json only for these.
-export const IMPLEMENTED_RULES: readonly Rule[] = [];
+export const IMPLEMENTED_RULES: readonly Rule[] = RULES.filter((r) => RULE_SOLVERS.has(r));
 
 // Apply edits in order to a copy of the building. The input is never changed.
 // An edit whose target does not exist is ignored.
@@ -47,7 +59,7 @@ export function applyEdits(building: Building, edits: readonly Edit[]): Building
 
 export function solve(building: Building, edits: readonly Edit[] = []): SolverResult[] {
   const b = applyEdits(building, edits);
-  return b.tokens.map((token) => ({
+  return b.tokens.map((token) => RULE_SOLVERS.get(token.rule)?.(b, token) ?? {
     // Placeholder until the token's rule is in IMPLEMENTED_RULES. The UI shows it as "not solved".
     token: token.id,
     status: 'fail',
@@ -56,5 +68,5 @@ export function solve(building: Building, edits: readonly Edit[] = []): SolverRe
     reason: 'no_route',
     needed: null,
     available: null,
-  }));
+  });
 }

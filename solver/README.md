@@ -8,8 +8,22 @@
 
 ## Status
 
-Starter stub. `IMPLEMENTED_RULES` is empty, so every expected case in `solver.test.ts` shows as
-`todo`. Adding a rule to `IMPLEMENTED_RULES` turns its expected cases into real tests.
+`no_steps` (wheelchair), `corner_turn` (sofa; the glass cases run on it too) and
+`shortest_exit` (people, no smoke) are done. Every other rule is still a placeholder, so its
+expected cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVERS` in
+`index.ts` puts it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
+
+## Files
+
+- `search.ts`: the search core for every walking rule. It builds the token's graph from the
+  rule's edge kinds, runs the breadth-first search, checks the elevator car, and builds the
+  fail record. It also holds the width and height checks.
+- `corner-turn.ts`: `lMax(a, b, w)`, the longest token of width w that turns the corner, and
+  the corner check that uses it.
+- One file per rule: `no-steps.ts` gives the rule's edge kinds and its edge checks in order.
+  A new walking rule (for example `corner_turn`) adds its own check and calls `walk()`.
+- `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
+  the edges walked on a pass, null on a fail.
 
 ## Tier 1 first task
 
