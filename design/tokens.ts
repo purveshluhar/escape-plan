@@ -8,14 +8,14 @@
 import type { Discipline } from '../contract/types.ts';
 
 // ---------- Backdrop and building ----------
-// Names kept from the arcade version so viewer/ and app/ keep compiling; values are v2.
+// Export names are stable so viewer/ and app/ compile unchanged when values move.
 
 export const BACKGROUND = '#eef2f8'; // design system `bg`: page backdrop behind every glass layer
 export const GRID = '#c3cde2'; // `line-soft`: hairlines, unfocused floor outlines, the ground grid
 export const WALL = '#7184ae'; // `line`: building outlines and wall tops (3.1:1, graphics only)
 export const WALL_INNER = '#dfe5f1'; // `wall-face`: vertical faces and translucent fills
 export const WALL_TOP = 'rgba(255,255,255,0.72)'; // `wall-top`: slab top faces, lower floors read through
-export const PELLET = '#2f5bff'; // available-route dots: `interactive` at ROUTE_DOT_OPACITY
+export const ROUTE_DOT = '#2f5bff'; // available-route dots: `interactive` at ROUTE_DOT_OPACITY
 
 // ---------- Glass (UI chrome only, never over the board) ----------
 
@@ -104,10 +104,10 @@ export type View = (typeof VIEWS)[number];
 // Blocked: solid up to blocked_at, FAIL dashes beyond. Proposed (Jev): ghost at GHOST_OPACITY.
 
 export const PATH = {
-  pelletSpacing: 0.6, // metres between route dots
-  pelletRadius: 0.12, // metres
+  pelletSpacing: 0.6, // metres between route dots (key name read by viewer/)
+  pelletRadius: 0.12, // metres; route dot radius
   trailWidth: 0.08, // metres; the travelled line behind the token
-  glow: 0, // v2 has no neon glow; kept so the viewer still reads it
+  glow: 0, // no glow in this look; the key stays because viewer/ reads it
   tokenRadius: 0.45, // metres; the token that carries the glyph
 } as const;
 

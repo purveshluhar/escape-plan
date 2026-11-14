@@ -20,8 +20,7 @@ type for moments only). The board is always 3D isometric: shaded, x-ray or explo
   discipline colours are under 3:1 on the light backdrop (see `look.md`).
 - `look.md`: the rules, route states and moments.
 - `flow.md`: the 12-sheet user flow, with asks for P1, P2 and P5. Clickable dummy linked there.
-- `look-preview.html`: a quick preview page that renders the tokens. To be replaced by an
-  isometric preview that matches `flow.md`.
+- Screen preview: the clickable 12-sheet canvas linked in `flow.md` (3D isometric, Liquid Glass).
 
 ## Tier 1 first task
 

@@ -2,11 +2,11 @@
 
 Owner: P4. Values live in `design/tokens.ts`; this file says how to use them. Source: the
 "Escape Plan · Liquid Glass" design system (v2). The flow is in `design/flow.md`.
-Preview: `npm run dev`, then open http://localhost:5173/design/look-preview.html.
+Clickable preview of every screen: the canvas linked in `design/flow.md`.
 
 A calm, light game surface: the building is a pale frosted model, the UI is glass floating over
-it, and colour is rationed so the routes and the objects carry the information. A little arcade
-stays on purpose: pixel type for the wordmark, ESCAPE!, CONFLICT! and LEVEL COMPLETE.
+it, and colour is rationed so the routes and the objects carry the information. Pixel type is
+kept for a few moments only: the wordmark, ESCAPE!, CONFLICT! and LEVEL COMPLETE.
 
 Readable first. A judge at the back of the room must see which object failed, where, and why
 within five seconds.
@@ -39,7 +39,7 @@ within five seconds.
 
 | Route state | Look |
 |---|---|
-| Available | small `PELLET` (accent) dots at `ROUTE_DOT_OPACITY` |
+| Available | small `ROUTE_DOT` (accent) dots at `ROUTE_DOT_OPACITY` |
 | Selected | larger dots in the discipline colour |
 | Travelled or escaped | solid line in the discipline colour, check badge in `PASS` |
 | Blocked | solid up to `blocked_at`, `FAIL` dashes beyond, double red ring, cross badge |
