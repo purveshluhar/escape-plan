@@ -92,7 +92,7 @@ test('a second support carries the load past a cut one', () => {
   assert.deepEqual(record(downward(b, load)), ['pass', ['beam', 'c-ok', 'f'], null, null, null, null]);
 });
 
-test('of two clear supports the lower id wins, then the fewest members', () => {
+test('of two clear supports the fewest members win, then the lower id', () => {
   const b = frame([
     member('beam', 'beam', ['c2', 'c1']), member('c1', 'column', ['c0']), member('c0', 'column', ['f']),
     member('c2', 'column', ['f']), member('f', 'foundation'),
@@ -110,6 +110,29 @@ test('a chain that reaches no foundation is no_route', () => {
 test('a support that is not a member is skipped', () => {
   const b = frame([member('beam', 'beam', ['ghost'])], []);
   assert.deepEqual(record(downward(b, load)), ['fail', ['beam'], null, 'no_route', null, null]);
+});
+
+test('a support that is not a member is passed over for the next one', () => {
+  const b = frame([member('beam', 'beam', ['a-ghost', 'col']), member('col', 'column', ['f']), member('f', 'foundation')], []);
+  assert.deepEqual(downward(b, load).path, ['beam', 'col', 'f']);
+});
+
+test('a cut foundation is no_support at the foundation', () => {
+  const r = downward(frame(undefined, [shaft({ crosses: ['f'], clear_width: 2 })]), load);
+  assert.deepEqual(record(r), ['fail', ['beam', 'col', 'f'], 'f', 'no_support', 1.5, 2]);
+});
+
+test('a cut goal member is no_support at the goal', () => {
+  const r = downward(frame(undefined, [shaft({ crosses: ['col'], clear_width: 2 })]), { ...load, goal: 'col' });
+  assert.deepEqual([r.blocked_at, r.reason], ['col', 'no_support']);
+});
+
+test('add_transfer_beam on a lower cut member lets the load through', () => {
+  const b = { ...demo, edges: demo.edges.map((e) => (e.id === 'plant-shaft' ? { ...e, crosses: ['c1'] } : e)) };
+  const widen = { op: 'widen', target: 'plant-shaft', value: 2, source: 'button' } as const;
+  assert.equal(solve(b, [widen]).find((x) => x.token === 'load')!.blocked_at, 'c1');
+  const fixed = solve(b, [widen, { op: 'add_transfer_beam', target: 'c1', value: null, source: 'button' }]);
+  assert.equal(fixed.find((x) => x.token === 'load')!.status, 'pass');
 });
 
 test('a start that is not a member is no_route with an empty path', () => {

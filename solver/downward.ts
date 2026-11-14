@@ -59,7 +59,8 @@ export function downward(building: Building, token: Token): SolverResult {
   if (path) return result(token, { status: 'pass', path, blocked_at: null, reason: null, needed: null, available: null });
 
   // Fail: search again with the cut off, then report the first cut member on that path.
-  // `path` runs from the start up to and including that member (the viewer puts the red X there).
+  // `path` runs from the start up to and including that member, so a cut start still has a
+  // place: [start], as viewer/fixtures.ts and app/scoreboard.test.ts expect.
   const open = search(members, token, () => true);
   const at = open?.findIndex((id) => cut.has(id)) ?? -1;
   if (open && at >= 0) {
