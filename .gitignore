@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Escape Plan
+# Cityweft files never enter the repo (EULA bars publishing derived geometry). See docs/adr/0004.
+data/cityweft/
+private-context/
+*.3dm
+*.glb
+.env*

@@ -1,0 +1,26 @@
+{
+  "name": "escape-plan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Every discipline has to get out: a live building graph game. Built at AEC Tech NYC 2026.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"contract/**/*.test.ts\" \"solver/**/*.test.ts\" \"viewer/**/*.test.ts\" \"app/**/*.test.ts\" \"design/**/*.test.ts\" \"data/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  }
+}
