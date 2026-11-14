@@ -9,14 +9,16 @@ server; tier 2 and 3 calls that need a key or a socket use one (ADR 0008).
 
 ## Decision
 
-- One npm package (no workspaces): TypeScript, Vite and three.js (with `@types/three`).
-  Exact versions are pinned in `package.json`.
+- One npm package (no workspaces): TypeScript, Vite and three.js, with `@types/three` and
+  `@types/node` (matching the Node 22 runtime). Exact versions are pinned in `package.json`.
 - `npm test` runs Node's built-in test runner on `*.test.ts` files. Node 22.18+ runs
   TypeScript directly, so there is no test framework and no build step for tests.
 - Data files are checked by `contract/validate.ts`, a small checker for the JSON Schema keywords
   we use. It walks every schema at load and throws on any other keyword.
-- Test files are not type-checked by `npm run typecheck`, because that needs `@types/node`,
-  which is not on the approved package list. Node still runs them.
+- `npm run typecheck` covers every `.ts` file, test files included. `tsconfig.json` loads the
+  `node` types, so `node:test`, `node:assert` and `node:fs` type-check. Browser code in
+  `viewer/` and `app/` must still not use Node APIs: they do not exist in the browser, and the
+  type checker no longer catches that.
 - `.npmrc` sets `omit-lockfile-registry-resolved=true`, so `package-lock.json` records versions
   and integrity hashes but no registry host. Each machine installs from its own configured registry.
 - The lockfile lists the native bindings for every platform. Regenerate it only from an empty
@@ -25,5 +27,5 @@ server; tier 2 and 3 calls that need a key or a socket use one (ADR 0008).
 
 ## Consequences
 
-`npm ci && npm test` works on a fresh clone and in CI. If the team approves `@types/node`,
-remove the `**/*.test.ts` exclude in `tsconfig.json`.
+`npm ci && npm run check` works on a fresh clone and in CI. A type error in a test fails the
+merge gate, the same as one in source.

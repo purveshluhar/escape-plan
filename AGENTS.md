@@ -46,11 +46,13 @@ Each folder's `README.md` says what it consumes and produces.
 | `npm run dev` | Start the game at http://localhost:5173. |
 | `npm test` | Node's built-in test runner: contract, solver, data schema checks, and every `*.test.ts`. |
 | `npm run check` | Typecheck, test and build: the gate before every merge (CI runs it too). |
-| `npm run typecheck` | `tsc --noEmit` over all source (test files are not type-checked). |
+| `npm run typecheck` | `tsc --noEmit` over all source, test files included. |
 | `npm run build` | Production build into `dist/`. |
 
 Tests are `<folder>/*.test.ts`, run by `node --test` (Node 22.18+ runs TypeScript directly).
 Import local files with the `.ts` extension, and use `import type` for types.
+`viewer/`, `app/` and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
+there. Typecheck loads Node types for the tests, so it does not catch this.
 
 ## Merge and tag rhythm
 

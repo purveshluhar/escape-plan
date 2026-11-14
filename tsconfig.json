@@ -12,8 +12,8 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "types": []
+    "types": ["node"]
   },
   "include": ["contract", "solver", "viewer", "app", "design", "data", "vite.config.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist"]
 }
