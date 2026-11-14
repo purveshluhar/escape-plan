@@ -14,20 +14,20 @@ type for moments only). The board is always 3D isometric: shaded, x-ray or explo
 
 - `tokens.ts`: palette, glass, discipline colours, glyphs and glyph ink, fonts, type sizes,
   space, radius, views, `PATH`, `MOTION`, `GHOST_OPACITY`, `contrastRatio()`. Export names
-  from the arcade version are kept so `viewer/` and `app/` still compile.
+  are stable, so `viewer/` and `app/` compile unchanged when values move.
 - `tokens.test.ts`: text and badge contrast, glyph contrast, discipline colours never reuse the
   pass, fail or accent colour, nothing flashes more than 3 times a second. One todo: four
   discipline colours are under 3:1 on the light backdrop (see `look.md`).
 - `look.md`: the rules, route states and moments.
 - `flow.md`: the 12-sheet user flow, with asks for P1, P2 and P5. Clickable dummy linked there.
-- `look-preview.html`: a fake 2D maze from the arcade version; it now renders with the light
-  tokens. To be replaced by an isometric preview.
+- `look-preview.html`: a quick preview page that renders the tokens. To be replaced by an
+  isometric preview that matches `flow.md`.
 
 ## Tier 1 first task
 
 Lock the discipline colours and glyphs in `design/tokens.ts`, the path style, and the fail and
-win moments. Use the `arcade-look` skill for the visual system and its screen checklist, and
-`demo-and-pitch` for the script. Every asset is self-made or properly licensed; record the
+win moments, following `look.md` and its colour rules. Use the `demo-and-pitch` skill for the
+script. Every asset is self-made or properly licensed; record the
 source of any third-party asset in this README.
 
 ## Third-party assets
