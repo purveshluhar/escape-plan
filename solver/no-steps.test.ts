@@ -35,6 +35,13 @@ test('no_steps is implemented', () => {
   assert.ok(IMPLEMENTED_RULES.includes('no_steps'));
 });
 
+test('a rule string that names an Object member gets the unsolved placeholder', () => {
+  for (const rule of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+    const b = { ...demo, tokens: [{ ...wheelchair, start: 'terrace', rule: rule as Token['rule'] }] };
+    assert.deepEqual(solve(b), [{ token: 'wheelchair', status: 'fail', path: [], blocked_at: null, reason: 'no_route', needed: null, available: null }], rule);
+  }
+});
+
 test('no_steps uses door, opening, ramp, elevator, step and stair, never shaft', () => {
   assert.deepEqual([...NO_STEPS.kinds].sort(), ['door', 'elevator', 'opening', 'ramp', 'stair', 'step']);
   assert.equal(walk(oneEdge({ kind: 'shaft' }), wheelchair, NO_STEPS).reason, 'no_route');

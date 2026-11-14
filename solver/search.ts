@@ -54,15 +54,19 @@ interface Hop {
 
 const byId = (a: Id, b: Id): number => (a < b ? -1 : a > b ? 1 : 0);
 
-function buildGraph(building: Building, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
+// An edge whose end is not a node is left out.
+function buildGraph(building: Building, nodes: Map<Id, BuildingNode>, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
   const hops = new Map<Id, Map<Id, Edge[]>>();
   const add = (from: Id, to: Id, edge: Edge): void => {
     const out = hops.get(from) ?? new Map<Id, Edge[]>();
     hops.set(from, out);
-    out.set(to, [...(out.get(to) ?? []), edge]);
+    const list = out.get(to);
+    if (list) list.push(edge);
+    else out.set(to, [edge]);
   };
   for (const edge of building.edges) {
     if (!(kinds as readonly EdgeKind[]).includes(edge.kind)) continue;
+    if (!nodes.has(edge.from) || !nodes.has(edge.to)) continue;
     add(edge.from, edge.to, edge);
     add(edge.to, edge.from, edge);
   }
@@ -93,9 +97,9 @@ function hopBlock(hop: Hop, nodes: Map<Id, BuildingNode>, token: Token, building
   return node ? carCheck(node, token) : null;
 }
 
-// Breadth-first search, one level of distance at a time. Each level is visited in node id
-// order, so a node's parent is its lowest-id neighbour one edge nearer the start, and among the
-// goals at the nearest distance the lowest id wins. Returns node ids start to goal, or null.
+// Breadth-first search with a first-in, first-out queue and neighbours in node id order. The
+// first goal taken from the queue wins. So the path has the fewest edges, and of two such paths
+// the one with the lower node id where they first differ wins. Returns node ids, or null.
 function search(
   graph: Map<Id, Hop[]>,
   token: Token,
@@ -106,24 +110,20 @@ function search(
   const isGoal = (id: Id): boolean => (token.goal === null ? nodes.get(id)?.is_exit === true : id === token.goal);
   const parent = new Map<Id, Id>();
   const seen = new Set<Id>([token.start]);
-  let level: Id[] = [token.start];
-  while (level.length > 0) {
-    const goal = level.find(isGoal);
-    if (goal !== undefined) {
-      const path = [goal];
-      for (let at = parent.get(goal); at !== undefined; at = parent.get(at)) path.unshift(at);
+  const queue: Id[] = [token.start];
+  for (let head = 0; head < queue.length; head++) {
+    const id = queue[head]!;
+    if (isGoal(id)) {
+      const path = [id];
+      for (let at = parent.get(id); at !== undefined; at = parent.get(at)) path.unshift(at);
       return path;
     }
-    const next: Id[] = [];
-    for (const id of level) {
-      for (const hop of graph.get(id) ?? []) {
-        if (seen.has(hop.to) || !passes(hop)) continue;
-        seen.add(hop.to);
-        parent.set(hop.to, id);
-        next.push(hop.to);
-      }
+    for (const hop of graph.get(id) ?? []) {
+      if (seen.has(hop.to) || !passes(hop)) continue;
+      seen.add(hop.to);
+      parent.set(hop.to, id);
+      queue.push(hop.to);
     }
-    level = next.sort(byId);
   }
   return null;
 }
@@ -142,21 +142,22 @@ function fail(token: Token, path: Id[], block: Block | null): SolverResult {
 
 // Solve one walking token: pass with its shortest path, or the fail record from the contract.
 export function walk(building: Building, token: Token, rule: WalkRule): SolverResult {
-  const graph = buildGraph(building, rule.kinds);
   const nodes = new Map(building.nodes.map((n) => [n.id, n]));
+  const graph = buildGraph(building, nodes, rule.kinds);
   const blockOn = (hop: Hop): Block | null => hopBlock(hop, nodes, token, building, rule);
 
   const path = search(graph, token, nodes, (hop) => blockOn(hop) === null);
   if (path) return { token: token.id, status: 'pass', path, blocked_at: null, reason: null, needed: null, available: null };
 
   // Fail: search again with the checks off, then report the first block on that path.
-  // No path at all: no_route, and the token stays at its start.
-  const open = search(graph, token, nodes, () => true) ?? [token.start];
+  // No path at all: no_route, and the token stays at its start ([] if the start is not a node).
+  const stay = nodes.has(token.start) ? [token.start] : [];
+  const open = search(graph, token, nodes, () => true) ?? stay;
   for (let i = 0; i + 1 < open.length; i++) {
     const hop = graph.get(open[i]!)!.find((h) => h.to === open[i + 1])!;
     const block = blockOn(hop);
     if (block) return fail(token, open.slice(0, i + 1), block);
   }
   // Reached only with no route: a checks-off path with no block would have passed above.
-  return fail(token, [token.start], null);
+  return fail(token, stay, null);
 }

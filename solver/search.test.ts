@@ -42,7 +42,7 @@ test('elevator car: a token turned 90 degrees fits, and an exact fit rides', () 
   assert.equal(carCheck(node('room'), token({ size: { width: 9, height: 9, length: 9 } })), null);
 });
 
-test('goal null goes to the nearest exit; a tie goes to the lower node id', () => {
+test('goal null goes to the nearest exit; a tie goes to the lower node id where the paths first differ', () => {
   const b = building(
     [node('s'), node('a'), exit('far'), exit('y'), exit('z'), node('b')],
     [edge('e1', 's', 'b'), edge('e2', 's', 'a'), edge('e3', 'a', 'z'), edge('e4', 'b', 'y'), edge('e5', 's', 'far', { kind: 'opening' }), edge('e6', 'far', 'z')],
@@ -50,8 +50,27 @@ test('goal null goes to the nearest exit; a tie goes to the lower node id', () =
   // `far` is one edge away, so it wins over y and z (two edges away).
   assert.deepEqual(walk(b, token(), RULE).path, ['s', 'far']);
   const noFar = building(b.nodes, b.edges.filter((e) => e.id !== 'e5'));
-  // y (via b) and z (via a) are both two edges away: y has the lower id.
-  assert.deepEqual(walk(noFar, token(), RULE).path, ['s', 'b', 'y']);
+  // y (via b) and z (via a) are both two edges away. The paths first differ at a and b: a wins.
+  assert.deepEqual(walk(noFar, token(), RULE).path, ['s', 'a', 'z']);
+});
+
+test('a tie below the first step also goes to the lower node id where the paths first differ', () => {
+  const nodes = [node('s'), node('a'), node('b'), node('c'), node('d'), exit('g')];
+  const edges = [edge('1', 's', 'a'), edge('2', 's', 'b'), edge('3', 'a', 'd'), edge('4', 'b', 'c'), edge('5', 'd', 'g'), edge('6', 'c', 'g')];
+  assert.deepEqual(walk(building(nodes, edges), token(), RULE).path, ['s', 'a', 'd', 'g']);
+  // The checks-off path of a fail follows the same rule.
+  const narrow = edges.map((e) => (e.id === '5' || e.id === '6' ? { ...e, clear_width: 0.1 } : e));
+  const got = walk(building(nodes, narrow), token(), RULE);
+  assert.deepEqual([got.blocked_at, got.path], ['5', ['s', 'a', 'd']]);
+});
+
+test('ids that are not in the building: no path through them', () => {
+  // A start that is not a node: no_route with an empty path, like an unsolved token.
+  const ghostStart = walk(building([exit('x')], []), token({ start: 'ghost' }), RULE);
+  assert.deepEqual([ghostStart.reason, ghostStart.path], ['no_route', []]);
+  // An edge to a node that does not exist is left out, so a goal there is never reached.
+  const ghostGoal = walk(building([node('s')], [edge('e', 's', 'ghost')]), token({ goal: 'ghost' }), RULE);
+  assert.deepEqual([ghostGoal.status, ghostGoal.reason, ghostGoal.path], ['fail', 'no_route', ['s']]);
 });
 
 test('a set goal is reached even when an exit is nearer; neighbours go in node id order', () => {
