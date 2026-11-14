@@ -5,7 +5,7 @@ description: Stress-test a plan, spec or design with hard questions before anyon
 
 # Grill the plan
 
-Goal: find the decisions that will hurt at 17:00, while they are still cheap to change.
+Goal: find the decisions that will hurt at the MVP gate, while they are still cheap to change.
 
 ## Steps
 
@@ -14,7 +14,8 @@ Goal: find the decisions that will hurt at 17:00, while they are still cheap to 
    - the demo moment: will it read on a projector in five seconds?
    - the contract: does it need a field that is not in `contract/types.ts`?
    - the truth: which expected case in `data/expected.json` proves it works?
-   - time: does it fit before its checkpoint? What is the switch or fallback if it does not?
+   - order: which gate does it wait for, and what must be green first? What is the switch or
+     fallback if it is not green?
    - the house rules: solver decides, a game not a code check, no Cityweft files, no secrets.
 3. Ask in rounds of **at most 4 questions**. For each question give:
    - the question, in one sentence;

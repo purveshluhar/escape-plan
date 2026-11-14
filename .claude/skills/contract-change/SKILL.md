@@ -5,7 +5,7 @@ description: Propose a change to contract/ (types, schemas, a new field or enum 
 
 # Propose a contract change
 
-`contract/` is owned by P1 and changes only at an hourly merge point. Every other agent builds
+`contract/` is owned by P1 and changes only at a merge point. Every other agent builds
 against it, so one local edit breaks four people. You propose; P1 changes.
 
 ## Steps

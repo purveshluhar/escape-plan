@@ -86,7 +86,7 @@ In this order. A gate is passed when its condition is green, not at a time.
 | The solver is plausibly wrong | P5's cases fail at the MVP gate or the tier 1 gate | `expected.json` is the truth. No solver merge unless its cases are green. P1 debugs by hand. |
 | A late merge breaks the demo | A tier 2 or 3 merge breaks tier 1 | Revert, demo from the last tag. |
 | Access fails | No Jev key at the first merge; no Cityweft export at its go/no-go; Jev slower than 2 s; wifi blocks phones | Switch to plan B or C at once. |
-| The 3D look eats the afternoon | At the 3D go/no-go a token still does not read clearly | Switch to 2D stacked plans. |
+| The 3D look eats the build | At the 3D go/no-go a token still does not read clearly | Switch to 2D stacked plans. |
 
 ## Merges
 
