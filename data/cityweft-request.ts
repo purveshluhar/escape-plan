@@ -151,9 +151,75 @@ export function describeStatus(status: number): string {
       return '401: missing or invalid key. Set CITYWEFT_API_KEY in the git-ignored .env.';
     case 402:
       return '402: no active subscription or remaining balance for this request.';
+    case 429:
+      return '429: this key reached its Cityweft usage limit. It resets with the billing period, or an admin raises it.';
+    case 0:
+      return 'Could not connect to Cityweft (network error).';
     case 503:
       return '503: Cityweft is busy. Retry shortly.';
     default:
       return `${status}: unexpected response from Cityweft.`;
   }
+}
+
+// Retries for /v1/context. Every successful request is billed by its area
+// (https://cityweft.gitbook.io/docs/basics/usage-limits.md), so only answers that say the request
+// was not served are retried: 503 (busy, with Retry-After;
+// https://cityweft.gitbook.io/docs/getting-started/api-reference.md) and a connect error before the
+// request left (status 0). A 429 means the key reached its usage limit, which holds until the limit
+// resets, and the docs say not to retry it. 500, 502 and 504 may come after the work was billed.
+// 400, 401 and 402 need a person. Up to MAX_ATTEMPTS tries; a wait never exceeds MAX_WAIT_MS.
+export const MAX_ATTEMPTS = 5;
+export const MAX_WAIT_MS = 120_000;
+const BASE_WAIT_MS = 2000;
+
+// Retry-After as milliseconds from `now`: delay-seconds, or an HTTP date in its IMF-fixdate form
+// (RFC 9110), always GMT. Anything else is unreadable (null): Date.parse alone reads '1.5' as a year.
+const IMF_FIXDATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+export function retryAfterMs(retryAfter: string | null, now: number): number | null {
+  const v = retryAfter?.trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  if (!IMF_FIXDATE.test(v)) return null;
+  const at = Date.parse(v);
+  return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
+
+// How long to wait before the next try after `attempt` (1-based) answered `status`, or null when
+// there is no next try. The server's Retry-After wins, and a longer one than MAX_WAIT_MS gives up
+// rather than calling back early; else the wait doubles each try, plus up to half again of jitter.
+export function retryDelayMs(
+  status: number, attempt: number, retryAfter: string | null, random: () => number = Math.random, now: number = Date.now(),
+): number | null {
+  if (attempt >= MAX_ATTEMPTS || (status !== 503 && status !== 0)) return null;
+  const asked = retryAfterMs(retryAfter, now);
+  if (asked !== null) return asked <= MAX_WAIT_MS ? asked : null;
+  return Math.min(MAX_WAIT_MS, Math.round(BASE_WAIT_MS * 2 ** (attempt - 1) * (1 + 0.5 * random())));
+}
+
+// True when fetch failed before the request reached the server, so a retry cannot double-bill.
+// A reset, a timeout or a bad header value (a key with a stray newline) is not one.
+const CONNECT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+export function isConnectError(err: unknown): boolean {
+  const code = (err as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof code === 'string' && CONNECT_CODES.has(code);
+}
+
+// One line for a 429 usage-limit answer, from its JSON body (message, resetsAt, remainingKm2).
+// Server text loses its control and format characters (line breaks become spaces), then has the
+// real key (when given) and anything shaped like a key masked, and is cut short.
+export function describeLimit(body: unknown, key?: string): string {
+  const flat = (v: string, max: number): string => {
+    const plain = v.replace(/[\p{Cc}\p{Cf}]/gu, (c) => (/\s/.test(c) ? ' ' : ''));
+    const masked = key ? plain.replaceAll(key, 'cw_***') : plain;
+    return masked.replace(/cw_[A-Za-z0-9_-]+/g, 'cw_***').replace(/\s+/g, ' ').slice(0, max).trim();
+  };
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof b.message === 'string' && b.message.trim()) parts.push(flat(b.message, 300));
+  if (typeof b.resetsAt === 'string') parts.push(`Resets at ${flat(b.resetsAt, 40)}.`);
+  if (typeof b.remainingKm2 === 'number' && Number.isFinite(b.remainingKm2)) {
+    parts.push(`${b.remainingKm2} km2 left: a smaller CITYWEFT_SIZE_M may still fit.`);
+  }
+  return parts.length ? `429: ${parts.join(' ')}` : describeStatus(429);
 }

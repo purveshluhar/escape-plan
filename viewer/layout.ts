@@ -1,6 +1,7 @@
 // Pure layout math: building nodes to 3D boxes, solver paths to 3D routes. No three.js here,
 // so it is easy to test.
-import type { Box, Building, Id, SolverResult } from '../contract/types.ts';
+import type { Box, Building, Id, Level, SolverResult } from '../contract/types.ts';
+import { EASE_GLASS, MOTION } from '../design/tokens.ts';
 
 export const STOREY_HEIGHT = 3.5; // metres drawn per level box
 export const PATH_LIFT = 0.5; // metres above the floor where token routes run
@@ -36,7 +37,7 @@ export function uncovered(boxes: BoxSpec[], covered: ReadonlySet<Id>): BoxSpec[]
 
 // What the viewer draws for the building graph itself. The graph's rooms are self-made, so none is
 // drawn as a box (the real 432 Park plans and facade in the backdrop are the building on screen).
-// The uncovered boxes still give the frame the camera fits and the grid spans, and each exit gets a
+// The uncovered boxes still give the frame the camera fits, and each exit gets a
 // label at its floor, so players see where the tokens are going. `frame` is null when every node is covered.
 export interface GraphMarks {
   frame: { min: Vec3; max: Vec3 } | null;
@@ -185,17 +186,23 @@ export interface FrustumInput {
   width: number; // canvas, pixels
   height: number;
   insetRight: number; // pixels on the right covered by a panel
+  insetLeft?: number; // pixels on the left covered by a panel (default 0)
+  insetBottom?: number; // pixels along the bottom covered by a panel (default 0)
   margin: number; // 1 = touching the edges
 }
 
-// Orthographic camera bounds that fit the model into the canvas left of `insetRight`, with the
-// model's centre (camera x = 0) in the middle of that free space.
-export function frustum({ hx, hy, width, height, insetRight, margin }: FrustumInput):
+// Orthographic camera bounds that fit the model into the canvas between `insetLeft` and
+// `insetRight`, and above `insetBottom`, with the model's centre (camera x = 0, y = 0) in the
+// middle of that free space.
+export function frustum({ hx, hy, width, height, insetRight, insetLeft = 0, insetBottom = 0, margin }: FrustumInput):
   { left: number; right: number; top: number; bottom: number } {
-  const free = Math.max(width - insetRight, 1);
-  const half = Math.max(hy, hx / (free / height)) * margin;
-  const left = (-free * half) / height;
-  return { left, right: left + (2 * half * width) / height, top: half, bottom: -half };
+  const free = Math.max(width - insetRight - insetLeft, 1);
+  const freeH = Math.max(height - insetBottom, 1);
+  const half = Math.max(hy, hx / (free / freeH)) * margin; // half the free height, in metres
+  const perPx = (2 * half) / freeH;
+  const left = -(insetLeft + free / 2) * perPx;
+  const top = half;
+  return { left, right: left + width * perPx, top, bottom: top - height * perPx };
 }
 
 // The orthographic camera sits this far from the model centre, looking down the (1,1,1) diagonal.
@@ -258,3 +265,173 @@ export function orbit(view: OrbitView, dx: number, dy: number): OrbitView {
 }
 
 export const easeInOut =(t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+
+// ---------- Zoomed in: the facade opens to the floor plans ----------
+
+// Closer than this zoom the facade fades out, the city dims and the floors above the level in the
+// middle of the view are cut away, each floor in view labelled. Three mouse-wheel notches in from the
+// framed view (1, 0.90, 0.82, 0.74) cross it; the framed view and a double-click reset (zoom 1) do not.
+export const REVEAL_ZOOM = 0.8;
+export const REVEAL_MS = 2 * MOTION.quickMs; // the facade fade, both ways
+
+export const revealed = (zoom: number): boolean => zoom < REVEAL_ZOOM;
+
+// Whether answers with a route are on the model. A question waiting for Show me is drawn parked: an
+// empty path and no block (app/shell.ts parkedResults).
+export const routesShown = (results: readonly SolverResult[]): boolean =>
+  results.some((r) => r.path.length > 0 || r.blocked_at !== null);
+
+// The facade opens zoomed in past REVEAL_ZOOM, and also at the framed view (zoom 1 or closer) while
+// answers are on the model, so their routes run on the floors inside, never across the solid facade.
+// Only with real floors loaded (`floors`): they are what it opens to.
+export const facadeOpen = (zoom: number, floors: boolean, routes: boolean): boolean =>
+  floors && (revealed(zoom) || (routes && zoom <= 1));
+
+// EASE_GLASS (a CSS cubic-bezier) as a function of time 0..1, for motion drawn in three.js.
+const [B1X, B1Y, B2X, B2Y] = EASE_GLASS.match(/-?[\d.]+/g)!.map(Number) as [number, number, number, number];
+const bez = (p1: number, p2: number, s: number): number => 3 * (1 - s) ** 2 * s * p1 + 3 * (1 - s) * s * s * p2 + s ** 3;
+export function easeGlass(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (bez(B1X, B2X, mid) < t) lo = mid;
+    else hi = mid;
+  }
+  return bez(B1Y, B2Y, (lo + hi) / 2);
+}
+
+// A fade from one amount to another (0 = facade solid, 1 = open), started at `start` milliseconds.
+export interface Fade {
+  from: number;
+  to: number;
+  start: number;
+}
+
+export function fadeAt(f: Fade, now: number, ms = REVEAL_MS): number {
+  return f.from + (f.to - f.from) * easeGlass((now - f.start) / ms);
+}
+
+// Head for `to` from wherever the fade is now, so turning round mid-fade never jumps. Reduced
+// motion switches at once.
+export function retarget(f: Fade, to: number, now: number, reduced: boolean): Fade {
+  if (f.to === to) return f;
+  return reduced ? { from: to, to, start: now } : { from: fadeAt(f, now), to, start: now };
+}
+
+// The height at which the ray through the middle of the view crosses the vertical line through the
+// framed centre: the floor seen there. With no pan that ray runs through the centre itself, so an
+// orbit never changes it. A sideways pan keeps the crossing height; a pan of y metres up the screen
+// raises it by y / cos(elevation) (the camera's up climbs cos per metre, the ray falls back sin).
+// Looking steeply down that factor runs away (14 at the steepest), so it is capped at 2 (60 degrees):
+// a small pan there never jumps the open floor many levels.
+export const FOCUS_GAIN_MAX = 2;
+export function focusHeight(centreY: number, view: OrbitView, pan: { x: number; y: number }): number {
+  return centreY + pan.y / Math.max(Math.cos(view.elevation), 1 / FOCUS_GAIN_MAX);
+}
+
+// The pan (metres up the screen) that puts a level at `height` in the middle of the view: the inverse
+// of focusHeight, with the same cap, so the floor the view reads back is the one asked for.
+export function panForFocus(height: number, centreY: number, view: OrbitView): number {
+  return (height - centreY) * Math.max(Math.cos(view.elevation), 1 / FOCUS_GAIN_MAX);
+}
+
+// A glide to a new pan: each frame covers a fixed share of what is left, so a target that moves while
+// it runs (a dragged scroller) never restarts a curve. 14 a second covers 97 percent in a quarter second.
+export const GLIDE_RATE = 14;
+export const GLIDE_SNAP = 0.02; // metres: this near the target it lands on it
+export function glideStep(current: number, target: number, dt: number, rate = GLIDE_RATE): number {
+  const next = current + (target - current) * (1 - Math.exp(-rate * Math.max(dt, 0)));
+  return Math.abs(target - next) < GLIDE_SNAP ? target : next;
+}
+
+// The elevation of the level nearest `height`: the top floor left standing. Infinity with no levels.
+export function cutLevel(levels: readonly Level[], height: number): number {
+  if (!Number.isFinite(height)) return Infinity;
+  let best = Infinity;
+  for (const l of levels) if (best === Infinity || Math.abs(l.elevation - height) < Math.abs(best - height)) best = l.elevation;
+  return best;
+}
+
+// Drops go to every level under the next drawn floor above the cut: the floors that are hidden. A
+// level with nothing drawn between them (the slice's plant level) stays reachable. Infinity: none hidden.
+export function dropCeiling(drawn: readonly Level[], cut: number): number {
+  const above = drawn.filter((l) => l.elevation > cut + 1e-6).map((l) => l.elevation);
+  return above.length ? Math.min(...above) - 1e-3 : Infinity;
+}
+
+// The facade opened for answers at the framed view (facadeOpen) must not cut a figure away: the cut
+// rises, one drawn floor at a time, until the highest point any route reaches (`top`, metres) sits
+// under the ceiling. Zoomed in, the person picks the floor, so this is not used there.
+export function answersCut(drawn: readonly Level[], cut: number, top: number): number {
+  let at = cut;
+  while (dropCeiling(drawn, at) <= top) {
+    const next = drawn.filter((l) => l.elevation > at + 1e-6).sort((a, z) => a.elevation - z.elevation)[0];
+    if (!next) break;
+    at = next.elevation;
+  }
+  return at;
+}
+
+// The building as drawn when cut: no level above `cut` and no node on one, so a drop cannot land on
+// a floor that is not on screen. Edges are left as they are (drop picking does not read them).
+export function belowCut(b: Building, cut: number): Building {
+  const levels = b.levels.filter((l) => l.elevation <= cut + 1e-6);
+  const kept = new Set(levels.map((l) => l.id));
+  return { ...b, levels, nodes: b.nodes.filter((n) => kept.has(n.level)) };
+}
+
+// A level's name on screen: its number from the id (L2 and T10 read "Level 2" and "Level 10"),
+// or the id itself when it has no number.
+export function floorName(levelId: Id): string {
+  const n = /^[A-Z]+(\d+)$/.exec(levelId);
+  return n ? `Level ${Number(n[1])}` : levelId;
+}
+
+// The plan extent of the building's own rooms (not the street, an exit or the truck outside), where
+// the floor labels are pinned.
+export function planExtent(b: Building): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  const rooms = b.nodes.filter((n) => !n.is_exit && n.type !== 'street' && n.type !== 'truck');
+  if (rooms.length === 0) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  return {
+    minX: Math.min(...rooms.map((n) => n.box.x)), maxX: Math.max(...rooms.map((n) => n.box.x + n.box.width)),
+    minZ: Math.min(...rooms.map((n) => n.box.y)), maxZ: Math.max(...rooms.map((n) => n.box.y + n.box.depth)),
+  };
+}
+
+export interface ScreenRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+export const FLOOR_TAG_GAP = 12; // pixels between a floor label and the plate corner it names
+const FLOOR_TAG_HEIGHT = 26; // pixels: 13 px type, 5 px padding and a 1 px border, each side
+const floorTagWidth = (text: string): number => text.length * 8 + 24;
+
+// A floor label's box on screen: left of the plate corner at `anchor`, centred on it vertically,
+// `width` wide when measured (an estimate from the text otherwise). When that would run off the left
+// edge it slides right to `minLeft`, onto the plate, so a close zoom keeps the label; `shift` says how far.
+export function floorTagRect(anchor: { x: number; y: number }, text: string, width = floorTagWidth(text), minLeft = 8):
+  ScreenRect & { shift: number } {
+  const right = anchor.x - FLOOR_TAG_GAP;
+  const shift = Math.max(0, minLeft - (right - width));
+  return { left: right - width + shift, right: right + shift, top: anchor.y - FLOOR_TAG_HEIGHT / 2, bottom: anchor.y + FLOOR_TAG_HEIGHT / 2, shift };
+}
+
+const clash = (a: ScreenRect, b: ScreenRect, pad = 4): boolean =>
+  a.left < b.right + pad && b.left < a.right + pad && a.top < b.bottom + pad && b.top < a.bottom + pad;
+
+// Which floor labels to show, in order of priority: one is dropped when a panel covers it (`free`
+// false), or when it would touch other text on screen (`taken`) or a label already kept.
+export function keepFloorTags(tags: { rect: ScreenRect; free: boolean }[], taken: ScreenRect[]): boolean[] {
+  const kept: ScreenRect[] = [];
+  return tags.map(({ rect, free }) => {
+    const ok = free && !taken.some((t) => clash(rect, t)) && !kept.some((k) => clash(rect, k));
+    if (ok) kept.push(rect);
+    return ok;
+  });
+}

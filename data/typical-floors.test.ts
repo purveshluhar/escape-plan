@@ -17,6 +17,11 @@ test('the turn is the one the package metadata gives for model level 10', () => 
   assert.equal(TYPICAL_TURN_DEG, 270);
 });
 
+test('a single room on another slice level (the ground-floor office) does not move the floor', () => {
+  assert.ok(building.nodes.some((n) => n.type === 'room' && n.level === 'L1'), 'the office is a room on L1');
+  assert.equal(floorPlacement(building).position[1], 9.4488);
+});
+
 test('a building with no apartment rooms puts the floor on the ground', () => {
   const bare = { ...building, nodes: building.nodes.filter((n) => n.type !== 'room') };
   assert.equal(floorPlacement(bare).position[1], 0);

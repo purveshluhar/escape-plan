@@ -16,7 +16,7 @@ Goal: find the decisions that will hurt at the next gate in `docs/plan.md`, whil
    - the truth: which expected case in `data/expected.json` proves it works?
    - order: which gate does it wait for, and what must be green first? What is the switch or
      fallback if it is not green?
-   - the house rules: solver decides, a game not a code check, no Cityweft files, no secrets.
+   - the house rules: solver decides, a quick check of sizes and routes (never a game, never a code review), no Cityweft files, no secrets.
 3. Ask in rounds of **at most 4 questions**. For each question give:
    - the question, in one sentence;
    - your **recommended answer** and the one-line reason;

@@ -2,10 +2,12 @@
 // replay data/expected.json without a browser. Owner: P3.
 import type { Building, Edit, ExpectedFile, SolverResult } from '../contract/types.ts';
 import { applyEdits, solve } from '../solver/index.ts';
-import { placeName } from './scoreboard.ts';
+import { metres, placeName } from './scoreboard.ts';
 
 // The case whose edits become the demo buttons, in order. P5 keeps it current in expected.json.
 export const DEMO_CASE = 'full-demo';
+// The case that adds the smoke fix (close the lobby door). Its widen is the same as the demo's, so it shows once.
+export const RACE_CASE = 'smoke-close-lobby-door';
 
 export interface DemoButton {
   id: string; // stable DOM id, from op and target
@@ -24,9 +26,6 @@ export interface Solved {
 
 export const initialState = (): GameState => ({ edits: [] });
 
-function metres(v: number): string {
-  return `${Number(v.toFixed(2))} m`;
-}
 
 export function editLabel(building: Building, edit: Edit): string {
   const name = edit.target ? placeName(building, edit.target) : '';
@@ -43,22 +42,22 @@ export function editLabel(building: Building, edit: Edit): string {
     case 'add_sleeve':
       return `Add sleeve at ${lower}`;
     case 'reset':
-      return 'Reset';
+      return 'Undo edits';
   }
 }
 
 // The demo buttons: one per edit in the DEMO_CASE, labelled from the building's own names, so
 // they follow P5's data when ids or values change. Reset is its own button, not one of these.
 export function demoButtons(building: Building, expected: ExpectedFile): DemoButton[] {
-  const demo = expected.cases.find((c) => c.id === DEMO_CASE);
-  if (!demo) return [];
-  return demo.edits
+  const edits = [DEMO_CASE, RACE_CASE].flatMap((id) => expected.cases.find((c) => c.id === id)?.edits ?? []);
+  const buttons = edits
     .filter((e) => e.op !== 'reset')
-    .map((e) => ({
+    .map((e): DemoButton => ({
       id: `edit-${e.op}-${e.target ?? 'none'}`,
       label: editLabel(building, e),
       edit: { ...e, source: 'button' },
     }));
+  return buttons.filter((b, i) => buttons.findIndex((x) => x.id === b.id) === i);
 }
 
 const sameEdit = (a: Edit, b: Edit): boolean => a.op === b.op && a.target === b.target && a.value === b.value;

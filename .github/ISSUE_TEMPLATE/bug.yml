@@ -1,5 +1,5 @@
 name: Bug
-description: Something is wrong in the game, the solver or the data.
+description: Something is wrong in the app, the solver or the data.
 labels: [needs-triage]
 body:
   - type: dropdown

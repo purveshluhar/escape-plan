@@ -4,7 +4,8 @@
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  buildInstancesRequest, buildRequest, describeStatus, extractInstances, shiftCenter, toLocal,
+  buildInstancesRequest, buildRequest, describeLimit, describeStatus, extractInstances, isConnectError, retryAfterMs, retryDelayMs, shiftCenter,
+  toLocal, MAX_ATTEMPTS, MAX_WAIT_MS,
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
@@ -16,7 +17,7 @@ const CENTRAL_PARK_CORNER = { lat: 40.76444, lon: -73.97333 }; // Grand Army Pla
 const OFFSET_METRES = { north: 162, east: -10 };
 const CENTER = shiftCenter(TARGET, OFFSET_METRES.north, OFFSET_METRES.east);
 const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 500; // a side; override in .env or the shell
-const MAX_TRIES = 3;
+const FETCH_TIMEOUT_MS = 300_000; // exports take a while; a stalled request still ends
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
 
 const key = process.env.CITYWEFT_API_KEY;
@@ -27,39 +28,84 @@ if (!key) {
 
 const body = buildRequest(CENTER, SIZE_METRES);
 
+// One POST with bounded retries (retryDelayMs). Each try is logged by its status only. Never log
+// a fetch error or its message: undici puts header values in some of them, and the Authorization
+// header holds the key.
 async function post(payload: object): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify(payload),
-    });
-    if (res.status !== 503 || attempt === MAX_TRIES) return res;
-    const wait = Number(res.headers.get('Retry-After')) || 5;
-    console.error(`${describeStatus(503)} Waiting ${wait}s (try ${attempt} of ${MAX_TRIES}).`);
-    await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+    let res: Response | null = null;
+    try {
+      res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (!isConnectError(err)) {
+        const kind = err instanceof Error ? err.name : 'error';
+        console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: the request failed (${kind}). Not retried: it may have reached Cityweft, or CITYWEFT_API_KEY in .env has a character a header cannot hold.`);
+        process.exit(1);
+      }
+    }
+    const status = res?.status ?? 0;
+    console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: ${status === 0 ? 'could not connect' : status}.`);
+    if (res?.ok) return res;
+    const retryAfter = res?.headers.get('Retry-After') ?? null;
+    const wait = retryDelayMs(status, attempt, retryAfter);
+    if (wait === null) {
+      const asked = retryAfterMs(retryAfter, Date.now());
+      if (status === 503 && asked !== null && asked > MAX_WAIT_MS) {
+        console.error(`Cityweft asked to wait ${Math.round(asked / 1000)} s, longer than this script waits. Run it again later.`);
+      }
+      if (res) return res;
+      console.error(describeStatus(0));
+      process.exit(1);
+    }
+    await res?.body?.cancel(); // free the connection before the wait
+    console.error(`${describeStatus(status)} Waiting ${(wait / 1000).toFixed(1)} s.`);
+    await new Promise((resolve) => setTimeout(resolve, wait));
   }
+}
+
+// What went wrong, for a final non-ok answer. A 429 carries the usage-limit details in its body.
+async function explain(res: Response): Promise<string> {
+  if (res.status !== 429) return describeStatus(res.status);
+  return describeLimit(await res.json().catch(() => null), key);
 }
 
 console.log(`Requesting a ${SIZE_METRES} m block around 432 Park Avenue (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
 const res = await post(body);
 if (!res.ok) {
-  console.error(describeStatus(res.status));
+  console.error(await explain(res));
   process.exit(1);
 }
 
-const { downloadUrl, spatialReference } = (await res.json()) as {
+// Body reads and the download fail with one fixed line: an error message could carry the
+// temporary download link, and the request is already billed.
+function fail(what: string, err: unknown): never {
+  console.error(`${what} failed (${err instanceof Error ? err.name : 'error'}). Run the script again.`);
+  process.exit(1);
+}
+
+const { downloadUrl, spatialReference } = (await res.json().catch((err: unknown) => fail('Reading the answer', err))) as {
   downloadUrl: string;
   spatialReference: unknown;
 };
 
 // The download link is temporary, so fetch it now. It is not a Cityweft API call: send no key.
-const file = await fetch(downloadUrl);
-if (!file.ok) {
-  console.error(`Download failed with ${file.status}. Run the script again for a fresh link.`);
-  process.exit(1);
+const DOWNLOAD_TIMEOUT_MS = 300_000;
+let glb: Buffer;
+try {
+  const file = await fetch(downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  if (!file.ok) {
+    console.error(`Download failed with ${file.status}. Run the script again for a fresh link.`);
+    process.exit(1);
+  }
+  glb = Buffer.from(await file.arrayBuffer());
+} catch (err) {
+  fail('The download', err);
 }
-const glb = Buffer.from(await file.arrayBuffer());
 
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(new URL('block.glb', OUT_DIR), glb);
@@ -87,10 +133,10 @@ console.log(`Saved data/cityweft/block.glb (${(glb.length / 1e6).toFixed(1)} MB)
 // benches, bus stops, hydrants and picnic tables come as JSON points from a second request.
 const instancesRes = await post(buildInstancesRequest(CENTER, SIZE_METRES));
 if (!instancesRes.ok) {
-  console.error(`Instances: ${describeStatus(instancesRes.status)} The GLB is saved; run again for instances.`);
+  console.error(`Instances: ${await explain(instancesRes)} The GLB is saved; run again for instances.`);
   process.exit(1);
 }
-const instances = extractInstances(await instancesRes.json());
+const instances = extractInstances(await instancesRes.json().catch((err: unknown) => fail('Reading the instances', err)));
 writeFileSync(new URL('instances.json', OUT_DIR), JSON.stringify(instances));
 const perType: Record<string, number> = {};
 for (const i of instances) perType[i.type] = (perType[i.type] ?? 0) + 1;

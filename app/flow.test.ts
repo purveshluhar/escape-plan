@@ -46,7 +46,7 @@ test('exits: the goal node, any exit node, or the ground for the load', () => {
 test('each object is offered only its own preset fix, and only until it is applied', () => {
   const fix = (id: string, applied = [] as typeof buttons[number]['edit'][]) =>
     fixesFor(buttons, relevantTargets(building, expected, id), applied).map((b) => b.label);
-  assert.deepEqual(fix('chiller'), ['Widen plant shaft to 2 m']);
+  assert.deepEqual(fix('chiller'), ['Widen plant shaft to 2.0 m']);
   assert.deepEqual(fix('wheelchair'), ['Add ramp at terrace door']);
   assert.deepEqual(fix('glass'), ['Widen lobby door to 1.6 m']);
   assert.deepEqual(fix('load', [buttons[0]!.edit]), ['Add transfer beam at beam B2']);

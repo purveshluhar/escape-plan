@@ -157,6 +157,13 @@ private-context/
 *.glb
 # The two 432 Park package models the viewer draws (our own approximate tower, not Cityweft).
 !data/432-park/*.glb
+# The token figurines: Kenney CC0 models (viewer/figures/CREDITS.md).
+!viewer/figures/wheelchair.glb
+!viewer/figures/character-male-f.glb
+!viewer/figures/character-female-d.glb
+!viewer/figures/character-male-d.glb
+!viewer/figures/character-female-e.glb
+!viewer/figures/loungeSofa.glb
 *.gltf
 *.obj
 *.fbx
@@ -176,3 +183,6 @@ private-context/
 *.e57
 *.las
 *.laz
+
+# tools/legibility-check.mjs output (screenshots show the Cityweft block)
+legibility-out/

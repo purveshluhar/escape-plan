@@ -1,62 +1,140 @@
-// App entry, design B (daylight model, spatial glass): place objects from the dock, press
-// Escape!, read PASS or FAIL in the summary pill, and apply a fix from the sheet or the edit box.
+// App entry, design B (daylight model, spatial glass): ask a question from the dock (click a chip,
+// or drag it onto any floor), move it by dragging on the model, press Show me, read Yes or No
+// in the summary pill, and apply a fix from the sheet or the edit box. Words: design/copy.md.
 // Every fix re-solves the placed objects. Owner: P3. The logic lives in shell.ts, state.ts,
 // answers.ts, flow.ts and scoreboard.ts (tested in Node); this file only draws and wires it.
 import * as THREE from 'three';
 import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
-import { coveredNodes } from '../data/typical-floors.ts';
-import { loadTypicalFloor } from '../data/typical-floors-load.ts';
+import { withSmoke } from '../data/smoke.ts';
+import { coveredNodes, drawnLevels } from '../data/typical-floors.ts';
+import { loadTypicalFloor, type TypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
-import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
+import { isMemberStart, movedPastSlop, stepLevel } from '../viewer/drop.ts';
+import { MOTION } from '../design/tokens.ts';
 import { createViewer } from '../viewer/index.ts';
+import { REVEAL_ZOOM } from '../viewer/layout.ts';
+import { stayText } from '../viewer/labels.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
-import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
-import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
+import { dimBlock, loadBackdrop, setCutHeight } from './backdrop-load.ts';
+import { MVP_TOKENS, mvpButtons } from './mvp.ts';
+import { scrollerStops } from './scroller.ts';
+import { mountScroller } from './scroller-view.ts';
 import type { Answer } from './answers.ts';
+import { conflictOf } from './conflict.ts';
+import type { Conflict } from './conflict.ts';
 import { fixesFor } from './flow.ts';
-import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
-import { PHASE_WORD, countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
-import type { ParseOutcome, Phase, PickItem } from './shell.ts';
+import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
+import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
+import {
+  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, stepShown, openable, focusFloor, togglePlaced, phaseWord, tokenCaption, withStarts,
+} from './shell.ts';
+import type { Phase, PickItem } from './shell.ts';
+import { readEdit } from './parse-client.ts';
+import type { Reading } from './parse-client.ts';
+import { findHint, hintModel } from './hint.ts';
+import type { HintResult } from './hint.ts';
+import { renderHint, stackAbove } from './hint-view.ts';
+import { answerLines, stripInsets } from './strip.ts';
+import { renderStrip } from './strip-view.ts';
+import { RACE, answerRows, helpfulCloseButtons, drawnResults, raceSpread, raceText, racePlaced } from './smoke.ts';
+import { readVotes, voteRequests } from './votes.ts';
+import type { PanelReading } from './votes.ts';
+import { renderVotes } from './votes-view.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
-// The MVP game: wheelchair, sofa and people (mvp.ts). The dock offers only these.
-const building = mvpBuilding(buildingJson as Building);
+// The MVP questions: wheelchair, sofa, people, chiller and load (mvp.ts). The dock offers only these.
+const base = buildingJson as Building;
+// The building with the smoke in it, for the dock, names and routes. Only a run with the smoke question
+// asked is solved on it (data/smoke.ts says why); every other run is solved on `base`.
+const building = withSmoke(base);
 const expected = expectedJson as ExpectedFile;
-const buttons = mvpButtons(building, demoButtons(buildingJson as Building, expected));
+const buttons = mvpButtons(base, demoButtons(base, expected));
+// Typed edits are read against every demo fix, so "widen shaft 2.0" and "transfer beam" are known.
+const typedFixes = demoButtons(base, expected);
 const items = pickerItems(building, MVP_TOKENS);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface State {
   phase: Phase;
   placed: Id[]; // in building order
+  starts: Map<Id, Id>; // token -> the node it was dropped on; a token not here starts in its own room
+  selected: Id | null; // the placed object clicked or dropped last
   game: GameState; // applied edits
   results: Answer[] | null; // last Escape! run, placed objects only
   note: string; // live-region line: "Re-solved after ..."
   editOpen: boolean;
-  jev: { text: string; out: ParseOutcome } | null; // a typed edit that was not clear enough
+  read: Reading | null; // the last typed edit, shown in the "who decided" strip
+  reading: string | null; // a typed edit still being read
+  solveMs: number | null;
   scoreOpen: boolean;
+  conflict: Conflict | null; // what the last edit turned from Yes to No, shown on the fix sheet
+  hint: { token: Id; result: HintResult; run: Answer[] } | null; // good only for the run it was asked about
 }
 
 const S: State = {
-  phase: 'empty', placed: [], game: initialState(), results: null, note: '', editOpen: false, jev: null, scoreOpen: false,
+  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false, conflict: null, hint: null,
 };
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
-const viewer = createViewer($('viewer'), { onZoom: (zoom) => setCutHeight(cutHeight(zoom)) });
+// The loaded city and real floors (null until they load) and the viewer's last reveal, so floors
+// that load after a zoom in still get it.
+const context3d = { block: null as THREE.Object3D | null, floor: null as TypicalFloor | null, amount: 0, cut: Infinity, dimmed: 0 };
+const applyReveal = (): void => {
+  context3d.floor?.reveal(context3d.amount, context3d.cut);
+  if (context3d.block && context3d.amount !== context3d.dimmed) dimBlock(context3d.block, context3d.amount);
+  context3d.dimmed = context3d.amount;
+};
+// The floor scroller on the right edge; it lists the drawn floors once they load and drives viewer.focusLevel.
+// The zoom (1 = framed) and the floors the view can open, for the arrow keys: zoomed in, a question
+// steps only onto a floor that can be shown, and the view follows it there.
+const view = { zoom: 1, floors: new Set<Id>() };
+const rail = mountScroller($('hud'), (level) => viewer.focusLevel(level));
+const viewer = createViewer($('viewer'), {
+  onZoom: (zoom) => {
+    setCutHeight(cutHeight(zoom));
+    view.zoom = zoom;
+  },
+  onReveal: (amount, cut) => {
+    Object.assign(context3d, { amount, cut });
+    applyReveal();
+  },
+  // Floor labels and fail cards keep clear of the panels over the model: the banner, the review panel,
+  // the strip, the Hint panel and the rail (its floor name pill sticks out left).
+  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint'), $('floors'), ...document.querySelectorAll('#floors .fl-name')],
+  onFocus: (level) => rail.follow(level),
+  onInset: (pixels) => rail.setInset(pixels), // the scroller keeps clear of the same panels as the model
+  onDrop: (token, node) => moveTo(token, node),
+  onRefuse: (token) => {
+    const what = S.placed.includes(token) ? 'not moved' : 'not placed';
+    S.note = stayText(building, token) ?? `${itemOf(token).label} ${what}: drop it on a floor of the tower`;
+    render();
+  },
+  onSelect: (token) => {
+    S.selected = token;
+    // The caption on the model is inside the 3D view, which screen readers skip; say it here too.
+    if (token !== null && S.placed.includes(token)) S.note = tokenCaption(edited(), token, resultOf(token));
+    render();
+  },
+});
 // Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
 // so framing them shows an empty 424 m view until (or unless) the real floors load.
 viewer.setCovered(coveredNodes(building));
-// The model centres in the whole view, and moves left of the fix sheet only when a run has failures
-// (the sheet floats on the right on wider screens; on phones it sits at the bottom).
+// The model centres in the whole view, and moves left of the fix sheet or the all-yes banner after
+// a run (both float on the right on wider screens; on phones they sit at the bottom).
+// The all-yes banner uses the same slot, so the model also moves left of it when every answer is yes.
 const insetFor = (results: readonly Answer[]): number =>
-  innerWidth > 700 && results.some((r) => r.status === 'fail') ? SIDE_PANEL : 0;
+  innerWidth > 700 && results.length > 0 ? SIDE_PANEL : 0;
 let runTimer = 0;
+// The review panel's votes on the last edit (votes.ts). Never changes an answer. `panelAsk` drops an
+// answer that comes back after a newer edit.
+let panel: PanelReading | null = null;
+let panelAsk = 0;
 
 // ---------- Small DOM helper (textContent only, never innerHTML) ----------
 
@@ -75,53 +153,71 @@ function btn(label: Child | Child[], cls: string, onClick: () => void, attrs: Re
 }
 
 const itemOf = (id: Id): PickItem => items.find((i) => i.token === id)!;
+// The question a person asks for this token (questions.ts), or its name when there is none yet.
+const askOf = (id: Id): string => questionOf(id)?.ask ?? itemOf(id).label;
 function dot(item: PickItem, small = false): HTMLElement {
   return h('span', {
     class: `dot${small ? ' sm' : ''}`, 'aria-hidden': 'true', style: `--c:${item.color};--gi:${item.glyphInk}`,
   }, item.glyph);
 }
 const word = (r: Answer | null | undefined, running = false): HTMLElement => r
-  ? h('b', { class: `word ${r.status}` }, r.status === 'pass' ? 'PASS' : 'FAIL')
+  ? h('b', { class: `word ${r.status}` }, r.status === 'pass' ? 'Yes' : 'No')
   : h('span', { class: 'word ready' }, running ? '...' : 'Ready');
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- Solving ----------
 
-function edited(): Building {
-  return run(building, S.game).building;
+// The building as played: each dropped object starts in the node it was dropped on.
+function played(): Building {
+  return withStarts(S.placed.includes(RACE) ? building : base, S.starts);
 }
 
-function solvePlaced(): { edited: Building; results: Answer[] } {
-  const { building: b, results } = run(building, S.game);
-  const all = answers(building, b, S.game.edits, results, expected, IMPLEMENTED_RULES);
-  return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
+function edited(): Building {
+  return run(played(), S.game).building;
+}
+
+function solvePlaced(edits: readonly Edit[] = S.game.edits): { edited: Building; results: Answer[]; drawn: Answer[]; spread: ReturnType<typeof raceSpread> } {
+  const start = played();
+  const { building: b, results } = run(start, { edits: [...edits] });
+  const all = answers(start, b, edits, results, expected, IMPLEMENTED_RULES);
+  // The smoke question is answered by the people's answer; the viewer also draws the people and the smoke parked.
+  const drawn = drawnResults(all, S.placed);
+  // The tint clock starts when the people do: each drawn token starts one stagger after the one before.
+  const delay = Math.max(0, drawn.findIndex((r) => r.token === 'people')) * MOTION.staggerSeconds;
+  return { edited: b, results: answerRows(all, S.placed), drawn, spread: raceSpread(b, all, MOTION.secondsPerToken, delay) };
 }
 
 // Show the building as it is now, with no run on it: placed objects wait in their start rooms.
 function idle(): void {
   window.clearTimeout(runTimer);
   viewer.setInsetRight(0);
-  viewer.show(edited(), parkedResults(S.placed));
+  viewer.show(edited(), parkedResults(racePlaced(building, S.placed)));
+  viewer.setSmoke(null);
 }
 
-function escape(): void {
-  if (S.placed.length === 0 || S.phase === 'running') return;
-  const { edited: b, results } = solvePlaced();
+// `from` is the last edit and the answers before it: an edit that turns a Yes into a No is said so.
+function escape(from?: { before: readonly Answer[] | null; label: string }): void {
+  if (S.placed.length === 0 || S.phase === 'running' || S.reading !== null) return;
+  const t0 = performance.now();
+  const { edited: b, results, drawn, spread } = solvePlaced();
+  S.solveMs = performance.now() - t0;
   S.results = results;
+  S.conflict = from ? conflictOf(from.before, results, from.label, b) : null;
+  if (S.conflict) S.note = [S.conflict.title, ...S.conflict.lines].join('. ');
   S.scoreOpen = false;
   viewer.setInsetRight(insetFor(results));
-  viewer.show(b, results);
+  const seconds = viewer.show(b, drawn); // the viewer's run timeline decides how long it plays
+  viewer.setSmoke(spread);
   window.clearTimeout(runTimer);
   if (REDUCE) {
     S.phase = phaseAfterRun(results);
   } else {
     S.phase = 'running';
-    const ms = runSeconds(results.length, MOTION.secondsPerToken, MOTION.staggerSeconds) * 1000;
     runTimer = window.setTimeout(() => {
       S.phase = phaseAfterRun(results);
       render();
-    }, ms);
+    }, seconds * 1000);
   }
   render();
 }
@@ -130,32 +226,79 @@ function escape(): void {
 
 function place(id: Id): void {
   if (S.phase === 'running') return;
+  closePanel(); // its before and after were solved with the old starts
   S.placed = togglePlaced(building, S.placed, id);
+  if (S.placed.includes(id)) S.selected = id;
+  else {
+    S.starts.delete(id); // placed again with a click, it starts in its own room
+    if (S.selected === id) S.selected = null;
+  }
   S.results = null;
+  S.conflict = null;
   S.note = '';
   S.phase = S.placed.length ? 'placed' : 'empty';
   idle();
   render();
 }
 
-function applyFix(edit: Edit, label: string): void {
+// A drop on the model (or an arrow key): the token starts in `node` and waits there for Show me,
+// like a placement from the dock. The last run's results no longer hold, so they are cleared.
+function moveTo(id: Id, node: Id): void {
   if (S.phase === 'running') return;
+  if (isMemberStart(building, id)) { // the load holds the building up where it is
+    S.note = stayText(building, id)!;
+    return render();
+  }
+  closePanel(); // its before and after were solved with the old starts
+  S.starts.set(id, node);
+  S.placed = dropPlaced(building, S.placed, id);
+  S.selected = id;
+  S.results = null;
+  S.conflict = null;
+  S.note = `${itemOf(id).label} starts in ${placeName(building, node)}`;
+  S.phase = 'placed';
+  idle();
+  render();
+}
+
+// While a typed sentence is read (up to 2.5 s), no other edit applies: its answer would land on a
+// building that changed under it.
+function applyFix(edit: Edit, label: string): void {
+  if (S.phase === 'running' || S.reading !== null) return;
+  const before = S.results;
+  const priorGame = S.game;
   S.game = applyEdit(S.game, edit);
+  if (S.game !== priorGame && edit.op !== 'reset') void askPanel(priorGame, edit);
+  else closePanel(); // Undo edits, or an edit already applied: the last votes are about another edit
   S.editOpen = false;
-  S.jev = null;
+  S.read = null;
   ($('editInput') as HTMLInputElement).value = '';
-  S.note = `Re-solved after ${label}`;
-  if (S.placed.length) escape();
+  S.note = `Checked again after: ${label}`;
+  if (S.placed.length) escape({ before, label });
   else {
     idle();
     render();
   }
+  if (edit.target !== null) viewer.flash(edit.target);
+}
+
+// Hint: the rules try edits at the stuck part and offer the first that turns this answer to Yes.
+// It applies through applyFix, like a typed edit; Undo edits removes it.
+function askHint(token: Id): void {
+  if (S.phase !== 'result' || !S.results || S.reading !== null) return;
+  const result = findHint(played(), S.game.edits, token, (e) => solvePlaced(e).results);
+  S.hint = { token, result, run: S.results };
+  render();
+  // The Hint button was redrawn under the click; keep keyboard focus inside the panel.
+  $('hint').querySelector<HTMLElement>('.hact .fixbtn')?.focus();
 }
 
 function reset(): void {
-  if (S.phase === 'running' || S.game.edits.length === 0) return;
+  if (S.phase === 'running' || S.reading !== null || S.game.edits.length === 0) return;
   S.game = initialState();
-  S.note = 'Re-solved after Reset (back to building.json)';
+  closePanel();
+  S.read = null; // the strip described an edit that is now undone
+  S.note = 'Checked again with the original building';
   if (S.results && S.placed.length) escape();
   else {
     idle();
@@ -165,8 +308,12 @@ function reset(): void {
 
 function clear(): void {
   if (S.phase === 'running') return;
+  closePanel(); // its before and after were solved with the old starts
   S.placed = [];
+  S.starts.clear();
+  S.selected = null;
   S.results = null;
+  S.conflict = null;
   S.note = '';
   S.phase = 'empty';
   idle();
@@ -182,44 +329,79 @@ function openEdit(): void {
 
 function closeEdit(): void {
   S.editOpen = false;
-  S.jev = null;
+  if (S.read && !S.read.out.edit) S.read = null;
   render();
 }
 
-function submitText(text: string): void {
-  // Jev is not connected yet, so typed edits go through plan C (shell.ts parseEdit), which returns
-  // the same JevParse shape. A sure parse applies at once; anything else asks "Did you mean".
-  const out = parseEdit(text, buttons);
-  if (out.edit) applyFix(out.edit, editLabel(building, out.edit));
-  else {
-    S.jev = { text, out };
-    render();
-  }
+// The server reads the sentence when it runs Strands Decider; otherwise this page does
+// (parse-client.ts). A sure parse applies at once; anything else asks "Did you mean" in the strip.
+async function submitText(text: string): Promise<void> {
+  if (S.reading !== null || S.phase === 'running') return;
+  S.reading = text;
+  S.read = null;
+  render();
+  const r = await readEdit(text, typedFixes, building);
+  S.reading = null;
+  // Escape! waits while a sentence is read, so no run is playing here.
+  if (r.out.edit) applyFix(r.out.edit, editLabel(building, r.out.edit));
+  S.read = r;
+  render();
+}
+
+// The review panel votes on one edit, one vote per discipline, with the rules' answers before and
+// after it. The answers on screen come from the rules alone, whatever the votes say.
+async function askPanel(before: GameState, edit: Edit): Promise<void> {
+  const ask = ++panelAsk;
+  const start = played();
+  // Only the questions asked get a vote; with none asked there is nothing to vote on.
+  const requests = voteRequests(start, edit, run(start, before).results, run(start, S.game).results, S.placed);
+  if (requests.length === 0) return closePanel();
+  panel = { requests, votes: [], why: 'pending', voter: null, decider: null, ms: 0 };
+  render();
+  const r = await readVotes(requests);
+  if (ask !== panelAsk) return;
+  panel = r;
+  render();
+}
+
+function closePanel(): void {
+  panelAsk++;
+  panel = null;
 }
 
 // ---------- Render ----------
 
+// A placed object's answer from the last run, once its walk has finished playing.
+function resultOf(id: Id): Answer | null {
+  const done = S.phase === 'result' || S.phase === 'complete';
+  return done && S.results ? S.results.find((r) => r.token === id) ?? null : null;
+}
+
 function render(): void {
   const running = S.phase === 'running';
-  const done = S.phase === 'result' || S.phase === 'complete';
-  const resOf = (id: Id): Answer | null => (done && S.results ? S.results.find((r) => r.token === id) ?? null : null);
+  const resOf = resultOf;
 
   // Picker chips
+  // One asked chip shows its question as a sentence on a projector (index.html, .sel): the one picked
+  // last. Six sentences do not fit one dock.
+  const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : S.placed.at(-1) ?? null;
   for (const b of $('picker').querySelectorAll<HTMLButtonElement>('.chip')) {
     b.setAttribute('aria-pressed', String(S.placed.includes(b.dataset.token!)));
+    b.classList.toggle('sel', b.dataset.token === sel);
     b.disabled = running;
   }
+  viewer.setDragEnabled(!running);
 
   // Dock tools
   const esc = $('btnEscape') as HTMLButtonElement;
-  esc.disabled = running || S.placed.length === 0;
+  esc.disabled = running || S.placed.length === 0 || S.reading !== null;
   if (S.placed.length) esc.removeAttribute('aria-describedby');
   else esc.setAttribute('aria-describedby', 'escHint');
   const n = S.game.edits.length;
   const rb = $('btnReset') as HTMLButtonElement;
   rb.disabled = running || n === 0;
-  rb.replaceChildren(n ? `Reset (${n}) ` : 'Reset ', h('kbd', {}, 'R'));
-  rb.setAttribute('aria-label', n ? `Reset, ${plural(n, 'edit')} applied` : 'Reset');
+  rb.replaceChildren(n ? `Undo edits (${n}) ` : 'Undo edits ', h('kbd', {}, 'R'));
+  rb.setAttribute('aria-label', n ? `Undo edits, ${n} applied` : 'Undo edits');
   ($('btnClear') as HTMLButtonElement).disabled = running || S.placed.length === 0;
   ($('btnEdit') as HTMLButtonElement).disabled = running;
   const dock = $('dock');
@@ -230,12 +412,14 @@ function render(): void {
     void dock.offsetWidth;
     dock.classList.add('pop');
   }
-  $('slimText').textContent = `Running - ${plural(S.placed.length, 'object')} escaping`;
+  $('slimText').textContent = `Checking ${plural(S.placed.length, 'route')}`;
 
   // Summary pill
   const sm = $('summary') as HTMLButtonElement;
-  const line = h('span', { class: 'sline' }, h('span', { class: 'phase' }, PHASE_WORD[S.phase]),
-    h('span', { class: 'vbar' }), h('span', { class: 'count num' }, countText(S.phase, S.placed.length, S.results)));
+  const phase = phaseWord(S.phase, S.placed.length);
+  const counted = countText(S.phase, S.placed.length, S.results);
+  const line = h('span', { class: 'sline' }, h('span', { class: 'phase' }, phase),
+    h('span', { class: 'vbar' }), h('span', { class: 'count num' }, counted));
   const chips = S.placed.length
     ? [h('span', { class: 'schips' }, ...S.placed.map((id) => h('span', { class: 'schip' }, dot(itemOf(id), true), word(resOf(id), running)))),
       h('span', { class: 'caret', 'aria-hidden': 'true' })]
@@ -243,67 +427,80 @@ function render(): void {
   sm.replaceChildren(line, ...chips);
   sm.disabled = S.phase === 'empty';
   sm.setAttribute('aria-expanded', String(S.scoreOpen));
-  sm.setAttribute('aria-label', `Scoreboard: ${sm.textContent?.replace(/\s+/g, ' ').trim() ?? ''}`);
+  const each = S.placed.map((id) => `${itemOf(id).label} ${resOf(id) ? (resOf(id)!.status === 'pass' ? 'yes' : 'no') : running ? 'checking' : 'ready'}`);
+  sm.setAttribute('aria-label', `Answers: ${[phase, counted, ...each].join(', ')}`);
 
-  // Scoreboard rows
+  // Answers rows, and the footer line that keeps the claim honest (ADR 0010)
   const b = edited();
   const sp = $('scorePanel');
   sp.classList.toggle('open', S.scoreOpen && S.placed.length > 0);
   document.body.classList.toggle('scoring', S.scoreOpen);
   sp.replaceChildren(...S.placed.map((id) => {
     const r = resOf(id);
-    const token = building.tokens.find((t) => t.id === id)!;
+    const token = b.tokens.find((t) => t.id === id)!;
+    const race = id === RACE && r ? raceText(b, r) : '';
     const det = !r ? `Starts in ${placeName(b, token.start)}`
-      : r.status === 'pass' ? `Out via ${r.path.map((p) => placeName(b, p)).join(', ')}`
-      : failLine(r, b);
-    return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, itemOf(id).label), word(r), h('span', { class: 'det num' }, det));
-  }));
+      : r.status === 'pass' ? `${yesLine(id)}. ${race || `Route: ${routeShown(id, r.path).map((p) => placeName(b, p)).join(', ')}`}`
+      : race || stuckLine(b, r);
+    return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, askOf(id)), word(r), h('span', { class: 'det num' }, det));
+  }), h('div', { class: 'snote' }, 'A quick check of sizes and routes, not a code review.'));
 
-  // Live note and LEVEL COMPLETE
+  // Live note and the all-yes banner
   $('note').textContent = S.note;
   $('banner').classList.toggle('on', S.phase === 'complete');
-  $('bannerSub').textContent = `${S.placed.length} of ${S.placed.length} out with ${plural(n, 'edit')}`;
+  // Written only when the words change, so the status region is not read out again on every render.
+  const yes = allYesText(S.placed, n);
+  if ($('bannerBig').textContent !== yes.title) $('bannerBig').textContent = yes.title;
+  if ($('bannerSub').textContent !== yes.lines) $('bannerSub').textContent = yes.lines;
 
   renderSheet(b);
   renderEdit();
+  renderHintPanel();
+  // The votes wait for the answers: while the walks play, the panel would tell the answer first.
+  renderVotes($('votes'), building, running ? null : panel, () => { closePanel(); render(); });
+  const picked = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
+  viewer.select(picked, picked === null ? null : tokenCaption(b, picked, resOf(picked), running));
 }
 
-function failLine(r: Answer, b: Building): string {
-  const why = r.reason ? REASON_TEXT[r.reason] : 'blocked';
-  const at = r.blocked_at ? ` at ${placeName(b, r.blocked_at)}` : '';
-  const nums = numbersText(r);
-  return `${cap(why)}${at}${nums ? ` - ${nums}` : ''}`;
-}
-
-// One card per failed object: verdict, reason, numbers and the demo fixes that matter to it.
+// One card per No answer: who asks, the question, the reason, the numbers and the fixes that matter.
 function renderSheet(b: Building): void {
   const sheet = $('sheet');
-  const fails = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
+  const noes = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
+  // The smoke answer is the people's: when their own card is up, one card says it.
+  const fails = noes.filter((r) => r.token !== RACE || !noes.some((o) => o.token === 'people'));
   sheet.classList.toggle('on', fails.length > 0 && !S.editOpen);
   if (fails.length === 0) return sheet.replaceChildren();
   const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
   sheet.replaceChildren(
-    h('div', { class: 'lbl' }, 'Fix it'),
+    ...(S.conflict ? [h('div', { class: 'conflict' }, h('b', {}, S.conflict.title), ...S.conflict.lines.map((l) => h('div', { class: 'cl' }, l)))] : []),
+    h('div', { class: 'lbl' }, cards.length > 1 ? `Suggested fixes (${cards.length})` : 'Suggested fixes'), // the count says more cards may sit below
     ...cards,
     h('div', { class: 'foot' },
       btn('Type an edit', 'fixbtn ghost', openEdit),
-      btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' })),
+      btn('Undo edits', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' })),
   );
 }
 
 function fixCard(r: Answer, b: Building): HTMLElement {
   const it = itemOf(r.token);
   // The buttons for where it is stuck now, and for anything expected.json says it gets stuck at.
-  const targets = relevantTargets(building, expected, r.token);
+  // expected.json knows only the start rooms, so a dropped object gets the buttons for where it is stuck now.
+  const moved = played().tokens.find((t) => t.id === r.token)?.start !== building.tokens.find((t) => t.id === r.token)?.start;
+  const targets = moved ? new Set<Id>() : relevantTargets(building, expected, r.token);
   if (r.blocked_at) targets.add(r.blocked_at);
-  const fixes = fixesFor(buttons, targets, S.game.edits);
-  const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
-  const nums = numbersText(r);
-  return h('div', { class: 'fcard', role: 'group', 'aria-label': `${it.label} failed` },
-    h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, it.label), h('span', { class: 'word fail' }, 'FAIL')),
+  // Against the smoke only a door the rules say lets people win is offered (not one the smoke does not come through).
+  const fixes = r.reason === 'smoke_first'
+    ? helpfulCloseButtons(buttons, r.token, S.game.edits, (e) => solvePlaced(e).results)
+    : fixesFor(buttons, targets, S.game.edits);
+  const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Stuck';
+  const nums = raceText(b, r) || numbersText(r);
+  const q = questionOf(r.token);
+  return h('div', { class: 'fcard', role: 'group', 'aria-label': `${askOf(r.token)} No` },
+    q && h('div', { class: 'who' }, q.person),
+    h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, askOf(r.token)), h('span', { class: 'word fail' }, 'No')),
     h('div', { class: 'rs' }, why, r.blocked_at && h('span', {}, ` at ${placeName(b, r.blocked_at)}`)),
     nums && h('div', { class: 'nb num' }, cap(nums)),
-    fixes.length === 0 && h('div', { class: 'none' }, 'No preset fix for this object.'),
+    fixes.length === 0 && h('div', { class: 'none' }, 'No suggested fix here yet. Type an edit.'),
     // "More fixes" opens every preset fix and the text box: in play tests it was the first move
     // after reading a failure, so it sits on each card, not only at the foot of the sheet.
     h('div', { class: 'fx', role: 'group', 'aria-label': `Fix for ${it.label}` },
@@ -316,44 +513,109 @@ function renderEdit(): void {
   document.body.classList.toggle('editing', S.editOpen);
   const ep = $('editPanel');
   ep.classList.toggle('open', S.editOpen);
-  ep.classList.toggle('err', S.jev !== null);
   $('quick').replaceChildren(
     ...buttons.map((f) => {
       const on = isApplied(S.game, f.edit);
       return btn(on ? `Applied: ${f.label}` : f.label, 'fixbtn', () => applyFix(f.edit, f.label), { 'aria-pressed': String(on) });
     }),
-    btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
+    btn('Undo edits', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
   );
-  const jev = $('jev');
-  jev.classList.toggle('on', S.jev !== null);
-  if (!S.jev) return jev.replaceChildren();
-  const { text, out } = S.jev;
-  jev.replaceChildren(
-    h('div', { class: 'q' }, 'Not sure what you meant by ', h('b', {}, `"${text}"`), '.'),
-    h('div', { class: 'dym' }, 'Did you mean'),
-    h('div', { class: 'opts' },
-      ...out.suggestions.filter((f) => !isApplied(S.game, f.edit)).map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))),
-      btn('Cancel', 'fixbtn ghost', () => {
-        S.jev = null;
-        render();
-        $('editInput').focus();
-      })),
-    h('div', { class: 'src' }, 'Typed edits use the keyword parser until Jev is connected.'),
-  );
+  ($('editApply') as HTMLButtonElement).disabled = S.reading !== null;
+  const placed = S.results !== null && S.placed.length > 0;
+  renderStrip($('strip'), building, {
+    pending: S.reading, reading: S.read,
+    answers: placed ? answerLines(S.results!, edited()) : null,
+    checking: S.phase === 'running', solveMs: S.solveMs,
+    suggestions: (S.read?.out.suggestions ?? []).filter((f) => !isApplied(S.game, f.edit)).map((f) => ({ label: f.label, onPick: () => applyFix(f.edit, f.label) })),
+    onCancel: () => {
+      S.read = null;
+      render();
+      if (S.editOpen) $('editInput').focus();
+    },
+    onClose: () => {
+      S.read = null;
+      render();
+    },
+  });
+  clearOfStrip();
+}
+
+// The model moves clear of the open strip (stripInsets: beside it on a wide screen, above it on a
+// laptop), so the strip never covers the answer it explains. Run on each render and on a window
+// resize (the strip's size and the free space change with it).
+function clearOfStrip(): void {
+  const strip = $('strip');
+  const on = strip.classList.contains('on');
+  const inset = stripInsets({
+    width: innerWidth, height: innerHeight,
+    rightPanel: S.results && S.results.length > 0 ? insetFor(S.results) : 0,
+    strip: on ? { left: strip.offsetLeft, right: strip.offsetLeft + strip.offsetWidth, top: strip.offsetTop } : null,
+  });
+  viewer.setInsetLeft(inset.left);
+  viewer.setInsetBottom(inset.bottom);
+  if (S.results) viewer.setInsetRight(insetFor(S.results)); // the sheet's slot moves below the model under 701 px
+}
+window.addEventListener('resize', clearOfStrip);
+
+// The Hint panel stacks above the "who decided" strip, so it draws after the strip does.
+function renderHintPanel(): void {
+  const show = S.hint !== null && S.hint.run === S.results && S.phase === 'result' ? S.hint : null;
+  const close = (): void => {
+    S.hint = null;
+    render();
+    $('hint').querySelector<HTMLElement>('.hbtns .fixbtn')?.focus();
+  };
+  renderHint($('hint'), {
+    asks: S.phase === 'result' && S.reading === null && S.results
+      ? S.results.filter((r) => r.status === 'fail').map((r) => ({ name: itemOf(r.token).label, onHint: () => askHint(r.token) }))
+      : [],
+    shown: show && {
+      name: askOf(show.token), model: hintModel(building, show.result, show.token), onClose: close,
+      onApply: () => show.result.fix && applyFix(show.result.fix, editLabel(building, show.result.fix)),
+    },
+  });
 }
 
 // ---------- Build the dock once ----------
 
+// A chip is a question. A click asks it, with the token in its own start room (a second click takes
+// it off); a drag from a chip carries it onto the model, where the viewer drops it on that floor.
+// Wide screens show the question; phones show the short name (index.html, .ask and .short).
+let chipPress: { id: Id; pointerId: number; x: number; y: number } | null = null;
+let dragged = false; // the click that ends a chip drag is not a placement
 for (const it of items) {
   const id = it.token;
-  const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => place(id),
-    { 'data-token': id, 'aria-pressed': 'false', ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}) });
+  const b = btn([dot(it), h('span', { class: 'ask' }, askOf(id)), h('span', { class: 'short' }, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => {
+    if (dragged) dragged = false;
+    else place(id);
+  }, {
+    'data-token': id, 'aria-pressed': 'false', 'aria-label': `${askOf(id)} (${it.label})`, // the name holds both the question and the short name a narrow screen shows
+    title: 'Click to ask. Or drag it onto a floor to start it there. Arrow up or down moves it one floor.',
+    ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}),
+  });
+  b.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || b.disabled) return;
+    chipPress = { id, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+    dragged = false;
+  });
   $('picker').append(b);
 }
+window.addEventListener('pointermove', (e) => {
+  if (!chipPress || e.pointerId !== chipPress.pointerId || !movedPastSlop(e.clientX - chipPress.x, e.clientY - chipPress.y)) return;
+  viewer.startDrag(chipPress.id, e);
+  dragged = true;
+  chipPress = null;
+});
+window.addEventListener('pointercancel', () => (chipPress = null));
+window.addEventListener('pointerup', () => {
+  chipPress = null;
+  // A drag let go off its chip fires no click there, so nothing is left to swallow.
+  window.setTimeout(() => (dragged = false), 0);
+});
 
 // ---------- Controls ----------
 
-$('btnEscape').addEventListener('click', escape);
+$('btnEscape').addEventListener('click', () => escape());
 $('btnReset').addEventListener('click', reset);
 $('btnClear').addEventListener('click', clear);
 $('btnEdit').addEventListener('click', () => (S.editOpen ? closeEdit() : openEdit()));
@@ -365,15 +627,21 @@ $('summary').addEventListener('click', () => {
 $('editForm').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const text = ($('editInput') as HTMLInputElement).value.trim();
-  if (text) submitText(text);
+  if (text) void submitText(text);
 });
 
 document.addEventListener('keydown', (ev) => {
   const typing = ev.target instanceof HTMLInputElement;
   if (ev.key === 'Escape') {
     if (S.editOpen) closeEdit();
-    else if (S.scoreOpen) {
+    else if (S.hint !== null) {
+      S.hint = null;
+      render();
+    } else if (S.scoreOpen) {
       S.scoreOpen = false;
+      render();
+    } else if (S.selected !== null) {
+      S.selected = null;
       render();
     }
     return;
@@ -383,28 +651,68 @@ document.addEventListener('keydown', (ev) => {
   const k = Number(ev.key);
   const hit = items.find((i) => i.key === k);
   if (hit?.token) return place(hit.token);
-  // Space is always Escape! (outside the text box); Enter is Escape! unless a button has focus.
-  if (ev.key === ' ' || (ev.key === 'Enter' && !onBtn)) {
+  // Space and Enter are Show me, unless a button has focus: then they press that button.
+  if (showMeKey(ev.key, onBtn)) {
     ev.preventDefault();
     return escape();
   }
   if (ev.key === 'r' || ev.key === 'R') return reset();
+  // The keyboard way to drag: arrow up or down moves the selected object one floor. Only with focus
+  // on the page or the dock, so the arrows still scroll a panel or move inside one.
+  const free = ev.target === document.body || (ev.target instanceof Element && ev.target.closest('#picker') !== null);
+  if ((ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && free && S.selected !== null && S.placed.includes(S.selected)) {
+    ev.preventDefault();
+    if (S.phase === 'running') return;
+    const up = ev.key === 'ArrowUp';
+    const stay = stayText(building, S.selected);
+    if (stay !== null) {
+      S.note = stay;
+      render();
+      return;
+    }
+    const from = played().tokens.find((t) => t.id === S.selected)?.start;
+    const open = view.zoom < REVEAL_ZOOM && view.floors.size > 0;
+    const to = from === undefined ? null : open
+      ? stepShown(building, from, up ? 1 : -1, openable(building, [...view.floors]))
+      : stepLevel(building, from, up ? 1 : -1);
+    if (to !== null) {
+      moveTo(S.selected, to);
+      const level = building.nodes.find((n) => n.id === to)?.level;
+      if (open && level !== undefined) {
+        // The camera glides only to a drawn floor; the terrace and plant levels go to the nearest one.
+        const floor = focusFloor(building, [...view.floors], level);
+        viewer.focusLevel(floor);
+        rail.follow(floor); // the rail names the floor at once, not only when the glide ends
+      }
+      return;
+    }
+    S.note = `${itemOf(S.selected).label} is already on the ${up ? 'top' : 'bottom'} floor`;
+    render();
+    return;
+  }
   if (ev.key === '/') {
     ev.preventDefault();
     openEdit();
   }
 });
 
+stackAbove($('hint'), $('strip'));
 idle();
 render();
 
 // The Cityweft block and the real 432 Park typical floor, each only when this machine has the files
-// (data/README.md). Plain ground otherwise; the graph's rooms are never drawn as boxes.
+// (data/README.md). No ground otherwise; the graph's rooms are never drawn as boxes, and the viewer draws no grid.
+// The city block is about 23 MB: say so while it loads, and credit its sources once it is in.
+const loading = $('loading');
+loading.classList.add('on');
 Promise.all([
   loadBackdrop().catch((err: unknown) => (console.warn('Cityweft backdrop not loaded:', err), null)),
   loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
 ]).then(([block, floor]) => {
+  loading.classList.remove('on');
+  $('credit').classList.toggle('on', block !== null);
   if (!block && !floor) return;
+  Object.assign(context3d, { block, floor, dimmed: 0 });
   const context = new THREE.Group();
   if (block) context.add(block);
   if (floor) {
@@ -412,4 +720,9 @@ Promise.all([
     context.add(floor.object);
   }
   viewer.setBackdrop(context);
+  applyReveal();
+  const drawn = floor ? drawnLevels(building) : [];
+  view.floors = new Set(drawn);
+  rail.setStops(scrollerStops(building.levels, drawn)); // before setFloors: its first frame tells the rail where the view is
+  viewer.setFloors(drawn); // only real floors can be opened
 });

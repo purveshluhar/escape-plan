@@ -39,6 +39,41 @@ const CORE: Box = { x: 8.44, y: 8.7, width: 11.62, depth: 11.7 };
 const DOOR = { clear_width: 1, clear_height: 2.4, step_height: 0 };
 const LIFT = { clear_width: 1.2, clear_height: 2.4, step_height: 0 };
 
+// Egress stairs. The package draws one return stair per residential level (the
+// Model_Level_NNN_Stairs meshes: 2.34 m across, two flights of 1.17 m, 3.6 m long) but has no stair
+// graph data, so these edges are self-made. Width: the package flight, 1.17 m. Assumed, from code
+// minimums as recalled and not checked against the code text: two stairs per storey (a high-rise
+// storey needs two exits, IBC 2021 1006.3), 2.03 m headroom (80 in, IBC 2021 1011.3), and landings as
+// wide as the flight (IBC 2021 1011.6), so each switchback is a 1.17 by 1.17 m corner. Stairs A and B
+// share the cores, so they are two edges, not two independent routes. step_height stays 0: `no_steps`
+// takes a stair's rise from the two levels' elevations.
+export const STAIR = { clear_width: 1.17, clear_height: 2.03, step_height: 0, corner_a: 1.17, corner_b: 1.17 };
+
+// Stair A and stair B from the core below up to `upper`, the core of level `upperLevel` (its id).
+export function stairs(lower: string, upper: string, upperLevel: string, levelNumber: number): Edge[] {
+  return (['a', 'b'] as const).map((s) => ({
+    id: `stair-${s}-${upperLevel}`, name: `Stair ${s.toUpperCase()} to level ${levelNumber}`,
+    from: lower, to: upper, kind: 'stair', ...STAIR,
+  }));
+}
+
+// How the hand-made slice (L1 lobby, L2 core, L3 plant) joins the tower's first core: the express
+// lift from the lobby, both stairs level by level, and a service lift from the lobby to the plant
+// (self-made: a supertall's mechanical floors are served by a service lift).
+export function sliceJoin(firstCore: string, firstLevel = 'T04', firstNumber = 4): Edge[] {
+  return [
+    { id: 'lift-T-slice', name: `Lift to level ${firstNumber}`, from: 'lobby', to: firstCore, kind: 'elevator', ...LIFT },
+    { id: 'lift-service-L3', name: 'Service lift to level 3', from: 'lobby', to: 'plant', kind: 'elevator', ...LIFT },
+    ...stairs('lobby', 'core-l10', 'L2', 2),
+    ...stairs('core-l10', 'plant', 'L3', 3),
+    ...stairs('plant', firstCore, firstLevel, firstNumber),
+  ];
+}
+
+// Whether an edge id is one sliceJoin writes, so a rerun replaces it. Exact ids, so a hand-written
+// slice edge (a terrace stair, say) is never dropped.
+export const isGeneratedJoin = (id: string, firstCore: string): boolean => sliceJoin(firstCore).some((e) => e.id === id);
+
 const round = (n: number): number => Math.round(n * 100) / 100;
 const two = (n: number): string => String(n).padStart(2, '0');
 
@@ -64,7 +99,10 @@ export function buildTower(meta: PackageMeta): { levels: Level[]; nodes: Buildin
     nodes.push({
       id: core, name: `Level ${f.level_index} core`, level: lv, type: coreType(f.program), box: { ...CORE }, is_exit: false,
     });
-    if (below) edges.push({ id: `lift-${lv}`, name: `Lift to level ${f.level_index}`, from: below, to: core, kind: 'elevator', ...LIFT });
+    if (below) {
+      edges.push({ id: `lift-${lv}`, name: `Lift to level ${f.level_index}`, from: below, to: core, kind: 'elevator', ...LIFT });
+      edges.push(...stairs(below, core, lv, f.level_index));
+    }
     below = core;
 
     // Units in package order: Model_Level_010_U01 is unit 1.

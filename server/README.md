@@ -4,7 +4,7 @@
 **Purpose:** the small local Node server. It keeps keys out of the browser. It turns a typed
 sentence into an edit (Jev parse, or plan B or plan C), gives one vote per discipline after an
 edit (Jev votes), and relays the phone messages over WebSocket in tier 3. Any other call that
-needs a key, such as the LLM post-game report (P4 with P3), also goes through this server; who
+needs a key, such as the LLM report after the session (P4 with P3), also goes through this server; who
 writes that route is box A in docs/plan-graph.html. Jev never decides pass or fail; the solver does.
 **Consumes:** `JevParseRequest`, `JevVoteRequest` and the phone messages (`contract/types.ts`).
 **Produces:** `JevParse` and `JevVote`. Plan B (a general LLM) and plan C (a keyword parser)
@@ -19,7 +19,8 @@ imports this folder: P3's screens in `app/` call the server over HTTP or WebSock
 
 Tier 2: `POST /parse` works with plan C (the keyword parser, the default) and with
 `DECIDER=strands` (a local Strands Decider, see below). Jev and plan B are not built yet; they go
-behind the same `parse()`. Jev votes and the phone relay are tier 3.
+behind the same `parse()`. `POST /votes` gives one vote per discipline after an edit, from the
+Strands Decider or, with no model, from the rules (below). The phone relay is tier 3.
 
 ## Run it
 
@@ -45,7 +46,7 @@ The server does not read `HOST` or `PORT`, because shells and tools export those
   `JevParseRequest`), `403` (Host or Origin not allowed), `404`, `405`, `413` (body too big) or
   `415` (not `application/json`). A body with an inherited key name (`__proto__`, `constructor`)
   is a `400`. A client that sends too slowly gets `408` after about 10 s.
-- Callers: the game page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
+- Callers: the app page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
   (`npm run dev`), or port 4173 (`npm run preview`). Other browser origins get `403`.
 - Accept a parse only when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Else show
   "Did you mean" and the buttons.
@@ -54,6 +55,54 @@ The server does not read `HOST` or `PORT`, because shells and tools export those
 curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
   -d '{"text":"widen the plant shaft to 2 m","ops":["widen","reset"],"targets":[{"id":"plant-shaft","name":"Plant shaft"}],"value_range":{"min":0,"max":5}}'
 ```
+
+## Route: `POST /votes`
+
+The review panel: one vote per discipline after an edit. A vote is a bubble only. It never
+changes an answer; the solver decides (ADR 0002).
+
+- Body: a list of 1 to 8 `JevVoteRequest`, one per discipline, all about the same edit, each with
+  `before` and `after` for the same token. The same size, content type, Host, Origin and
+  inherited-key checks as `/parse` apply. Anything else is a `400`.
+- Answer: `200` with one `JevVote` per request, in the same order. `x-decider` says which
+  DECIDER the server runs; `x-voter` says who voted: `strands` (the model) or `rules`.
+- `DECIDER=strands`: one Strands call asks one question per discipline (accept, object or
+  review), with what the rules found before and after the edit. The model's choice and
+  confidence go into the vote as they are, so a vote can disagree with the rules. The app shows
+  that disagreement; the rules' answer still stands.
+- The model gets at most 2 s (`VOTE_TIMEOUT_MS`), inside the app's 2.5 s budget. When Strands is
+  down, slower, busy with a `/parse` call, or answers a vote that is not offered, the rules vote
+  instead (`x-voter: rules`). A vote changes nothing, so this fallback is safe, unlike a parse.
+  `/parse` and `/votes` share the one-call-at-a-time lock, because Strands answers one call at a time.
+- The rules vote (plan C, `ruleVote`): Yes after the edit is `accept`; Yes before and No after is
+  `object`; No before and after is `review`. Confidence 1.
+
+```bash
+curl -s http://127.0.0.1:8787/votes -H 'content-type: application/json' -d '[{"discipline":"structure","edit":{"op":"widen","target":"plant-shaft","value":2,"source":"button"},"before":{"token":"load","status":"pass","path":["beam-b2","c1","f1"],"blocked_at":null,"reason":null,"needed":null,"available":null},"after":{"token":"load","status":"fail","path":["beam-b2"],"blocked_at":"beam-b2","reason":"no_support","needed":1.5,"available":2}}]'
+```
+
+## Called from the page (Vite proxy)
+
+The page posts to `/parse` and `/votes` on its own origin, so it works on localhost and through a
+tunnel. The root `vite.config.ts` forwards them to `http://127.0.0.1:<SERVER_PORT>` (`npm run dev`
+and `npm run preview`), exactly `/parse` and `/votes` and nothing under them. Both paths go through
+the same guard below, and share its 4 places. It sets Host to the server's own, so
+the Host check above holds. A tunnel origin is not on the Origin list, so `proxy-guard.ts` does
+that job in front of the proxy: a call passes only when the browser marks it
+`Sec-Fetch-Site: same-origin`, and then goes on without Origin. Every other call, including one
+with no browser headers (curl), gets `403` from Vite. More than 4 calls at once get `429`. Vite's
+own Host check and CORS run first. The server itself is unchanged: called directly, it still
+refuses foreign Hosts and Origins. The proxy reads `SERVER_PORT` and `SERVER_HOST` the way the
+server does: from `.env`, and the shell wins.
+
+The proxy also refuses any call that does not come from this machine (loopback), so
+`npm run dev -- --host` does not put `/parse` on the network. A tunnel client runs on this machine,
+so its calls pass. This is not a login: a program on this machine can send those headers. Who
+can reach Vite through a tunnel is the tunnel's own sign-in.
+
+The app uses this server's answer only when it sends `x-decider: strands`. With `keywords` it
+reads the sentence itself (`app/parse-client.ts`), so keywords can stay the default here until
+the demo laptop is timed (below).
 
 ## Plan C rules (`keywords.ts`)
 

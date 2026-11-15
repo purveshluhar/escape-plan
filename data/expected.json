@@ -89,8 +89,79 @@
       ]
     },
     {
+      "id": "sofa-and-people-base",
+      "description": "The base building, for the sofa and people (from the old solver fixture tests; the sofa numbers are P1-03): the 2.2 m sofa cannot turn at the lobby door (L_max about 2.0 m), and people (0.6 m wide) do not fit the 0.5 m office door.",
+      "edits": [],
+      "expect": [
+        {
+          "token": "sofa",
+          "status": "fail",
+          "blocked_at": "lobby-door",
+          "reason": "cannot_turn",
+          "path": [
+            "lobby"
+          ]
+        },
+        {
+          "token": "people",
+          "status": "fail",
+          "blocked_at": "office-door",
+          "reason": "too_narrow",
+          "path": [
+            "office"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "widen-lobby-door",
+      "description": "Widen the lobby door to 1.6 m: the sofa turns (L_max about 2.73 m) and gets out.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "lobby-door",
+          "value": 1.6,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "sofa",
+          "status": "pass",
+          "path": [
+            "lobby",
+            "corridor",
+            "street"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "widen-office-door",
+      "description": "Widen the office door to 0.9 m: people get out.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "people",
+          "status": "pass",
+          "path": [
+            "office",
+            "corridor",
+            "street"
+          ]
+        }
+      ]
+    },
+    {
       "id": "full-demo",
-      "description": "The 3-minute demo: widen the shaft, add a transfer beam at B2, add a ramp at the terrace door, widen the lobby corner. Every token passes: LEVEL COMPLETE.",
+      "description": "The 3-minute demo: widen the shaft, add a transfer beam at B2, add a ramp at the terrace door, widen the lobby corner, widen the office door (people). Every token passes: LEVEL COMPLETE.",
       "edits": [
         {
           "op": "widen",
@@ -115,6 +186,12 @@
           "target": "lobby-door",
           "value": 1.6,
           "source": "button"
+        },
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
         }
       ],
       "expect": [
@@ -133,6 +210,115 @@
         {
           "token": "load",
           "status": "pass"
+        },
+        {
+          "token": "sofa",
+          "status": "pass"
+        },
+        {
+          "token": "people",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "id": "smoke-race-lost",
+      "description": "Smoke in the lobby, the office door widened. People reach the corridor at step 1 and so does the smoke through the open lobby door. A tie goes to the smoke.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "people",
+          "status": "fail",
+          "blocked_at": "corridor",
+          "reason": "smoke_first",
+          "path": [
+            "office"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "smoke-close-lobby-door",
+      "description": "Smoke in the lobby, the office door widened, the lobby door closed. The smoke now reaches the corridor at step 2 by the core, one step after the people, who get out at step 2.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
+        },
+        {
+          "op": "close_door",
+          "target": "lobby-door",
+          "value": null,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "people",
+          "status": "pass",
+          "path": [
+            "office",
+            "corridor",
+            "street"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "smoke-race-others-unchanged",
+      "description": "Smoke in the lobby with every demo fix and the lobby door closed: the wheelchair, the sofa and people all get through. Smoke does not stop them.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
+        },
+        {
+          "op": "widen",
+          "target": "lobby-door",
+          "value": 1.6,
+          "source": "button"
+        },
+        {
+          "op": "add_ramp",
+          "target": "terrace-door",
+          "value": null,
+          "source": "button"
+        },
+        {
+          "op": "close_door",
+          "target": "lobby-door",
+          "value": null,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "wheelchair",
+          "status": "pass"
+        },
+        {
+          "token": "sofa",
+          "status": "pass"
+        },
+        {
+          "token": "people",
+          "status": "pass",
+          "path": [
+            "office",
+            "corridor",
+            "street"
+          ]
         }
       ]
     }

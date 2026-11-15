@@ -1,13 +1,11 @@
 // P1-07, the MVP gate: one edit changes each MVP token's result live (wheelchair, sofa, people),
-// solve() over every expected case stays under 100 ms (ADR 0002), and solve() is pure and
-// deterministic.
+// and solve() is pure and deterministic. The 100 ms budget (ADR 0002) is checked by
+// mvp-resolve.timing.ts, which runs alone in `npm run test:timing`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { performance } from 'node:perf_hooks';
 import { IMPLEMENTED_RULES, solve } from './index.ts';
 import { checkBuildingRefs, validate } from '../contract/validate.ts';
-import { withMvpFixture } from './mvp-fixture.ts';
 import type { Building, Edit, ExpectedFile, Rule, SolverResult } from '../contract/types.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -25,30 +23,19 @@ const resultOf = (b: Building, edits: readonly Edit[], token: string): SolverRes
 const near = (got: number | null, want: number, what: string) =>
   assert.ok(got !== null && Math.abs(got - want) < 0.0005, `${what}: got ${got}, want about ${want}`);
 
-// The sofa and people tokens are a fixture until P5 adds them to data/ (see mvp-fixture.ts).
-const mvpBuilding = (): Building => withMvpFixture(freshBuilding());
-const mvp = mvpBuilding();
+// The sofa and people are in data/building.json with the other tokens (they were a test fixture).
+const mvp = building;
 
-// The MVP fixture cases, in expected.json's shape, for the timing and purity checks below.
+// One edit per MVP token, for the "each edit changes only its own token" check below.
 const MVP_CASES: { id: string; edits: Edit[] }[] = [
   { id: 'mvp-base', edits: [] },
   { id: 'mvp-ramp', edits: [button('add_ramp', 'terrace-door')] },
   { id: 'mvp-widen-lobby', edits: [button('widen', 'lobby-door', 1.6)] },
-  { id: 'mvp-widen-office', edits: [button('widen', 'fixture-office-door', 0.9)] },
+  { id: 'mvp-widen-office', edits: [button('widen', 'office-door', 0.9)] },
 ];
 
-test('solve() over every expected case takes under 100 ms in total (ADR 0002)', (t) => {
-  // First in this file, and node --test runs each file in its own process: these are the first
-  // solve() calls in the process, as on the first click.
-  const start = performance.now();
-  for (const c of expected.cases) solve(building, c.edits);
-  for (const c of MVP_CASES) solve(mvp, c.edits);
-  const ms = performance.now() - start;
-  t.diagnostic(`solve() over ${expected.cases.length} expected cases + ${MVP_CASES.length} MVP fixture cases: ${ms.toFixed(2)} ms`);
-  assert.ok(ms < 100, `took ${ms.toFixed(2)} ms`);
-});
-
-test('the MVP fixture is valid building data', () => {
+test('building.json has the sofa and people, and stays valid building data', () => {
+  assert.deepEqual(['sofa', 'people'].map((id) => building.tokens.some((t) => t.id === id)), [true, true]);
   assert.deepEqual(validate('building.schema.json', mvp), []);
   assert.deepEqual(checkBuildingRefs(mvp), []);
 });
@@ -74,7 +61,7 @@ test('wheelchair: fail at the terrace-door step, pass after add_ramp terrace-doo
   assert.deepEqual([after.status, after.path, after.blocked_at, after.reason], ['pass', ['terrace', 'lobby', 'corridor', 'street'], null, null]);
 });
 
-test('sofa (fixture): cannot turn at lobby-door (L_max 1.997 < 2.2), pass after widen lobby-door 1.6 (L_max 2.73)', () => {
+test('sofa: cannot turn at lobby-door (L_max 1.997 < 2.2), pass after widen lobby-door 1.6 (L_max 2.73)', () => {
   const before = resultOf(mvp, [], 'sofa');
   assert.deepEqual([before.status, before.path, before.blocked_at, before.reason, before.needed], ['fail', ['lobby'], 'lobby-door', 'cannot_turn', 2.2]);
   near(before.available, 1.997, 'L_max at lobby-door');
@@ -82,14 +69,14 @@ test('sofa (fixture): cannot turn at lobby-door (L_max 1.997 < 2.2), pass after 
   assert.deepEqual([after.status, after.path, after.blocked_at, after.reason], ['pass', ['lobby', 'corridor', 'street'], null, null]);
 });
 
-test('people (fixture): too narrow at fixture-office-door (0.6 > 0.5), pass after widen fixture-office-door 0.9 with time 2', () => {
+test('people: too narrow at office-door (0.6 > 0.5), pass after widen office-door 0.9 with time 2', () => {
   const before = resultOf(mvp, [], 'people');
   assert.deepEqual(
     [before.status, before.path, before.blocked_at, before.reason, before.needed, before.available, before.time],
-    ['fail', ['fixture-office'], 'fixture-office-door', 'too_narrow', 0.6, 0.5, null],
+    ['fail', ['office'], 'office-door', 'too_narrow', 0.6, 0.5, null],
   );
-  const after = resultOf(mvp, [button('widen', 'fixture-office-door', 0.9)], 'people');
-  assert.deepEqual([after.status, after.path, after.blocked_at, after.reason, after.time], ['pass', ['fixture-office', 'corridor', 'street'], null, null, 2]);
+  const after = resultOf(mvp, [button('widen', 'office-door', 0.9)], 'people');
+  assert.deepEqual([after.status, after.path, after.blocked_at, after.reason, after.time], ['pass', ['office', 'corridor', 'street'], null, null, 2]);
 });
 
 test('each MVP edit changes only its own MVP token', () => {
@@ -99,7 +86,7 @@ test('each MVP edit changes only its own MVP token', () => {
   assert.deepEqual(status([]), { wheelchair: 'fail', sofa: 'fail', people: 'fail' });
   assert.deepEqual(status([button('add_ramp', 'terrace-door')]), { wheelchair: 'pass', sofa: 'fail', people: 'fail' });
   assert.deepEqual(status([button('widen', 'lobby-door', 1.6)]), { wheelchair: 'fail', sofa: 'pass', people: 'fail' });
-  assert.deepEqual(status([button('widen', 'fixture-office-door', 0.9)]), { wheelchair: 'fail', sofa: 'fail', people: 'pass' });
+  assert.deepEqual(status([button('widen', 'office-door', 0.9)]), { wheelchair: 'fail', sofa: 'fail', people: 'pass' });
   const all = MVP_CASES.flatMap((c) => c.edits);
   assert.deepEqual(status(all), { wheelchair: 'pass', sofa: 'pass', people: 'pass' });
 });
@@ -107,7 +94,7 @@ test('each MVP edit changes only its own MVP token', () => {
 test('solve() never changes its input, and the same input gives the same output twice', () => {
   const runs = [
     ...expected.cases.map((c) => ({ b: freshBuilding(), id: c.id, edits: structuredClone(c.edits) })),
-    ...MVP_CASES.map((c) => ({ b: mvpBuilding(), id: c.id, edits: structuredClone(c.edits) })),
+    ...MVP_CASES.map((c) => ({ b: freshBuilding(), id: c.id, edits: structuredClone(c.edits) })),
   ];
   for (const { b, id, edits } of runs) {
     const before = structuredClone({ b, edits });

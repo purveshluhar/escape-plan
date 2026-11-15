@@ -5,7 +5,7 @@
 ## Checklist
 
 - Folder touched (only one, your own): <!-- solver/ viewer/ app/ design/ data/ server/ -->
-- [ ] `npm run check` (typecheck, test, build) passed on my machine
+- [ ] `npm run check` (typecheck, test, test:timing, build) passed on my machine
 - [ ] `contract/` is unchanged, or P1 approved this change at a merge point
 - [ ] `data/expected.json` values unchanged, or P5 re-checked them by hand
 - [ ] No secrets, no `.env`, no Cityweft files

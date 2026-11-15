@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Escape Plan</title>
+<title>Escape Plan - ask your building</title>
+<link rel="icon" href="data:," />
 <style>
 /* Design B: daylight model, spatial glass. The model fills the screen; light glass floats over it:
    the summary pill at the top, the dock at the bottom, the fix sheet and the edit box above it. */
-:root{
+:root{--dockb:104px;
   color-scheme: light;
   --ink:#14161c; --muted:#3d4250; --pass:#05592c; --fail:#9a0f19; --esc:#1b1e24; --focus:#1d3fd6;
   --g-top:rgba(250,251,253,.74); --g-bot:rgba(236,240,246,.66); --blur:16px;
@@ -20,7 +21,7 @@
 html,body{margin:0;height:100%;overflow:hidden;font-family:var(--font);color:var(--ink);
   background:linear-gradient(180deg,#c9d8ea 0%,#e6ebf0 55%,#f4efe6 100%);-webkit-font-smoothing:antialiased}
 #viewer{position:fixed;inset:0}
-/* The app shows LEVEL COMPLETE in its own banner, with the line under it. */
+/* The app shows the all-yes answer in its own banner, with the yes lines under it. */
 #viewer .ep-banner{display:none}
 #hud{position:fixed;inset:0;pointer-events:none;z-index:2}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -57,16 +58,18 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .word.pass{color:var(--pass)} .word.fail{color:var(--fail)} .word.ready{color:var(--muted);font-weight:600}
 
 /* ---------- Dock (bottom capsule) ---------- */
-#dock{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);border-radius:999px;padding:8px;
+#dock{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);border-radius:999px;padding:8px;width:max-content;
   display:flex;align-items:center;max-width:calc(100vw - 24px);transition:padding .5s var(--spring)}
 #dock.pop{animation:settle .6s var(--spring)}
 @keyframes settle{from{transform:translateX(-50%) scale(.94);opacity:.6}to{transform:translateX(-50%) scale(1);opacity:1}}
 .dock-full{display:flex;align-items:center;gap:var(--s2);min-width:0}
-#picker{display:flex;gap:8px;align-items:center}
+#picker{display:flex;gap:8px;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none;
+  padding:5px 4px;margin:-5px -4px} /* room inside the scroll box for a chip's focus ring */
+#picker::-webkit-scrollbar{display:none}
 .scrollwrap{position:relative;min-width:0;display:flex;flex:1}
 .scroller{display:flex;align-items:center;gap:var(--s2);min-width:0;overflow-x:auto;scrollbar-width:none}
 .scroller::-webkit-scrollbar{display:none}
-.chip{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 9px;border-radius:999px;
+.chip{touch-action:none;user-select:none;-webkit-user-select:none;display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 9px;border-radius:999px;
   background:rgba(255,255,255,.5);border:1px solid rgba(20,22,28,.10);font:600 16px/1 var(--font);white-space:nowrap;
   transition:background .3s var(--soft),transform .4s var(--spring)}
 .chip:hover:not(:disabled){background:rgba(255,255,255,.9)}
@@ -74,6 +77,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .chip[aria-pressed="true"]{background:#fff;border:1px solid rgba(20,22,28,.6);box-shadow:0 1px 3px rgba(20,22,28,.10)}
 .chip:disabled{color:#4a4f5a;background:rgba(255,255,255,.3);border-style:dashed;height:40px;font-size:14px;padding:0 12px 0 6px;gap:7px}
 .chip:disabled .dot{width:24px;height:24px;font-size:12px}
+.chip .short{display:none}
 .later{font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 0 10px}
 .sep{width:1px;height:30px;background:rgba(20,22,28,.16);flex:none}
 .tool{height:42px;padding:0 13px;border-radius:999px;background:transparent;border:1px solid rgba(20,22,28,.10);
@@ -111,22 +115,25 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .caret::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateY(-2px) rotate(45deg);transition:transform .4s var(--spring)}
 #summary[aria-expanded="true"] .caret::after{transform:translateY(2px) rotate(225deg)}
 #scorePanel{position:fixed;top:78px;left:50%;transform:translateX(-50%);border-radius:28px;padding:10px 16px;
-  width:min(560px,calc(100vw - 24px));display:none}
+  width:min(560px,calc(100vw - 24px));display:none;max-height:calc(100vh - 380px);overflow-y:auto}
 #scorePanel.open{display:block;animation:fadeup .4s var(--soft)}
+#scorePanel.glass{background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(246,246,244,.95))} /* near-opaque: cards on the model must not show through the rows */
 .srow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:10px 4px;border-bottom:1px solid rgba(20,22,28,.08)}
 .srow:last-child{border-bottom:0}
 .srow .nm{font:600 17px/1.2 var(--font)} .srow .word{font-size:20px}
 .srow .det{grid-column:2 / 4;font:400 16px/1.35 var(--font);color:var(--muted)}
+.snote{padding:10px 4px 4px;font:400 15px/1.3 var(--font);color:var(--muted)}
 @keyframes fadeup{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 
 #note{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-/* ---------- LEVEL COMPLETE ---------- */
-#banner{position:fixed;left:0;right:0;top:104px;text-align:center;pointer-events:none;display:none}
-#banner.on{display:block;animation:bannerIn .9s var(--spring)}
-#banner .big{font:800 clamp(40px,5.2vw,76px)/1 var(--font);letter-spacing:.03em;color:var(--ink)}
-#banner .sub{margin-top:10px;font:500 20px/1.3 var(--font);color:var(--muted)}
-@keyframes bannerIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+/* ---------- All yes: a calm answer in the fix sheet slot (empty when every answer is yes) ---------- */
+/* It never sits over the Answers panel (top centre), so it stays on while that panel is open. */
+#banner{position:fixed;right:24px;bottom:var(--dockb);width:min(380px,calc(100vw - 16px));border-radius:28px;padding:18px 22px 20px;pointer-events:none;display:none}
+#banner.on{display:block;animation:sheetIn .5s var(--soft)}
+body.editing #banner.on{display:none}
+#banner .big{font:800 34px/1.1 var(--font);color:var(--pass)}
+#banner .sub{margin-top:8px;font:500 18px/1.4 var(--font);color:var(--ink);text-wrap:pretty}
 
 /* ---------- Buttons in panels ---------- */
 .fixbtn{height:46px;padding:0 18px;border-radius:999px;font:600 16px/1 var(--font);text-align:left;white-space:nowrap;
@@ -138,13 +145,15 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .fixbtn:disabled{color:#5a5f6a;border-style:dashed;background:transparent}
 
 /* ---------- Fix sheet: one card per failed object ---------- */
-#sheet{position:fixed;right:24px;bottom:104px;width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 200px);overflow-y:auto;
+#sheet{position:fixed;right:24px;bottom:var(--dockb);width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 200px);overflow-y:auto;
   border-radius:28px;padding:10px 10px 8px;display:none}
 #sheet.on{display:block;animation:sheetIn .5s var(--spring)}
+#sheet{scrollbar-width:thin;scrollbar-color:rgba(20,22,28,.35) transparent} /* a visible bar when the cards run past the bottom */
 #sheet .lbl{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px}
 .fcard{padding:10px 8px;border-bottom:1px solid rgba(20,22,28,.08)}
+.fcard .who{font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px 2px}
 .fcard .top{display:flex;align-items:center;gap:10px}
-.fcard .nm{font:600 17px/1.1 var(--font)}
+.fcard .nm{font:600 17px/1.2 var(--font);min-width:0;text-wrap:balance}
 .fcard .word{font-size:20px;margin-left:auto}
 .fcard .rs{margin:8px 0 2px 2px;font:600 16px/1.25 var(--font)}
 .fcard .rs span{font-weight:400}
@@ -154,11 +163,32 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .morebtn{background:none;border:0;padding:6px 8px;font:500 15px/1 var(--font);color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .morebtn:hover{color:var(--ink)}
 .fcard .none{font:400 15px/1.3 var(--font);color:var(--muted);margin-top:8px}
+#sheet .conflict{margin:0 0 8px;padding:12px 14px;border-radius:18px;background:#fde7e8;border:2px solid #e5484d;color:#7a1218}
+#sheet .conflict b{display:block;font:800 17px/1.25 var(--font)}
+#sheet .conflict .cl{margin-top:6px;font:500 15px/1.35 var(--font);text-wrap:pretty}
 #sheet .foot{display:flex;gap:6px;margin-top:8px}
 #sheet .foot .fixbtn{flex:1;height:40px;text-align:center}
 
+/* ---------- Hint: the fix the rules found, stacked above the "who decided" strip ---------- */
+#hint{position:fixed;left:24px;bottom:calc(var(--dockb) + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
+#hint.on{display:block;animation:sheetIn .45s var(--soft)}
+#hint:not(.open){width:max-content;max-width:min(520px,calc(100vw - 48px))}
+body.editing #hint.open{width:min(520px,max(240px,calc(100vw - 592px)))}
+@media (max-width:950px){body.editing #hint{display:none}} /* the edit box takes the room */
+#hint .hbtns{display:flex;flex-wrap:wrap;gap:6px}
+#hint .hbtns .fixbtn{height:40px;font-size:15px;padding:0 14px}
+#hint .hbody{margin-top:10px}
+#hint .hhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:400 15px/1.3 var(--font)}
+#hint .htried{color:var(--muted)}
+#hint .hlabel{font:700 18px/1.25 var(--font);margin:8px 0 2px}
+#hint .hthen{font:400 15px/1.35 var(--font);color:var(--pass)}
+#hint .hbreak,#hint .hnote{font:400 15px/1.35 var(--font);margin-top:4px}
+#hint .hbreak{color:var(--fail)}
+#hint .hact{display:flex;gap:6px;margin-top:10px}
+#hint .hact .fixbtn{height:40px;font-size:15px;padding:0 14px}
+
 /* ---------- Edit box (typed edits) ---------- */
-#editPanel{position:fixed;right:24px;bottom:104px;width:min(520px,calc(100vw - 16px));
+#editPanel{position:fixed;right:24px;bottom:var(--dockb);width:min(520px,calc(100vw - 16px));
   border-radius:30px;padding:14px;display:none}
 #editPanel.open{display:block;animation:sheetIn .45s var(--soft)}
 #editPanel .row{display:flex;gap:8px;align-items:center}
@@ -170,21 +200,126 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 #editInput::placeholder{color:#5a5f6a}
 .quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .quick .fixbtn{height:40px;font-size:15px;padding:0 14px}
-#editPanel.err .quick{display:none}
-#jev{display:none;margin-top:12px;padding:12px 12px 4px;border-top:1px solid rgba(20,22,28,.10)}
-#jev.on{display:block}
-#jev .q{font:400 17px/1.35 var(--font);margin:0 4px 4px}
-#jev .q b{font-weight:700}
-#jev .dym{font:700 20px/1.2 var(--font);margin:10px 4px 8px}
-#jev .opts{display:flex;flex-wrap:wrap;gap:6px}
-#jev .src{font:400 13px/1.3 var(--font);color:var(--muted);margin:10px 4px 6px}
+
+/* ---------- Review panel: one vote per discipline after an edit; the rules still decide ---------- */
+#votes{position:fixed;top:16px;left:24px;width:min(420px,calc(100vw - 48px));max-height:calc(100vh - 140px);overflow-y:auto;border-radius:24px;padding:12px 14px;display:none}
+#votes.on{display:block;animation:sheetIn .45s var(--soft)}
+#votes .vhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 4px}
+#votes .vt{font:700 16px/1.2 var(--font)} #votes .vhead .tool{height:32px;font-size:14px}
+#votes .srcline{font:400 14px/1.3 var(--font);color:var(--muted);margin:0 2px 6px}
+#votes .vb{border-radius:16px;padding:7px 10px;margin:6px 0;background:rgba(255,255,255,.62);border:1px solid rgba(20,22,28,.12)}
+#votes .vb.clash{background:#fff4d6;border:2px solid #b45309}
+#votes .vtop{display:grid;grid-template-columns:1fr auto 44px;gap:8px;align-items:baseline;font:400 15px/1.2 var(--font)}
+#votes .vd{font-weight:600} #votes .vw{font:400 12px/1 var(--font);color:var(--muted);margin-left:8px;white-space:nowrap} #votes .vv{font-weight:700} #votes .vc{text-align:right;color:var(--muted)} #votes .vc.low{color:#8a3c06;font-weight:700} #votes .vns{font-weight:400;color:#8a3c06}
+#votes .accept .vv{color:var(--pass)} #votes .object .vv{color:var(--fail)} #votes .review .vv{color:var(--muted)}
+#votes .vr{font:400 14px/1.3 var(--font);margin-top:2px}
+#votes .vrules{font:600 13px/1.3 var(--font);color:var(--muted);margin-top:2px} #votes .clash .vrules{color:#7a3306}
+@media (max-width:1100px) and (min-width:701px){#votes{top:84px;max-height:calc(100vh - 420px)}}
+@media (max-width:1450px) and (min-width:701px){body.scoring #votes{display:none}} /* the Answers panel takes the room */
+#votes .vsum{font:600 14px/1.3 var(--font);margin:8px 2px 2px} #votes .vsum.clash{color:#7a3306}
+/* ---------- Who decided strip: the sentence, the reading, the rules' answer ---------- */
+#strip{position:fixed;left:24px;bottom:var(--dockb);width:min(800px,calc(100vw - 48px));border-radius:26px;padding:14px 16px 12px;display:none}
+#strip.on{display:block;animation:sheetIn .45s var(--soft)}
+body.editing #strip{width:min(800px,calc(100vw - 592px))}
+#strip .shead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 10px}
+#strip .typed{font:400 17px/1.3 var(--font)} #strip .typed b{font-weight:700}
+#strip .shead .tool{height:34px;font-size:14px}
+#strip .boxes{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch}
+#strip .arrow{align-self:center;font:700 20px/1 var(--font);color:var(--muted)}
+#strip .box{border-radius:18px;padding:10px 12px;background:rgba(255,255,255,.62);border:1px solid rgba(20,22,28,.12);min-width:0}
+#strip .box.amber{background:#fff4d6;border-color:#b45309}
+#strip .bh{display:flex;align-items:center;gap:8px;font:700 15px/1.2 var(--font);margin-bottom:4px}
+#strip .step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font:700 13px/1 var(--font)}
+#strip .srcline{font:400 14px/1.3 var(--font);color:var(--muted);margin:0 0 8px}
+#strip .part{display:grid;grid-template-columns:52px 1fr 96px 40px;gap:8px;align-items:center;font:400 15px/1.25 var(--font);margin:3px 0}
+#strip .pn{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+#strip .pv{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#strip .bar{height:8px;border-radius:4px;background:rgba(20,22,28,.12);overflow:hidden}
+#strip .bar i{display:block;height:100%;background:var(--pass)}
+#strip .part.low .bar i{background:#b45309} #strip .part.low .pc{color:#8a3c06;font-weight:700}
+#strip .pc{text-align:right}
+#strip .verdict{font:600 15px/1.3 var(--font);margin:8px 0 2px}
+#strip .amber .verdict{color:#7a3306}
+#strip .dym{font:700 17px/1.2 var(--font);margin:10px 0 6px}
+#strip .opts{display:flex;flex-wrap:wrap;gap:6px}
+#strip .opts .fixbtn{height:38px;font-size:14px;padding:0 12px}
+#strip .ans{display:grid;grid-template-columns:auto auto 1fr;gap:8px;align-items:baseline;font:400 15px/1.3 var(--font);margin:4px 0}
+#strip .an{font-weight:600} #strip .word.yes{color:var(--pass)} #strip .word.no{color:var(--fail)}
+#strip .ad{color:var(--muted)}
+#strip .quiet{font:400 15px/1.35 var(--font);color:var(--muted)}
+#strip .caps{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;margin:8px 4px 0;font:400 13px/1.3 var(--font);color:var(--muted)}
+#strip .caps span:last-child{grid-column:3}
+
+/* ---------- Projector (1920 px): six questions as short names (the asked ones as sentences), the tools and Show me fit in one dock ---------- */
+@media (max-width:2300px){
+  .chip{font-size:15px;padding:0 9px 0 6px;gap:6px}
+  #picker{gap:4px}
+  .later{padding:0 0 0 6px}
+  .chip kbd,.tool kbd{display:none}
+  .tool{padding:0 9px}
+}
+
+/* ---------- Below 2200 px six questions do not fit as sentences: the chip shows the short name, and its label keeps the question.
+   From 1501 px up, a chip that is asked shows its question, so the dock says what is being answered ---------- */
+@media (max-width:2199px){
+  .chip .ask{display:none}
+  .chip .short{display:inline}
+}
+@media (min-width:1501px) and (max-width:2199px){
+  .chip.sel .ask{display:inline}
+  .chip.sel .short{display:none}
+}
+
+/* ---------- Laptop (1366 px): the dock, the tools and Show me fit in one row ---------- */
+@media (max-width:1500px){
+  .chip{font-size:15px;padding:0 12px 0 8px;gap:8px}
+  .chip kbd,.tool kbd{display:none}
+  .tool{padding:0 12px}
+  #btnEscape{padding:0 20px 0 24px}
+}
+
+/* ---------- Short screens (768 px): the fix sheet keeps its foot buttons in view ---------- */
+@media (max-height:820px){
+  #sheet{bottom:var(--dockb);max-height:calc(100vh - var(--dockb) - 20px);padding:8px 8px 6px}
+  #sheet .lbl{padding:2px 8px 4px}
+  .fcard{padding:6px 8px}
+  .fcard .who{margin-bottom:4px}
+  .fcard .rs{margin-top:4px}
+  .fcard .fx{margin-top:6px}
+  .fcard .fx .fixbtn{height:38px}
+}
+
+/* ---------- Narrow (701 to 1100 px): the chips show the short name so the dock fits ---------- */
+@media (max-width:1100px){
+  .chip .ask{display:none}
+  .chip .short{display:inline}
+  :root{--dockb:164px}
+  #dock{border-radius:30px}
+  .dock-full{flex-wrap:wrap;justify-content:center;row-gap:6px}
+  #picker{flex-basis:100%;justify-content:center}
+  /* the floor rail would sit over the model left of a panel, so it waits while one is open */
+  body:has(#sheet.on) #floors,body:has(#banner.on) #floors,body.editing #floors{display:none}
+  body:has(#sheet.on) #hint:not(.open){max-width:calc(100vw - 452px)} /* wraps clear of the fix sheet */
+  /* the taller dock leaves less height; the sheet's top stays on screen and below the summary pill */
+  #sheet{max-height:calc(100vh - var(--dockb) - 84px)}
+}
+/* 701 to 1400 px (where a centred panel reaches the sheet): the Answers panel opens in the free column left of the fix sheet or the all-yes banner, never over them */
+@media (max-width:1400px) and (min-width:701px){
+  body:has(#sheet.on) #scorePanel,body:has(#banner.on) #scorePanel{left:16px;transform:none;width:min(560px,calc(100vw - 436px));animation:sheetIn .4s var(--soft);z-index:5} /* over Hint and the strip in that column */
+}
 
 /* ---------- Compact (phone) ---------- */
 @media (max-width:700px){
-  #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;border-radius:30px}
+  :root{--dockb:192px}
+  #floors{display:none} /* no room beside the model on a phone; drag and pinch still move the view */
+  #picker{flex-wrap:wrap;row-gap:6px}
+  #summary{max-width:calc(100vw - 16px)}
+  #summary .schips{display:none} /* six chips do not fit; the count says it and the sheet lists each */
+  .tool{padding:0 9px;font-size:14px}
+  #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;width:auto;border-radius:30px}
   .dock-full{flex-wrap:wrap;row-gap:6px;width:100%}
   #picker{flex-basis:100%}
-  #picker .chip{flex:1;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
+  #picker .chip{flex:1 1 30%;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
   #picker .dot{width:24px;height:24px;font-size:13px}
   .scroller{flex:1;padding:2px 22px 2px 2px;-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent 96%)}
   .scroller > .sep:first-of-type{display:none}
@@ -193,17 +328,33 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
   .tools{order:-1}
   #btnEscape{height:52px;padding:0 18px;font-size:18px;margin-left:4px}
   #btnEscape kbd{display:none}
-  #dock.slim{left:50%;right:auto;transform:translateX(-50%)}
+  #dock.slim{left:50%;right:auto;width:max-content;transform:translateX(-50%)}
   #summary{top:30px;padding:8px 10px 8px 16px;gap:10px;font-size:16px;flex-wrap:wrap;justify-content:center;border-radius:28px;row-gap:8px;width:max-content;white-space:normal}
-  #summary .vbar,#summary .caret,.chip kbd,.glabel{display:none}
+  #summary .vbar,#summary .caret,.chip kbd,.glabel,.chip .ask{display:none}
+  .chip .short{display:inline}
   #summary .sline{flex-basis:100%;justify-content:center;gap:8px}
   .schip .word{font-size:16px}
-  #scorePanel{top:120px}
-  #sheet{left:8px;right:8px;width:auto;bottom:136px;max-height:45vh}
-  #editPanel{bottom:136px;left:8px;right:8px;width:auto}
-  #banner{top:128px}
+  #scorePanel{top:120px;max-height:calc(100vh - 440px)}
+  #sheet{left:8px;right:8px;width:auto;bottom:var(--dockb);max-height:45vh}
+  #editPanel{bottom:var(--dockb);left:8px;right:8px;width:auto}
+  #strip,body.editing #strip{top:96px;bottom:auto;left:8px;right:8px;width:auto;max-height:50vh;overflow:auto}
+  #strip .boxes{grid-template-columns:1fr} #strip .arrow,#strip .caps{display:none}
+  #hint:not(.open){right:auto;width:max-content}
+  body:has(#sheet.on) #hint:not(.open){max-width:calc(100vw - 16px)}
+  #hint,body.editing #hint{top:calc(114px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
+  #banner{left:8px;right:8px;width:auto;bottom:var(--dockb)}
+  #votes{top:auto;bottom:var(--dockb);left:8px;right:8px;width:auto;max-height:35vh}
+  body.editing #votes,body:has(#sheet.on) #votes,body:has(#banner.on) #votes{display:none}
   #banner .sub{font-size:16px}
 }
+#loading{position:fixed;left:50%;top:84px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:999px;font:600 15px/1.2 var(--font);color:var(--ink)}
+#loading.on{display:flex}
+#credit{position:fixed;right:10px;bottom:2px;display:none;padding:1px 8px;border-radius:8px;background:rgba(255,255,255,.82);font:500 12px/1.4 var(--font);color:var(--muted);pointer-events:none}
+#credit.on{display:block}
+@media (max-width:700px){#credit{bottom:auto;top:2px;right:2px;font-size:11px}}
+/* With the fix sheet or the all-yes banner on the right, the summary centres in the space left of it, as the model does */
+/* ...but never past the left edge: on a narrow screen it moves right until its left edge is 16 px in */
+@media (min-width:701px){body:has(#sheet.on):not(:has(#votes.on)) #summary,body:has(#banner.on):not(:has(#votes.on)) #summary{left:calc(50% - 202px);transform:translateX(max(-50%, calc(218px - 50vw)))}}
 @keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}
@@ -213,36 +364,40 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 <body>
 <div id="viewer" aria-label="3D model of the building" role="img"></div>
 <div id="hud">
-  <nav id="dock" class="glass" aria-label="Game controls">
+  <nav id="dock" class="glass" aria-label="Building controls">
     <div class="dock-full">
-      <div id="picker" role="group" aria-label="Pick an object"><span class="later glabel" aria-hidden="true">Place</span></div>
+      <div id="picker" role="group" aria-label="Pick a question"><span class="later glabel" aria-hidden="true">Ask</span></div>
       <div class="scrollwrap"><div class="scroller">
         <span class="sep" aria-hidden="true"></span>
         <div class="tools">
-          <button type="button" class="tool" id="btnEdit" aria-label="Type an edit">Edit <kbd>/</kbd></button>
-          <button type="button" class="tool" id="btnReset">Reset <kbd>R</kbd></button>
+          <button type="button" class="tool" id="btnEdit" aria-label="Edit the building">Edit <kbd>/</kbd></button>
+          <button type="button" class="tool" id="btnReset">Undo edits <kbd>R</kbd></button>
           <button type="button" class="tool" id="btnClear">Clear</button>
         </div>
       </div></div>
-      <button type="button" id="btnEscape" aria-describedby="escHint">Escape! <kbd>Space</kbd></button>
+      <button type="button" id="btnEscape" aria-describedby="escHint">Show me <kbd>Space</kbd></button>
     </div>
-    <div class="dock-slim" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="slimText">Running</span></div>
+    <div class="dock-slim" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="slimText">Checking</span></div>
   </nav>
   <button type="button" id="summary" class="glass" aria-expanded="false" aria-controls="scorePanel"></button>
-  <div id="scorePanel" class="glass" role="region" aria-label="Scoreboard"></div>
+  <div id="scorePanel" class="glass" role="region" aria-label="Answers"></div>
   <div id="note" role="status"></div>
-  <div id="banner" role="status"><div class="big">LEVEL COMPLETE</div><div class="sub" id="bannerSub">Every object got out of the building</div></div>
-  <div id="sheet" class="glass" role="region" aria-label="Fixes"></div>
-  <div id="editPanel" class="glass" role="dialog" aria-label="Type an edit">
-    <div class="ehead"><label for="editInput">Type an edit</label><button type="button" class="tool" id="editClose">Close <kbd>Esc</kbd></button></div>
+  <div id="banner" class="glass" role="status"><div class="big" id="bannerBig">Yes</div><div class="sub" id="bannerSub"></div></div>
+  <div id="sheet" class="glass" role="region" aria-label="Suggested fixes"></div>
+  <div id="editPanel" class="glass" role="dialog" aria-label="Edit the building">
+    <div class="ehead"><label for="editInput">Edit the building</label><button type="button" class="tool" id="editClose">Close <kbd>Esc</kbd></button></div>
     <form class="row" id="editForm" autocomplete="off">
       <input id="editInput" type="text" placeholder="For example: widen the lobby door to 1.6 m" />
-      <button type="submit" class="fixbtn">Apply</button>
+      <button type="submit" class="fixbtn" id="editApply">Apply</button>
     </form>
     <div class="quick" id="quick"></div>
-    <div id="jev" role="alert"></div>
   </div>
-  <span id="escHint" hidden>Place an object first</span>
+  <div id="strip" class="glass" role="region" aria-label="Who decided" aria-live="polite"></div>
+  <div id="hint" class="glass" role="region" aria-label="Hint" aria-live="polite"></div>
+  <div id="votes" class="glass" role="region" aria-label="Review panel" aria-live="polite"></div>
+  <div id="loading" class="glass" role="status"><span class="spinner" aria-hidden="true"></span>Loading the city around the tower</div>
+  <div id="credit">City block: Cityweft. Map data: OpenStreetMap contributors</div>
+  <span id="escHint" hidden>Pick a question first</span>
 </div>
 <script type="module" src="/app/main.ts"></script>
 </body>

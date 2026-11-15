@@ -6,7 +6,7 @@
 **Produces:** `createViewer(container)` returning `{ show(building, results), setBackdrop(object), setCovered(ids) }` (`viewer/index.ts`).
 `setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). The graph's
 rooms are self-made, so the viewer draws no box for them; only each exit gets a label. `setCovered`
-takes node ids the backdrop stands in for: the camera frames, and the grid spans, only the other
+takes node ids the backdrop stands in for: the camera frames only the other
 nodes' boxes (routes still use every node).
 Mouse: the wheel zooms (0.1x close to 60x far); left-drag orbits the camera around the model; right-drag
 (or shift-drag) pans; double-click returns to the framed, isometric view.
@@ -21,14 +21,19 @@ tested without a browser.
 
 Tier 1 (#5), restyled to Liquid Glass v2 (`design/look.md`). Every `show()` re-runs all tokens,
 `MOTION.staggerSeconds` apart. Each token, a tile with its glyph, travels the route dots along
-its `path`, which goes through the door between rooms. On a fail it shakes, and a blinking red
-X pops above `blocked_at` with a label: "CHILLER  TOO NARROW / Plant shaft: needs 1.6 m, has
+its `path`, which goes through the door between rooms. On a No it shakes, and a blinking red
+X pops above `blocked_at` with a label: "Chiller: too narrow / Plant shaft: needs 1.6 m, has
 1.2 m". Labels go right, left or above their X, whichever overlaps least. When every token
-passes, LEVEL COMPLETE shows.
+passes, the Yes to all banner shows.
 
 `createViewer(container, { insetRight })`: pixels on the right covered by a floating panel.
-The model and LEVEL COMPLETE centre in the space left of it. The canvas is transparent, so the
+The model and the Yes to all banner centre in the space left of it. The canvas is transparent, so the
 page backdrop shows through.
+
+`viewer.focusLevel(id)` glides the camera up or down the tower until that floor (one passed to
+`setFloors`) is in the middle of the view, and the open floor follows it. The `onFocus` option says
+which floor is in the middle when the view changes by other means (a pan, a zoom). Reduced motion
+jumps. The floor scroller in `app/scroller-view.ts` drives it.
 
 Dev page: `npm run dev`, then open http://localhost:5173/viewer/dev.html (add `&inset=372` to
 mimic the app's side panel). It plays each case in `data/expected.json`. Tokens whose rule the
@@ -40,3 +45,10 @@ the `1.2 < 1.6 m` callout, the fail freeze), the edit flash, and the asks in `de
 
 Go/no-go at 15:30: if a token does not read clearly moving through the cutaway, switch to 2D
 stacked plans (one SVG per level) and keep 3D on a branch.
+
+## Smoke tint
+
+`viewer.setSmoke({ steps, secondsPerStep })` tints each node of the slice the smoke has reached
+(`viewer/smoke.ts`, tested): one translucent block per node, denser near the source, shown from
+`step * secondsPerStep` seconds after `show()`, and all at once with reduced motion. Tower floors the
+backdrop stands in for get none. `setSmoke(null)` clears it.

@@ -36,6 +36,15 @@ test('status marks reach 3:1 on the background (graphics)', () => {
   assert.ok(contrastRatio(FAIL, BACKGROUND) >= 3);
 });
 
+// The dock draws a glyph with antialiasing over a 2 px ink ring; a colour at exactly 4.5:1 measured
+// 4.47:1 on screen (the legibility check). A tenth of margin keeps the drawn glyph at AA.
+test('every glyph keeps a margin over 4.5:1 (4.6:1), so it still passes once drawn', () => {
+  for (const [d, s] of Object.entries(DISCIPLINE_STYLE)) {
+    const r = contrastRatio(s.glyphInk, s.color);
+    assert.ok(r >= 4.6, `${d} glyph ${s.glyphInk} on ${s.color} is ${r.toFixed(2)}:1`);
+  }
+});
+
 test('every glyph reaches 4.5:1 on its discipline colour', () => {
   for (const [d, s] of Object.entries(DISCIPLINE_STYLE)) {
     const r = contrastRatio(s.glyphInk, s.color);

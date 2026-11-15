@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, shiftCenter, toLocal, MAX_AREA_KM2,
+  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, describeLimit, isConnectError, retryAfterMs, retryDelayMs, shiftCenter, toLocal, MAX_AREA_KM2, MAX_ATTEMPTS, MAX_WAIT_MS,
 } from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
@@ -123,4 +123,105 @@ test('toLocal gives block metres: x north and z east from the south-west corner'
   assert.ok(Math.abs(north.x - 750) < 1e-6 && Math.abs(north.z - 400) < 1e-6);
   const east = at(shiftCenter(centre, 0, 100));
   assert.ok(Math.abs(east.z - 500) < 1e-6 && Math.abs(east.x - 400) < 1e-6);
+});
+
+// Retries: https://cityweft.gitbook.io/docs/getting-started/api-reference.md lists 503 (busy, with
+// Retry-After). https://cityweft.gitbook.io/docs/basics/usage-limits.md: "Don't retry a 429
+// automatically" and show its message. Every successful request is billed by area, so only answers
+// that say the request was not served (503) and errors before the request left (connect errors) retry.
+const NOW = Date.parse('2026-11-15T12:00:00Z');
+
+test('a busy answer (503) and a connect error (status 0) are retried', () => {
+  assert.ok(retryDelayMs(503, 1, null, () => 0.5, NOW)! > 0);
+  assert.ok(retryDelayMs(0, 1, null, () => 0.5, NOW)! > 0);
+});
+
+test('nothing else is retried: 429 (usage limit), 402, 400, 401, and 500/502/504 (may have been billed)', () => {
+  for (const s of [200, 400, 401, 402, 404, 429, 500, 502, 504]) {
+    assert.equal(retryDelayMs(s, 1, '3', () => 0.5, NOW), null, `status ${s}`);
+  }
+});
+
+test('Retry-After in seconds or as an HTTP date is honoured', () => {
+  assert.equal(retryDelayMs(503, 1, '7', () => 0.5, NOW), 7000);
+  assert.equal(retryDelayMs(503, 1, 'Sun, 15 Nov 2026 12:00:30 GMT', () => 0.5, NOW), 30_000);
+  assert.equal(retryDelayMs(503, 1, 'Sun, 15 Nov 2026 11:59:00 GMT', () => 0.5, NOW), 0); // already past
+});
+
+test('a Retry-After longer than the longest wait gives up instead of calling back early', () => {
+  assert.equal(retryDelayMs(503, 1, '9999', () => 0.5, NOW), null);
+  assert.equal(retryDelayMs(503, 1, 'Mon, 16 Nov 2026 12:00:00 GMT', () => 0.5, NOW), null);
+  assert.ok(retryDelayMs(503, 1, String(MAX_WAIT_MS / 1000), () => 0.5, NOW)! <= MAX_WAIT_MS);
+});
+
+test('an unreadable Retry-After falls back to the doubling wait', () => {
+  // only delay-seconds or an IMF-fixdate in GMT count; Date.parse alone reads '1.5' as a year
+  const backoff = retryDelayMs(503, 1, null, () => 0, NOW);
+  for (const v of ['soon', '1.5', '2.5', '-5', 'Sun Nov 15 12:00:30 2026', '2026-11-15T12:00:30Z']) {
+    assert.equal(retryDelayMs(503, 1, v, () => 0, NOW), backoff, v);
+  }
+});
+
+test('retryAfterMs reads what the server asked for, for the give-up message', () => {
+  assert.equal(retryAfterMs('9999', NOW), 9_999_000);
+  assert.equal(retryAfterMs('Sun, 15 Nov 2026 12:00:30 GMT', NOW), 30_000);
+  assert.equal(retryAfterMs('1.5', NOW), null);
+  assert.equal(retryAfterMs(null, NOW), null);
+});
+
+test('without Retry-After the wait doubles each attempt, with jitter, and stays under five minutes', () => {
+  const lo = (a: number) => retryDelayMs(503, a, null, () => 0, NOW)!;
+  const hi = (a: number) => retryDelayMs(503, a, null, () => 0.999, NOW)!;
+  assert.ok(lo(2) >= 2 * lo(1) - 1 && lo(3) >= 2 * lo(2) - 1, 'doubles');
+  assert.ok(hi(1) > lo(1), 'jitter');
+  assert.ok(hi(4) < 5 * 60 * 1000);
+});
+
+test('at most MAX_ATTEMPTS tries, and all the waits add up to under ten minutes', () => {
+  assert.equal(retryDelayMs(503, MAX_ATTEMPTS, null, () => 0.5, NOW), null);
+  assert.ok(MAX_ATTEMPTS <= 5);
+  let total = 0;
+  for (let a = 1; a < MAX_ATTEMPTS; a++) total += retryDelayMs(503, a, String(MAX_WAIT_MS / 1000), () => 0.999, NOW)!;
+  assert.ok(total < 10 * 60 * 1000, `${total} ms`);
+});
+
+test('only an error before the request left counts as a connect error', () => {
+  const connect = new TypeError('fetch failed', { cause: Object.assign(new Error('x'), { code: 'ECONNREFUSED' }) });
+  const dns = new TypeError('fetch failed', { cause: Object.assign(new Error('x'), { code: 'ENOTFOUND' }) });
+  const reset = new TypeError('fetch failed', { cause: Object.assign(new Error('x'), { code: 'ECONNRESET' }) });
+  const badHeader = new TypeError('Headers.append: "Bearer cw_FAKE\nX" is an invalid header value.');
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  assert.equal(isConnectError(connect), true);
+  assert.equal(isConnectError(dns), true);
+  assert.equal(isConnectError(reset), false); // may have reached the server
+  assert.equal(isConnectError(badHeader), false);
+  assert.equal(isConnectError(timeout), false);
+  assert.equal(isConnectError('nope'), false);
+});
+
+test('a usage-limit answer shows its message, when it resets and what is left', () => {
+  const line = describeLimit({
+    code: 'USAGE_LIMIT_REACHED', remainingKm2: 0.2, requestKm2: 0.4, resetsAt: '2026-12-06T09:00:00.000Z',
+    message: 'This token has 0.2 km2 left.\nRaise it at https://app.cityweft.com/api-tokens.',
+  });
+  assert.match(line, /^429: /);
+  assert.match(line, /0\.2 km2 left/);
+  assert.match(line, /2026-12-06T09:00:00\.000Z/);
+  assert.doesNotMatch(line, /\n/); // control characters from the body are flattened
+});
+
+test('a usage-limit body that is missing or odd still gives a plain 429 line, and never echoes a key', () => {
+  assert.equal(describeLimit(null), describeStatus(429));
+  assert.equal(describeLimit('x'), describeStatus(429));
+  assert.doesNotMatch(describeLimit({ message: 'key cw_live_abcDEF123 is paused' }), /cw_live_abcDEF123/);
+  const key = 'cw_ab.c+d/e=f';
+  const echoed = describeLimit({ message: `token ${key} and cw_ab\u0000.c+d/e=f`, resetsAt: key }, key);
+  assert.doesNotMatch(echoed, /\.c\+d\/e=f/); // the real key is masked whole, whatever its characters
+  assert.doesNotMatch(describeLimit({ message: 'a\u009bb\u202ec' }), /[\u009b\u202e]/u); // C1 and format controls
+
+  assert.ok(describeLimit({ message: 'x'.repeat(5000) }).length < 600);
+});
+
+test('the status line names 429', () => {
+  assert.match(describeStatus(429), /^429/);
 });

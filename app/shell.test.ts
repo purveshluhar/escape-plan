@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
-import { demoButtons } from './state.ts';
+import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, stepShown, togglePlaced, tokenCaption, withStarts, openable, focusFloor } from './shell.ts';
+import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
 const building = read('../data/building.json') as Building;
@@ -38,12 +38,16 @@ test('phase and summary words', () => {
   assert.equal(phaseAfterRun([res('chiller', 'pass'), res('glass', 'pass')]), 'complete');
   assert.equal(phaseAfterRun([res('chiller', 'pass'), res('glass', 'fail')]), 'result');
   assert.equal(phaseAfterRun([]), 'result');
-  assert.equal(countText('empty', 0, null), 'Pick an object to place it');
-  assert.equal(countText('placed', 2, null), '2 placed');
-  assert.equal(countText('running', 3, null), '3 escaping');
-  assert.equal(countText('result', 2, [res('chiller', 'pass'), res('glass', 'fail')]), '1 of 2 out');
-  assert.equal(runSeconds(0, 2, 0.25), 0);
-  assert.equal(runSeconds(4, 2, 0.25), 2.75);
+  assert.equal(countText('empty', 0, null), 'Pick a question to start');
+  assert.equal(countText('placed', 1, null), '1 question');
+  assert.equal(countText('placed', 2, null), '2 questions');
+  assert.equal(countText('running', 3, null), '3 routes');
+  assert.equal(countText('result', 2, [res('chiller', 'pass'), res('glass', 'fail')]), '1 yes, 1 no');
+  assert.equal(countText('result', 1, [res('glass', 'fail')]), 'No');
+  assert.equal(countText('complete', 3, [res('a', 'pass'), res('b', 'pass'), res('c', 'pass')]), '3 of 3 yes');
+  assert.equal(countText('complete', 1, [res('a', 'pass')]), 'Yes', 'one question answered yes reads Answer | Yes');
+  assert.deepEqual((['empty', 'placed', 'running'] as const).map((p) => phaseWord(p, 2)), ['Your building', 'Ready', 'Checking']);
+  assert.deepEqual([phaseWord('result', 1), phaseWord('result', 2), phaseWord('complete', 1), phaseWord('complete', 3)], ['Answer', 'Answers', 'Answer', 'Yes to all']);
 });
 
 test('parse: a clear sentence becomes one text edit', () => {
@@ -71,9 +75,161 @@ test('parse: a vague sentence asks "Did you mean" with the closest fixes first',
   assert.equal(parseEdit('hello there', buttons).edit, null);
 });
 
+test('parse: short phrases that name one fix apply (audit gap 8)', () => {
+  assert.deepEqual(parseEdit('ramp terrace', buttons).edit, { op: 'add_ramp', target: 'terrace-door', value: null, source: 'text' });
+  assert.deepEqual(parseEdit('widen shaft 2.0', buttons).edit, { op: 'widen', target: 'plant-shaft', value: 2, source: 'text' });
+  assert.deepEqual(parseEdit('transfer beam', buttons).edit, { op: 'add_transfer_beam', target: 'beam-b2', value: null, source: 'text' });
+});
+
+test('parse: a word shared by several fixes, or no part at all, still asks', () => {
+  assert.equal(parseEdit('widen the door to 2 m', buttons).edit, null, '"door" names three fixes');
+  assert.equal(parseEdit('widen the corridor', buttons).edit, null, 'three widen fixes, none named');
+  assert.equal(parseEdit('make the lobby bigger', buttons).edit, null);
+});
+
+test('parse: negations, questions and words of other fixes never apply (review C1)', () => {
+  for (const s of [
+    'do not widen the shaft', 'no transfer beam', 'undo ramp terrace', 'remove the ramp terrace',
+    'is the terrace step a ramp?', 'ramp lobby', 'ramp the office', 'widen beam 2', 'beam', 'transfer',
+    'widen shaft 20', 'widen shaft 0.1', 'widen shaft and terrace 2', "don't widen the lobby door to 1.6 m",
+  ]) assert.equal(parseEdit(s, buttons).edit, null, s);
+});
+
+test('parse: hedges, other units, signs and two numbers never apply (review round 2)', () => {
+  for (const s of [
+    "won't ramp terrace", 'stop ramp terrace', 'ramp terrace isnt needed', 'should I ramp terrace', 'maybe ramp terrace',
+    'step', 'the stairs need a step', 'widen the shaft by 2 cm', 'widen shaft -2', 'widen shaft 2.0 metres or maybe 3',
+    'widen lobby door 1,5', 'widen the lobby door from 1.2 to 1.5', 'widen the lobby door to 1.5 feet',
+  ]) assert.equal(parseEdit(s, buttons).edit, null, s);
+});
+
+test('typed edits are read against every demo fix, so the shaft and the beam are known', () => {
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  assert.match(main, /const typedFixes = demoButtons\(base, expected\)/);
+  assert.match(main, /readEdit\(text, typedFixes, building/);
+});
+
 test('the page has no Later group and no sample label', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(page, /laterGroup|id="sample"|#sample/);
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(main, /laterGroup|\$\('sample'\)|self-made sample building/);
+});
+
+test('a drop places the object without taking it off, and keeps building order', () => {
+  const [a, b] = building.tokens.map((t) => t.id);
+  assert.deepEqual(dropPlaced(building, [], b!), [b]);
+  assert.deepEqual(dropPlaced(building, [b!], a!), [a, b]);
+  assert.deepEqual(dropPlaced(building, [a!, b!], a!), [a, b], 'a second drop moves it; it never takes it off');
+});
+
+test('a dropped start replaces the start room; the base building is not changed', () => {
+  const mvp = building;
+  const moved = withStarts(mvp, new Map([['wheelchair', 'lobby'], ['sofa', 'no-such-node']]));
+  assert.equal(moved.tokens.find((t) => t.id === 'wheelchair')?.start, 'lobby');
+  assert.equal(moved.tokens.find((t) => t.id === 'sofa')?.start, 'lobby', 'an unknown node is ignored');
+  assert.equal(mvp.tokens.find((t) => t.id === 'wheelchair')?.start, 'terrace');
+  assert.equal(withStarts(mvp, new Map()), mvp);
+});
+
+test('the solver answers from the dropped start: the wheelchair off the terrace misses the step', () => {
+  const mvp = building;
+  const at = (b: Building, id: string): SolverResult => run(b, initialState()).results.find((r) => r.token === id)!;
+  assert.equal(at(mvp, 'wheelchair').reason, 'step');
+  const fromLobby = at(withStarts(mvp, new Map([['wheelchair', 'lobby']])), 'wheelchair');
+  assert.equal(fromLobby.status, 'pass');
+  assert.equal(fromLobby.path[0], 'lobby');
+  const fromTower = at(withStarts(mvp, new Map([['wheelchair', 'T10-u1']])), 'wheelchair');
+  assert.equal(fromTower.path[0], 'T10-u1');
+});
+
+test('a selected object says where it is and how it did', () => {
+  const mvp = building;
+  assert.equal(tokenCaption(mvp, 'wheelchair', null), 'Wheelchair - Terrace - Ready');
+  const fail: SolverResult = { ...res('wheelchair', 'fail'), reason: 'step', blocked_at: 'terrace-door' };
+  assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - No: step in the way');
+  assert.equal(tokenCaption(mvp, 'wheelchair', res('wheelchair', 'pass')), 'Wheelchair - Terrace - Yes');
+  assert.equal(tokenCaption(mvp, 'wheelchair', null, true), 'Wheelchair - Terrace - Checking', 'during a run');
+});
+
+test('the all-yes banner shows with the Answers panel open, in the empty fix sheet slot, never over the panel', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /body\.scoring #banner\.on\{display:none\}/);
+  assert.match(page, /#banner\{position:fixed;right:24px;bottom:var\(--dockb\);/, 'the banner sits where the fix sheet sits (empty when all is yes)');
+  assert.match(page, /#sheet\{position:fixed;right:24px;bottom:var\(--dockb\);/, 'the fix sheet sits in the same slot');
+  const laptop = page.slice(page.indexOf('@media (max-width:1500px)'));
+  assert.doesNotMatch(laptop.slice(0, laptop.indexOf('}\n}')), /#btnEscape kbd/, 'Show me keeps its Space hint on a laptop');
+});
+
+test('the page puts no game words in front of people', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const body = page.slice(page.indexOf('<body>'));
+  for (const w of [/level complete/i, /escape!/i, /scoreboard/i, /\bgame\b/i, /\bPASS\b/, /\bFAIL\b/, /\bobject\b/i, /\bplace an\b/i]) {
+    assert.doesNotMatch(body, w);
+  }
+  assert.match(body, />Show me <kbd>Space<\/kbd><\/button>/);
+  assert.match(page, /<title>Escape Plan - ask your building<\/title>/);
+});
+
+test('a token that starts on a member (the load) never takes a floor start', () => {
+  const kept = withStarts(building, new Map([['load', 'plant'], ['sofa', 'office']]));
+  assert.equal(kept.tokens.find((t) => t.id === 'load')!.start, 'beam-b2');
+  assert.equal(kept.tokens.find((t) => t.id === 'sofa')!.start, 'office');
+});
+
+test('keys: Space and Enter run Show me on the page, but on a focused button they press that button', () => {
+  assert.equal(showMeKey(' ', false), true);
+  assert.equal(showMeKey('Enter', false), true);
+  assert.equal(showMeKey(' ', true), false);
+  assert.equal(showMeKey('Enter', true), false);
+  assert.equal(showMeKey('a', false), false);
+});
+
+test('each dock question has its own glyph, led by its name (the sofa is not "G" for glass)', () => {
+  const items = pickerItems(building, ['wheelchair', 'sofa', 'people', 'chiller', 'load', 'smoke']);
+  for (const it of items) assert.equal(it.glyph.charAt(0), it.label.charAt(0), `${it.label} glyph ${it.glyph}`);
+  assert.equal(new Set(items.map((i) => i.glyph)).size, items.length, 'no two glyphs are the same');
+});
+
+test('the smoke caption gives the answer as the people\'s, not as if the smoke were stuck at a door', () => {
+  const smoke = (building as Building).tokens.some((t) => t.id === 'smoke') ? building : null;
+  const b = smoke ?? { ...building, tokens: [...building.tokens, { ...building.tokens[0]!, id: 'smoke' }] };
+  const no: SolverResult = { ...res('smoke', 'fail'), reason: 'too_narrow' };
+  const caption = tokenCaption(b, 'smoke', no);
+  assert.match(caption, /People: No, too narrow$/, caption);
+  assert.match(tokenCaption(b, 'smoke', res('smoke', 'pass')), /People: Yes$/);
+  assert.match(tokenCaption(b, 'smoke', null), /Ready$/);
+});
+
+test('zoomed in, an arrow step skips floors the view cannot open, so the question never lands out of sight', async () => {
+  const { withSmoke } = await import('../data/smoke.ts');
+  const { drawnLevels } = await import('../data/typical-floors.ts');
+  const { stepLevel } = await import('../viewer/drop.ts');
+  const b = withSmoke(building);
+  const shown = new Set(drawnLevels(b));
+  const levelOf = (id: string | null): string | undefined => b.nodes.find((n) => n.id === id)?.level;
+  const start = 'unit1-living'; // Level 2, one floor up from the wheelchair's terrace; the plant floor above is not drawn
+  assert.ok(!shown.has(levelOf(stepLevel(b, start, 1))!), 'the plain step goes to a floor that is not drawn (the reason for this test)');
+  const to = stepShown(b, start, 1, (lv) => shown.has(lv));
+  assert.ok(to !== null, 'there is a drawn floor above');
+  assert.ok(shown.has(levelOf(to)!), `lands on a drawn floor, got ${levelOf(to)}`);
+  assert.equal(stepShown(b, start, 1, () => true), stepLevel(b, start, 1), 'with every floor shown it is the plain step');
+});
+
+test('zoomed in, the slice floors with no plan (terrace L1, plant L3) stay reachable, and the view follows to a floor it can open', async () => {
+  const { withSmoke } = await import('../data/smoke.ts');
+  const { drawnLevels } = await import('../data/typical-floors.ts');
+  const { stepLevel } = await import('../viewer/drop.ts');
+  const b = withSmoke(building);
+  const drawn = drawnLevels(b);
+  const can = openable(b, drawn);
+  const levelOf = (id: string | null): string | undefined => b.nodes.find((n) => n.id === id)?.level;
+  // Down from Level 2 goes to the terrace on L1, never "already on the bottom floor".
+  assert.equal(levelOf(stepShown(b, 'unit1-living', -1, can)), 'L1');
+  assert.equal(stepShown(b, 'unit1-living', -1, can), stepLevel(b, 'unit1-living', -1));
+  // Up from Level 2 goes to the plant floor, as a drag can.
+  assert.equal(levelOf(stepShown(b, 'unit1-living', 1, can)), 'L3');
+  // The camera can only glide to a drawn floor: for L1 and L3 it goes to the nearest one.
+  for (const lv of ['L1', 'L3']) assert.ok(drawn.includes(focusFloor(b, drawn, lv)), lv);
+  assert.equal(focusFloor(b, drawn, 'L2'), 'L2');
 });

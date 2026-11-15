@@ -2,7 +2,7 @@
   "name": "escape-plan",
   "version": "0.1.0",
   "private": true,
-  "description": "Every discipline has to get out: a live building graph game. Built at AEC Tech NYC 2026.",
+  "description": "Ask your building: can my sofa get in, can my parent's wheelchair get out? A quick check of sizes and routes on a live building graph. Built at AEC Tech NYC 2026.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -16,7 +16,8 @@
     "time-parse": "node --env-file-if-exists=.env server/time-parse.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"contract/**/*.test.ts\" \"solver/**/*.test.ts\" \"viewer/**/*.test.ts\" \"app/**/*.test.ts\" \"design/**/*.test.ts\" \"data/**/*.test.ts\" \"server/**/*.test.ts\"",
-    "check": "npm run typecheck && npm test && npm run build"
+    "test:timing": "node --test --test-concurrency=1 solver/mvp-resolve.timing.ts",
+    "check": "npm run typecheck && npm test && npm run test:timing && npm run build"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

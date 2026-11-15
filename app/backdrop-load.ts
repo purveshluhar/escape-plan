@@ -1,10 +1,11 @@
 // Loads the fetched Cityweft block (git-ignored data/cityweft/) for the viewer's backdrop. Browser
 // only; the placement math is in backdrop.ts. Resolves to null when the block is not on this
-// machine (a fresh clone, or a build: neither has data/cityweft/), so the game keeps the plain
-// ground. Owner: P3.
+// machine (a fresh clone, or a build: neither has data/cityweft/); the game then has no ground
+// under the tower. Owner: P3.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CUT_HEIGHT, backdropMatrix, coversPoint, layerColor, metaToBlock } from './backdrop.ts';
+import { CUT_HEIGHT, backdropMatrix, buildingColors, coversPoint, metaToBlock, roofOrFacade, surfaceColor } from './backdrop.ts';
+import { fadeMaterials } from '../viewer/fade.ts';
 
 const BASE = '/data/cityweft/';
 const CUT = [new THREE.Plane(new THREE.Vector3(0, -1, 0), CUT_HEIGHT)]; // keeps y <= CUT_HEIGHT
@@ -29,6 +30,24 @@ async function readMeta(): Promise<Meta | null> {
   }
 }
 
+// Colour one Cityweft building from its descriptor (userData.descriptor): per-vertex facade and
+// roof colours (linear RGB, as three expects for vertex colours) and the shared `material`. A
+// vertex is roof when its normal looks up in the world, so any node rotation works. Needs the
+// mesh's matrixWorld up to date.
+const linear = (hex: string): number[] => new THREE.Color(hex).toArray();
+export function colourBuilding(mesh: THREE.Mesh, material: THREE.Material): void {
+  const geometry = mesh.geometry as THREE.BufferGeometry;
+  if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+  const { facade, roof } = buildingColors(mesh.userData.descriptor);
+  const normal = geometry.getAttribute('normal');
+  const toWorld = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+  const v = new THREE.Vector3();
+  // the world up part of each normal (interleaved or quantised normals too)
+  const up = Float32Array.from({ length: normal.count }, (_, i) => v.fromBufferAttribute(normal, i).applyMatrix3(toWorld).normalize().y);
+  geometry.setAttribute('color', new THREE.BufferAttribute(roofOrFacade(up, linear(facade), linear(roof)), 3));
+  mesh.material = material;
+}
+
 export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   const meta = await readMeta();
   if (!meta) return null;
@@ -40,7 +59,10 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   // The real 432 Park Avenue: the building whose footprint covers the target. Our own model stands
   // in its place, so it is cut, and its footprint centre and base anchor the whole block.
   let tower: { mesh: THREE.Object3D; box: THREE.Box3 } | null = null;
+  // Colours come from each mesh's Cityweft descriptor (glTF mesh extras, in userData). Buildings
+  // share one vertex-colour material (facade and roof per vertex); the ground shares one per colour.
   const mats = new Map<string, THREE.Material>();
+  const buildingMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: CUT });
   block.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const name = o.name || o.parent?.name || '';
@@ -48,8 +70,10 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
       const box = new THREE.Box3().setFromObject(o);
       const covers = coversPoint({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z }, target);
       if (covers && (!tower || box.max.y > tower.box.max.y)) tower = { mesh: o, box };
+      colourBuilding(o, buildingMat);
+      return;
     }
-    const color = layerColor(name);
+    const color = surfaceColor(o.userData.descriptor, name);
     let mat = mats.get(color);
     if (!mat) {
       mat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, clippingPlanes: CUT });
@@ -72,4 +96,11 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   placed.add(block);
   placed.userData = { removedTower: found?.mesh.name ?? null, anchor, groundY };
   return placed;
+}
+
+// Zoomed in, the city steps back so the open floors read first: `amount` from the viewer's
+// onReveal (0 = full strength, 1 = dimmed to CITY_DIMMED of its opacity).
+export const CITY_DIMMED = 0.4;
+export function dimBlock(block: THREE.Object3D, amount: number): void {
+  fadeMaterials(block, 1 - amount * (1 - CITY_DIMMED));
 }

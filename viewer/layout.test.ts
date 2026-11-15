@@ -124,6 +124,31 @@ test('the view centres the model in the screen left of a side panel, scaled to f
   assert.equal(centrePx, 250);
 });
 
+test('a panel on the left too: the model centres in the free space between the two panels', () => {
+  // 1000 x 500 px canvas, 300 px panel on the left and 200 px on the right: 500 px free, from 300 to 800.
+  const both = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, insetLeft: 300, margin: 1 });
+  const centrePx = ((0 - both.left) / (both.right - both.left)) * 1000;
+  assert.equal(centrePx, 550);
+  // The 20 m model fills the 500 px free span, so 1 m is 25 px.
+  assert.equal(1000 / (both.right - both.left), 25);
+  // With no left panel it is the right-panel case.
+  assert.deepEqual(frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, insetLeft: 0, margin: 1 }),
+    frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, margin: 1 }));
+});
+
+test('a panel along the bottom: the model fits and centres in the free space above it', () => {
+  // 1000 x 500 px canvas, a 250 px strip along the bottom: 1000 x 250 px free, from the top to 250 px.
+  const lifted = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 0, insetBottom: 250, margin: 1 });
+  const centreY = ((lifted.top - 0) / (lifted.top - lifted.bottom)) * 500; // pixels from the top
+  assert.equal(centreY, 125);
+  // The 10 m tall model fills the 250 px free height, so 1 m is 25 px across and down.
+  assert.equal(500 / (lifted.top - lifted.bottom), 25);
+  assert.equal(1000 / (lifted.right - lifted.left), 25);
+  // With no bottom panel it is the plain case.
+  assert.deepEqual(frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, insetBottom: 0, margin: 1 }),
+    frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, margin: 1 }));
+});
+
 test('covered nodes are left out of the drawn boxes, the rest keep their order', () => {
   const boxes = [
     { id: 'a', center: [0, 0, 0], size: [1, 1, 1] },
@@ -192,15 +217,18 @@ test('elevation stays between a low angle and straight down, so the view never f
 });
 
 test('graph marks: no slice room is drawn as a box; their extent still frames the view; only the exit is labelled', async () => {
-  const { withMvpFixture } = await import('../solver/mvp-fixture.ts');
   const { coveredNodes } = await import('../data/typical-floors.ts');
-  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
-  const b = withMvpFixture(real);
+  const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
   const marks = graphMarks(b, new Set(coveredNodes(b)));
   assert.deepEqual(Object.keys(marks).sort(), ['frame', 'labels']); // nothing that draws a box
-  // The slice (L1 to L3 plus the fixture office): x 0..28.5, up to the top of the L3 plant, z 0..37.4 (truck).
+  // The slice (L1 to L3, the office included): x 0..28.5, up to the top of the L3 plant, z 0..37.4 (truck).
   assert.deepEqual(marks.frame, { min: [0, 0, 0], max: [28.5, 14.1732 + STOREY_HEIGHT, 37.4] });
   // The street exit, at street level in the middle of its node.
   assert.deepEqual(marks.labels, [{ id: 'street', at: [14.25, 0, 26.9] }]);
   assert.equal(graphMarks(b, new Set(b.nodes.map((n) => n.id))).frame, null);
+});
+
+test('the viewer draws no ground grid under the building (the real 432 Park and Cityweft ground is the floor)', () => {
+  const viewer = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(viewer, /GridHelper|\bGRID\b/);
 });

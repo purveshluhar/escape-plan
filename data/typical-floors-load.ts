@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Building } from '../contract/types.ts';
+import { fadeMaterials } from '../viewer/fade.ts';
 import { TOWER_CENTRE } from '../app/backdrop.ts';
 import { TOWER_FLOORS } from './tower-floors.ts';
 import {
@@ -15,6 +16,9 @@ export interface TypicalFloor {
   object: THREE.Object3D;
   // Put the floors on the levels of this building (call again after each edit).
   place(b: Building): void;
+  // Open the outside (the viewer's onReveal): the facade fades out by `amount` (0 = solid, 1 = gone),
+  // and while it is open at all, the floors above elevation `cut` are hidden so the plan at `cut` shows.
+  reveal(amount: number, cut: number): void;
 }
 
 // The outside of the tower from the package's complete Lightweight model, or null without it. Only
@@ -69,12 +73,18 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
   sliceFloor.add(slice.clone(true));
   const tower = new THREE.Group();
   object.add(sliceFloor, tower);
+  let facade: THREE.Object3D | null = null;
   try {
-    const facade = await loadFacade();
+    facade = await loadFacade();
     if (facade) object.add(facade);
   } catch (err) {
     console.warn('Facade not loaded:', err); // the floors still show without it
   }
+
+  let open = { amount: 0, cut: Infinity };
+  const showFloors = (): void => {
+    for (const floor of [sliceFloor, ...tower.children]) floor.visible = open.amount <= 0 || floor.position.y <= open.cut + 1e-6;
+  };
 
   return {
     object,
@@ -99,6 +109,14 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
         floor.position.set(...f.position);
         tower.add(floor);
       }
+      showFloors(); // an edit while the facade is open keeps the cut
+    },
+    reveal(amount, cut) {
+      open = { amount, cut };
+      showFloors();
+      if (!facade) return;
+      facade.visible = amount < 1;
+      fadeMaterials(facade, 1 - amount);
     },
   };
 }

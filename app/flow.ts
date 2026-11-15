@@ -117,9 +117,11 @@ export function exitsFor(building: Building, token: Token): ExitOption[] {
 
 // The demo fixes that can help one object (sheet 11): demo buttons whose target matters to it and
 // that are not applied yet. `targets` comes from relevantTargets() in answers.ts.
+// Closing a door helps only against the smoke, so it is never offered here: the sofa stuck at the lobby
+// door is not told to close it. The smoke answer gets its own list (smoke.ts helpfulCloseButtons).
 export function fixesFor(buttons: DemoButton[], targets: Set<Id>, applied: readonly Edit[]): DemoButton[] {
   const done = (e: Edit): boolean => applied.some((a) => a.op === e.op && a.target === e.target && a.value === e.value);
-  return buttons.filter((b) => b.edit.target !== null && targets.has(b.edit.target) && !done(b.edit));
+  return buttons.filter((b) => b.edit.op !== 'close_door' && b.edit.target !== null && targets.has(b.edit.target) && !done(b.edit));
 }
 
 // Tokens that passed before and fail now: the CONFLICT! moment, and the warning on a proposal.

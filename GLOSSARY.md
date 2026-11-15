@@ -3,15 +3,21 @@
 Plain words for every term in `contract/types.ts`. Use these terms in code, tests, issues and UI.
 Units are metres and kN.
 
-## Game
+## Experience
 
-- **Token**: one discipline's thing that must escape the building (chiller, glass panel, ...). Each token has a start, a goal, a size and one rule.
-- **Escape**: run the solver and animate every token along its path.
+- **Question**: what a person asks about their building, such as "Can my sofa get in?". Each question is about one token. The dock chips show the questions.
+- **Answer**: the solver's verdict on one question, shown as **Yes** or **No** (code: status `pass` or `fail`). A No says where the thing is stuck and gives the numbers.
+- **Person**: who asks the question: home buyer, family, owner or manager.
+- **Token**: the code term for one discipline's thing that must get through the building (chiller, glass panel, ...). Each token has a start, a goal, a size and one rule. On screen it is named (Sofa), never called a token.
+- **Show me**: the button that runs the solver and animates every token along its path (code: `escape()`).
+- **Answers panel**: the list of answers, one row per question (code: `app/scoreboard.ts`).
 - **Discipline**: the trade a token stands for: `mep`, `logistics`, `accessibility`, `structure`, `life_safety`, `fire`, `plumbing`, `electrical`.
 - **Edit**: one change to the building, such as widening a door. Every edit re-solves every token.
 - **Re-solve**: run the solver again on the building with all edits applied.
-- **LEVEL COMPLETE**: every token passes.
-- **Red X**: the mark drawn where a token is blocked (`blocked_at`).
+- **Yes to all**: the banner when every answer is Yes (code: phase `complete`).
+- **Undo edits**: the button that removes every edit (code: edit op `reset`).
+- **Suggested fixes**: the sheet with preset edits for a No answer.
+- **Red X**: the mark drawn where a token is blocked (`blocked_at`). On screen the words are "stuck at {Place}".
 - **Tier**: a scope band. Tier 1 must ship. Tier 2 starts when all of tier 1 is green; tier 3 starts when tier 2 is tagged.
 - **Gate**: one step in the ordered list in `docs/plan.md`. It is passed when its condition is green, not at a time. The **MVP gate** (wheelchair, sofa and people green) tags `tier1-demo`. **Feature freeze** (gate 11) allows fixes only.
 - **Expected case**: one hand-checked scenario in `data/expected.json`: a list of edits and the results a person checked.
@@ -23,8 +29,8 @@ Units are metres and kN.
 - **Sofa** (T1, `logistics`, rule `corner_turn`): furniture that must turn corridor corners on its way out.
 - **Wheelchair** (T1, `accessibility`, rule `no_steps`): must reach an exit with no step.
 - **Load** (T1, `structure`, rule `downward`): gravity load that must reach a foundation through supporting members.
-- **People** (T1 for the walk out, T2 for the race with smoke, `life_safety`, rule `shortest_exit`): walk the path with the fewest edges to an exit.
-- **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and races the people.
+- **People** (T1 for the walk out, T2 for people timed against the smoke, `life_safety`, rule `shortest_exit`): walk the path with the fewest edges to an exit.
+- **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and is timed against the people.
 - **Water** (T2, `plumbing`, rule `downhill`): a drain that must fall all the way.
 - **Power** (T3, `electrical`, rule `supply`): electricity from its start node (the building's service entry) through a `panel` node to the kitchen.
 
@@ -79,7 +85,11 @@ Units are metres and kN.
 - **Jev parse**: three typed answers about one sentence: which op, which target, what value, each with a confidence.
 - **Confidence threshold**: 0.8. Below it, the app shows "Did you mean" and the buttons.
 - **Vote**: `accept`, `object` or `review`, with a confidence. Shown as a bubble only.
+- **Review panel**: the vote bubbles after an edit, one per discipline in the data (`POST /votes`). Voted by Strands Decider, or by the rules when no model answers. A vote that says the opposite of the rules is shown as "Rules disagree"; the rules' answer stands.
 - **Plan B**: a general LLM forced to return the same typed answers as Jev.
 - **Plan C**: a keyword parser and the buttons.
+- **Strands Decider**: the open-source (Apache-2.0) typed-decision model that fills Jev's parse slot today, with `DECIDER=strands` (server/README.md). It reads the op and the target only, and votes in the review panel (`POST /votes`); on screen it is named "Strands Decider". ADRs keep the name Jev for history.
+- **Who decided strip**: the panel after a typed edit: the sentence, the reading with a confidence per part, then the rules' answer. Below 0.8 it turns amber, says "Not sure" and changes nothing.
+- **Reader**: who read a typed sentence: Strands Decider (on the server), or the page's own keyword reader (`app/shell.ts parseEdit`) when the server runs keywords, is down, or takes over 2.5 s.
 - **Phone messages** (T3): `join`, `escape`, `vote` from a phone; `result` back to it.
 - **Cityweft** (T2): the source of the city-block backdrop. Its files never enter the repo.
