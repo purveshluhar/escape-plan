@@ -58,11 +58,14 @@ package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, t
      comes from (for example `Typical_4_Apartment_Plan_R001`). The original is kept beside it as
      `432_Park_Avenue_Rooms.original.csv`. Row counts change, because the plans differ in room count.
   3. `whole-tower.ts` turns those plans into graph data: a core per level (lobby, services room or
-     plant for an open mechanical band) joined by lifts, and per apartment a living-room box with a
-     door to the core. Only the tower part of `building.json` is rewritten; the slice is untouched.
+     plant for an open mechanical band) joined by a lift and two egress stairs, and per apartment a
+     living-room box with a door to the core. `sliceJoin` joins the slice to the tower: the express
+     lift from the lobby to level 4, a service lift from the lobby to the L3 plant, and both stairs
+     level by level (lobby, L2 core, L3 plant, level 4). Only the tower part of `building.json` and
+     these join edges are rewritten; the slice's own rooms and edges are untouched.
   4. `tower-floors.ts` (generated, do not edit) records the plan and turn per level for the viewer.
 - `typical-floors.ts` and `typical-floors-load.ts` draw the real floor plan at every apartment level
-  (and the slice's level 10) in the viewer, when the package is on the machine.
+  (and the slice's level 2, which uses level 10's plan) in the viewer, when the package is on the machine.
 - The two package models the viewer draws are in the repo, in `data/432-park/`:
   `432_Park_Avenue_Typical_Plans.glb` (the four floor plans) and `432_Park_Avenue_Lightweight.glb`
   (the complete tower, used for its exterior). They are our own approximate model (a reconstruction
@@ -74,8 +77,19 @@ package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, t
   draw those). Without the file the floors show without a facade.
 - Levels with no plan (lobby, services, open mechanical) get a plain slab and the fixed core as a
   stand-in, using the GLB's own `Slab` and `Core` nodes: the package has no layout for them.
-- Elevations are real (86 levels, 425 m). The package has no door data: doors and lifts are ours.
-- Tests: `tower-plans.test.ts`, `whole-tower.test.ts`, `typical-floors.test.ts`.
+- Elevations are real (86 levels, 425 m). The package has no door, lift or stair data: all doors,
+  lifts and stairs are self-made. Assumed values:
+  - Doors are 1.0 x 2.4 m.
+  - Lifts are 1.2 x 2.4 m. They are edges with no car node, so no car-size check runs.
+  - Stairs A and B are 1.12 m wide with 2.03 m headroom (44 in and 80 in, IBC 2021 1011.2 and
+    1011.3). Each landing is as wide as the stair (corner 1.12 by 1.12 m, IBC 2021 1011.6).
+  - Both stairs come down to the L1 lobby. In a real building at most half the exits may discharge
+    through a lobby (IBC 2021 1028.1). Here the lobby door stays the demo's one way out.
+  - These values come from code minimums as recalled, not checked against the code text.
+- The slice's L2 is level 2: the names say so ("Level 2 core lobby"). It uses level 10's
+  three-apartment plan as a stand-in typical floor. The tower's own level 10 is T10.
+- Tests: `tower-plans.test.ts`, `whole-tower.test.ts`, `typical-floors.test.ts`, and `egress.test.ts`
+  (no drop on any level leaves people, the wheelchair or the sofa with no route out).
 
 ## Tier 1 first task
 

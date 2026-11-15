@@ -4,13 +4,14 @@
 // 2. Rewrites type_assignment in the package's Rooms CSV to the GLB room each room comes from
 //    (the original CSV is kept as 432_Park_Avenue_Rooms.original.csv, which the script reads).
 // 3. Rebuilds the tower part of data/building.json (levels, nodes and edges named T<nn>) from those
-//    plans, and writes data/tower-floors.ts for the viewer. The demo slice L1 to L3 is never touched.
+//    plans, plus the lifts and stairs that join the slice to the tower (sliceJoin), and writes
+//    data/tower-floors.ts for the viewer. The slice's own rooms and edges are never touched.
 // Rerunnable: the same seed gives the same tower. Owner: P5.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Building, Edge } from '../contract/types.ts';
 import { CLEAR_HEIGHT, assignPlans, glbRoomName, planRooms } from './tower-plans.ts';
 import type { TypicalPlan } from './tower-plans.ts';
-import { buildTower } from './whole-tower.ts';
+import { buildTower, isGeneratedJoin, sliceJoin } from './whole-tower.ts';
 import type { PackageMeta } from './whole-tower.ts';
 
 const SEED = 432;
@@ -63,15 +64,14 @@ const kept = { levels: building.levels.filter((l) => !generated(l.id)), nodes: b
 const keptIds = new Set(kept.nodes.map((n) => n.id));
 const tower = buildTower({ floors, rooms });
 const first = tower.nodes[0];
-const join: Edge[] = first
-  ? [{ id: 'lift-T-slice', name: `Lift to level ${first.name.match(/\d+/)?.[0]}`, from: 'lobby', to: first.id, kind: 'elevator', clear_width: 1.2, clear_height: 2.4, step_height: 0 }]
-  : [];
+for (const id of ['lobby', 'core-l10', 'plant']) if (!keptIds.has(id)) throw new Error(`slice node ${id} is missing`);
+const join: Edge[] = first ? sliceJoin(first.id, first.level, Number(first.level.slice(1))) : [];
 const out: Building = {
   ...building,
   levels: [...kept.levels, ...tower.levels],
   nodes: [...kept.nodes, ...tower.nodes],
   edges: [
-    ...building.edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to) && !e.id.startsWith('lift-T-')),
+    ...building.edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to) && !isGeneratedJoin(e.id)),
     ...join,
     ...tower.edges,
   ],
