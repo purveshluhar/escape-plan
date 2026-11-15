@@ -116,3 +116,55 @@ test('validator rejects bad data', () => {
   assert.notDeepEqual(validate('phone.schema.json#/$defs/to_app', { type: 'vote', token: 't' }), []);
   assert.notDeepEqual(validate('solver-output.schema.json', [{ ...X.exampleResultFail, needed: Number.NaN }]), []);
 });
+
+// Key names that also exist on Object.prototype must not pass as known fields or schema names.
+const INHERITED = ['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString'];
+
+test('validator rejects unknown fields named like Object.prototype keys', () => {
+  const vote = JSON.stringify(X.exampleJevVote);
+  const pass = JSON.stringify(X.exampleResultPass);
+  // Pairs, not an object: got["__proto__"] = ... would set the prototype instead.
+  const got: [string, string[]][] = [];
+  const want: [string, string[]][] = [];
+  for (const key of INHERITED) {
+    // JSON.parse makes "__proto__" an own key, as a request body would.
+    const top = JSON.parse(`{${JSON.stringify(key)}:1,${vote.slice(1)}`);
+    assert.ok(Object.hasOwn(top, key), key);
+    const nested = JSON.parse(`[${pass.slice(0, -1)},${JSON.stringify(key)}:{}}]`);
+    got.push([key, [...validate('jev.schema.json#/$defs/vote', top), ...validate('solver-output.schema.json', nested)]]);
+    want.push([key, [`$: unknown field "${key}"`, `$[0]: unknown field "${key}"`]]);
+  }
+  assert.deepEqual(got, want);
+  ok('jev.schema.json#/$defs/vote', JSON.parse(vote));
+});
+
+test('validator reports a missing required field named like an Object.prototype key', () => {
+  const file = 'inherited-required.test.schema.json';
+  SCHEMAS[file] = { type: 'object', required: ['toString'], properties: { toString: { type: 'string' } } };
+  try {
+    assert.deepEqual(validate(file, {}), ['$: missing required field "toString"']);
+    ok(file, { toString: 'x' });
+  } finally {
+    delete SCHEMAS[file];
+  }
+});
+
+test('validator refuses schema refs named like Object.prototype keys', () => {
+  const refused = (ref: string): boolean => {
+    try {
+      validate(ref, {});
+      return false;
+    } catch (e) {
+      return /unknown schema file|bad \$ref/.test(String(e));
+    }
+  };
+  const got = INHERITED.flatMap((key) => [key, `jev.schema.json#/$defs/${key}`]).filter((ref) => !refused(ref));
+  assert.deepEqual(got, []);
+});
+
+test('validator refuses a $ref that does not end on a schema object', () => {
+  for (const ref of ['jev.schema.json#/$id', 'jev.schema.json#/$defs/vote/required', 'jev.schema.json#/$defs/vote/required/length', 'jev.schema.json#/$defs/vote#x']) {
+    assert.throws(() => validate(ref, {}), /bad \$ref/, ref);
+  }
+  ok('phone.schema.json#/$defs/to_app/oneOf/2', { type: 'vote', token: 'chiller', vote: 'accept' });
+});
