@@ -85,3 +85,21 @@ export function drawnLevels(b: Building): string[] {
   const slice = floorPlacement(b).position[1];
   return b.levels.filter((l) => /^T\d\d$/.test(l.id) || l.elevation === slice).map((l) => l.id);
 }
+
+// Zoomed in, the facade opens to a floor plan. Its full-height walls would hide the rooms, the routes
+// and the figures from the camera looking down, so the open floor is drawn as a cutaway: its
+// partitions, core, columns and stairs stand only CUT_WALL_HEIGHT metres high, a little above the
+// furniture (1 m), so each room still reads as a room. The slab, finish and furniture stay as they are.
+export const CUT_WALL_HEIGHT = 1.2;
+
+export function isCutWall(name: string): boolean {
+  return /_(Partitions|Core|Concrete_Grid|Stairs)$/.test(name);
+}
+
+// The height scale of a cut wall `height` metres tall while the facade is `amount` open (0 shut, 1
+// open): full height when shut, CUT_WALL_HEIGHT when open, eased with the facade fade between.
+export function cutWallScale(height: number, amount: number): number {
+  if (!(height > CUT_WALL_HEIGHT)) return 1;
+  const a = Math.min(1, Math.max(0, amount));
+  return 1 - a * (1 - CUT_WALL_HEIGHT / height);
+}

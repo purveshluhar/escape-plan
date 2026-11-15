@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Building } from '../contract/types.ts';
-import { TYPICAL_TURN_DEG, floorPlacement, looksLikeGlb, towerFloors, towerSlabs, coveredNodes, isInterior, FACADE_URL } from './typical-floors.ts';
+import { CUT_WALL_HEIGHT, TYPICAL_TURN_DEG, cutWallScale, floorPlacement, isCutWall, looksLikeGlb, towerFloors, towerSlabs, coveredNodes, isInterior, FACADE_URL } from './typical-floors.ts';
 
 const building = JSON.parse(readFileSync(new URL('./building.json', import.meta.url), 'utf8')) as Building;
 
@@ -76,4 +76,19 @@ test('the facade keeps the exterior of the Lightweight tower and drops its inter
     assert.equal(isInterior(name), true, name);
   }
   assert.match(FACADE_URL, /432_Park_Avenue_Lightweight\.glb$/);
+});
+
+test('the open floor is cut low: walls, core, columns and stairs, not the slab or the furniture', () => {
+  for (const part of ['Partitions', 'Core', 'Concrete_Grid', 'Stairs']) assert.equal(isCutWall(`Typical_3_Apartment_Plan_${part}`), true, part);
+  for (const part of ['Slab', 'Base_Finish', 'Furniture', 'R001', 'Apartment_Layout']) assert.equal(isCutWall(`Typical_3_Apartment_Plan_${part}`), false, part);
+});
+
+test('a cut wall shrinks to 1.2 m as the facade opens, and stands full height when it is shut', () => {
+  assert.equal(CUT_WALL_HEIGHT, 1.2);
+  assert.equal(cutWallScale(3.81, 0), 1); // facade shut
+  assert.ok(Math.abs(cutWallScale(3.81, 1) - 0.31496) < 1e-5); // 1.2 / 3.81, the partitions
+  assert.ok(Math.abs(cutWallScale(3.81, 0.5) - 0.65748) < 1e-5); // halfway through the fade
+  assert.ok(Math.abs(cutWallScale(4.72, 1) - 0.25424) < 1e-5); // the columns and the stairs
+  assert.equal(cutWallScale(1, 1), 1); // already under the cut
+  assert.equal(cutWallScale(0, 1), 1); // no height to cut
 });

@@ -77,7 +77,7 @@ the stairs first, whatever door is closed. So the app offers no fix up there."
 | Click | On screen | Say |
 |---|---|---|
 | Click Clear. Turn the mouse wheel 3 notches in | The facade fades. The open floor has a label, for example "Level 2". | "Zoom in and the facade opens to the floor plans." |
-| Click the middle of the floor rail on the right, then press `End`, then `Home` | The camera glides to that floor. The rail reads "Level 86" at the top and "Level 2" at the bottom. | "The rail moves through the tower, from Level 2 to Level 86." |
+| Right-drag the model down, then up | The open floor changes as the view moves. Its label names it, for example "Level 30". | "Every floor of the tower opens, from Level 2 to Level 86." |
 | Double-click the model | Back to the framed view | "Every edit checks every question again over the whole tower, in a few milliseconds." |
 
 ## Close
@@ -128,7 +128,7 @@ of the Answers panel: "A quick check of sizes and routes, not a code review."
 |---|---|---|
 | The server is off | The strip: "Read by: this page", "The server is not reachable." The panel: "Review panel is off", "No votes - the server is not reachable", "The rules still decide every answer." | Keep going. The page reads the sentence itself, and the edit is made. Say: "The rules still decide every answer." |
 | The model is off or slow (`DECIDER=strands`) | The strip: "Read by: this page", "The model gave no answer (down or busy)." The panel: "Votes by: the rules. The model gave no usable vote (off, busy, slow or unclear)." | Keep going. The page reads it, and the rules vote. |
-| The city block is slow | "Loading the city around the tower". Questions and answers work before it arrives; the floor plans and the rail come with it. | Start with beats 1 to 4. Do beat 5 once the block is in. |
+| The city block is slow | "Loading the city around the tower". Questions and answers work before it arrives; the floor plans come with it. | Start with beats 1 to 4. Do beat 5 once the block is in. |
 | The city block is not on this laptop | Plain ground, no city. The tower questions still work. | Skip the city line. |
 | A typed edit asks "Did you mean" | Amber strip, "Nothing was changed." | Click the right button under "Did you mean", or use the fix button. |
 | The page breaks | | Switch to the backup recording without apology and keep talking. |

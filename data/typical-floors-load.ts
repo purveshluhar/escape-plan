@@ -9,7 +9,7 @@ import { fadeMaterials } from '../viewer/fade.ts';
 import { TOWER_CENTRE } from '../app/backdrop.ts';
 import { TOWER_FLOORS } from './tower-floors.ts';
 import {
-  FACADE_URL, TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, floorPlacement, isInterior, looksLikeGlb, towerFloors, towerSlabs,
+  FACADE_URL, TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, cutWallScale, floorPlacement, isCutWall, isInterior, looksLikeGlb, towerFloors, towerSlabs,
 } from './typical-floors.ts';
 
 export interface TypicalFloor {
@@ -17,7 +17,8 @@ export interface TypicalFloor {
   // Put the floors on the levels of this building (call again after each edit).
   place(b: Building): void;
   // Open the outside (the viewer's onReveal): the facade fades out by `amount` (0 = solid, 1 = gone),
-  // and while it is open at all, the floors above elevation `cut` are hidden so the plan at `cut` shows.
+  // and while it is open at all, the floors above elevation `cut` are hidden so the plan at `cut` shows,
+  // its walls cut low (typical-floors.ts CUT_WALL_HEIGHT).
   reveal(amount: number, cut: number): void;
 }
 
@@ -81,9 +82,33 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
     console.warn('Facade not loaded:', err); // the floors still show without it
   }
 
+  // The walls of each floor that are cut low when it is the open one, with their full height. The
+  // plans are z up inside their node (the node turns them y up), so the height is the z extent.
+  const walls = new Map<THREE.Object3D, { mesh: THREE.Object3D; height: number }[]>();
+  const wallsOf = (floor: THREE.Object3D): { mesh: THREE.Object3D; height: number }[] => {
+    let list = walls.get(floor);
+    if (!list) {
+      list = [];
+      floor.traverse((o) => {
+        if (!(o instanceof THREE.Mesh) || !isCutWall(o.name)) return;
+        const g = o.geometry as THREE.BufferGeometry;
+        if (!g.boundingBox) g.computeBoundingBox();
+        list!.push({ mesh: o, height: g.boundingBox!.max.z - Math.max(0, g.boundingBox!.min.z) });
+      });
+      walls.set(floor, list);
+    }
+    return list;
+  };
+
   let open = { amount: 0, cut: Infinity };
   const showFloors = (): void => {
-    for (const floor of [sliceFloor, ...tower.children]) floor.visible = open.amount <= 0 || floor.position.y <= open.cut + 1e-6;
+    for (const floor of [sliceFloor, ...tower.children]) {
+      floor.visible = open.amount <= 0 || floor.position.y <= open.cut + 1e-6;
+      // Only the open floor is cut low; the floors under it and every floor while the facade is shut
+      // keep their full walls.
+      const isOpen = open.amount > 0 && Math.abs(floor.position.y - open.cut) < 1e-3;
+      for (const w of wallsOf(floor)) w.mesh.scale.z = isOpen ? cutWallScale(w.height, open.amount) : 1;
+    }
   };
 
   return {
@@ -94,6 +119,7 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
       sliceFloor.rotation.y = rotationY;
 
       tower.clear();
+      for (const k of [...walls.keys()]) if (k !== sliceFloor) walls.delete(k);
       for (const f of towerFloors(TOWER_FLOORS, b)) {
         const plan = templates.get(f.node);
         if (!plan) continue;

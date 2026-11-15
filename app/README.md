@@ -13,10 +13,8 @@ Pure logic (`app/scoreboard.ts`) is tested in `app/scoreboard.test.ts`.
 
 Starter: a Show me button, the Answers panel and the Yes to all banner.
 
-The floor scroller (`scroller.ts` logic, `scroller-view.ts` page) is a vertical slider on the
-right edge. It lists the drawn floors as "Level <n>". Drag it, turn the wheel over it, or press
-the arrow, Page, Home or End keys when it has focus: the camera glides to the floor
-(`viewer.focusLevel`) and, zoomed in, opens it. It follows the view when the view is panned.
+Zoomed in, the arrow keys move the selected object one floor, and the camera glides to that floor
+(`viewer.focusLevel`) and opens it. A pan moves the open floor too.
 
 ## Tier 1 first task
 
