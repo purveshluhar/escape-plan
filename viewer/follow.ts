@@ -49,8 +49,10 @@ export interface CameraFrame {
 
 // The pan that puts the middle of the points in the middle of the free view, and the zoom that holds
 // them all with FOLLOW_MARGIN to spare: FOLLOW_ZOOM, or closer when the person was already closer,
-// wider when the points are far apart, and never wider than the framed view. null: no points.
-export function followFrame({ points, centre, view, baseHalf, aspect, userZoom }: FollowInput): CameraFrame | null {
+// wider when the points are far apart. A group too wide for the framed view would leave the camera on
+// the empty middle, so then only the lead (the first point) is framed. null: no points.
+export function followFrame(input: FollowInput): CameraFrame | null {
+  const { points, centre, view, baseHalf, aspect, userZoom } = input;
   if (points.length === 0) return null;
   // The camera's right and up, as three's lookAt makes them (world up is y).
   const [dx, dy, dz] = viewDirection(view.azimuth, view.elevation);
@@ -67,8 +69,9 @@ export function followFrame({ points, centre, view, baseHalf, aspect, userZoom }
   }
   const half = Math.max((maxY - minY) / 2 + FOLLOW_MARGIN, ((maxX - minX) / 2 + FOLLOW_MARGIN) / Math.max(aspect, 1e-6));
   const close = Math.min(FOLLOW_ZOOM, userZoom);
-  const zoom = Math.min(1, Math.max(close, half / Math.max(baseHalf, 1e-6)));
-  return { pan: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, zoom };
+  const needed = half / Math.max(baseHalf, 1e-6);
+  if (needed > 1 + 1e-9 && points.length > 1) return followFrame({ ...input, points: [points[0]!] });
+  return { pan: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, zoom: Math.min(1, Math.max(close, needed)) };
 }
 
 // One frame of the camera easing towards `target`, `dt` seconds on: the pan in metres, the zoom in
@@ -86,3 +89,35 @@ export function followStep(current: CameraFrame, target: CameraFrame, dt: number
     zoom: Math.abs(target.zoom - z) < SNAP_ZOOM ? target.zoom : z,
   };
 }
+
+// Who has the camera. 'run': the follow camera, from a run's start (paused: the person moved the view
+// during it, and the Follow button shows); 'back': the run's routes went, so it eases back to the
+// camera the person had (`before`); 'off': the person's.
+export interface FollowState {
+  mode: 'off' | 'run' | 'back';
+  paused: boolean;
+  before: CameraFrame | null;
+}
+
+// The viewer shows new answers. With routes, the follow camera takes over and keeps the camera the
+// person had (over runs in a row, the first one). Without (the objects parked again), it goes back to
+// that camera, unless the person took it during the run.
+export function followOnShow(s: FollowState, routes: boolean, camera: CameraFrame): FollowState {
+  if (routes) return { mode: 'run', paused: false, before: s.mode === 'off' || s.paused || !s.before ? camera : s.before };
+  if (s.mode === 'run' && !s.paused && s.before) return { mode: 'back', paused: false, before: s.before };
+  return { mode: 'off', paused: false, before: null };
+}
+
+// The person moved the view (a drag, the wheel, a double-click, a floor glide). While the run still
+// plays the follow pauses; after it, or while going back, the camera is simply theirs.
+export function followOnPause(s: FollowState, playing: boolean): FollowState {
+  if (s.mode === 'run' && playing) return { ...s, paused: true };
+  return s.mode === 'off' ? s : { mode: 'off', paused: false, before: null };
+}
+
+// The Follow button: the follow camera takes over again.
+export function followOnResume(s: FollowState): FollowState {
+  return s.mode === 'run' ? { ...s, paused: false } : s;
+}
+
+export const followButton = (s: FollowState): boolean => s.mode === 'run' && s.paused;

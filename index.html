@@ -344,6 +344,9 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   body.editing #votes,body:has(#sheet.on) #votes,body:has(#banner.on) #votes{display:none}
   #banner .sub{font-size:16px}
 }
+/* During a run the camera follows the moving objects; after the person moves the view, this puts it back. Under the answer pill. */
+#follow{position:fixed;left:50%;top:84px;transform:translateX(-50%);display:none;height:40px;padding:0 18px;border-radius:999px;font:600 15px/1 var(--font);color:var(--ink);cursor:pointer}
+#follow.on{display:block}
 #loading{position:fixed;left:50%;top:84px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:999px;font:600 15px/1.2 var(--font);color:var(--ink)}
 #loading.on{display:flex}
 #credit{position:fixed;right:10px;bottom:2px;display:none;padding:1px 8px;border-radius:8px;background:rgba(255,255,255,.82);font:500 12px/1.4 var(--font);color:var(--muted);pointer-events:none}
@@ -392,6 +395,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   <div id="strip" class="glass" role="region" aria-label="Who decided" aria-live="polite"></div>
   <div id="hint" class="glass" role="region" aria-label="Hint" aria-live="polite"></div>
   <div id="votes" class="glass" role="region" aria-label="Review panel" aria-live="polite"></div>
+  <button type="button" id="follow" class="glass" title="Keep the view on the route and its answer">Follow</button>
   <div id="loading" class="glass" role="status"><span class="spinner" aria-hidden="true"></span>Loading the city around the tower</div>
   <div id="credit">City block: Cityweft. Map data: OpenStreetMap contributors</div>
   <span id="escHint" hidden>Pick a question first</span>

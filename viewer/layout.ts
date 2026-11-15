@@ -339,7 +339,7 @@ export function panForFocus(height: number, centreY: number, view: OrbitView): n
 }
 
 // A glide to a new pan: each frame covers a fixed share of what is left, so a target that moves while
-// it runs (a dragged scroller) never restarts a curve. 14 a second covers 97 percent in a quarter second.
+// it runs (a new floor asked for mid-glide) never restarts a curve. 14 a second covers 97 percent in a quarter second.
 export const GLIDE_RATE = 14;
 export const GLIDE_SNAP = 0.02; // metres: this near the target it lands on it
 export function glideStep(current: number, target: number, dt: number, rate = GLIDE_RATE): number {
@@ -353,6 +353,15 @@ export function cutLevel(levels: readonly Level[], height: number): number {
   let best = Infinity;
   for (const l of levels) if (best === Infinity || Math.abs(l.elevation - height) < Math.abs(best - height)) best = l.elevation;
   return best;
+}
+
+// The drawn floor a figure at `height` stands on: the highest at or under it (route points run
+// PATH_LIFT above their floor), or the lowest drawn floor when it is under all of them. Unlike
+// cutLevel, a figure halfway up a stair does not open the floor above before it gets there.
+export function floorUnder(levels: readonly Level[], height: number): number {
+  if (levels.length === 0) return Infinity;
+  const under = levels.filter((l) => l.elevation <= height + 1e-6).map((l) => l.elevation);
+  return under.length ? Math.max(...under) : Math.min(...levels.map((l) => l.elevation));
 }
 
 // Drops go to every level under the next drawn floor above the cut: the floors that are hidden. A

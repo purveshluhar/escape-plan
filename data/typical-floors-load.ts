@@ -83,7 +83,7 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
   }
 
   // The walls of each floor that are cut low when it is the open one, with their full height. The
-  // plans are z up inside their node (the node turns them y up), so the height is the z extent.
+  // plans are z up inside their node (the node turns them y up), standing on z = 0.
   const walls = new Map<THREE.Object3D, { mesh: THREE.Object3D; height: number }[]>();
   const wallsOf = (floor: THREE.Object3D): { mesh: THREE.Object3D; height: number }[] => {
     let list = walls.get(floor);
@@ -93,7 +93,7 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
         if (!(o instanceof THREE.Mesh) || !isCutWall(o.name)) return;
         const g = o.geometry as THREE.BufferGeometry;
         if (!g.boundingBox) g.computeBoundingBox();
-        list!.push({ mesh: o, height: g.boundingBox!.max.z - Math.max(0, g.boundingBox!.min.z) });
+        list!.push({ mesh: o, height: g.boundingBox!.max.z }); // the scale is about the floor (z = 0), so the top is the height
       });
       walls.set(floor, list);
     }

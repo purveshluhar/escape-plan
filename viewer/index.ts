@@ -23,8 +23,8 @@ import type { CornerFx } from './corner-fx.ts';
 import { createPerfOverlay, perfEnabled } from './perf.ts';
 import { localState, planRun, runItem, tokenClock, turnToward, walkClock, yawOf, TIMING } from './timeline.ts';
 import type { LocalState, Phase, Plan, RunItem } from './timeline.ts';
-import { followFrame, followSet, followStep } from './follow.ts';
-import type { CameraFrame } from './follow.ts';
+import { followButton, followFrame, followOnPause, followOnResume, followOnShow, followSet, followStep } from './follow.ts';
+import type { CameraFrame, FollowState } from './follow.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
 import type { LabelSide } from './labels.ts';
 import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
@@ -33,7 +33,7 @@ import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
   focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, facadeOpen, routesShown, answersCut, FLOOR_TAG_GAP,
-  glideStep, panForFocus,
+  glideStep, panForFocus, floorUnder,
   type Fade, type ScreenRect,
 } from './layout.ts';
 
@@ -51,6 +51,9 @@ export interface Viewer {
   // middle of the view; while the facade is open that floor is the one opened. A jump under reduced
   // motion. Dragging the view, or a double-click reset, ends the glide where it is.
   focusLevel(level: Id): void;
+  // The follow camera after the person moved the view during a run (ViewerOptions onFollowPaused):
+  // take the camera back to the moving objects and their answer.
+  resumeFollow(): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
   // The same for a panel on the left (the typed-edit strip): the model centres between the two.
@@ -102,6 +105,10 @@ export interface ViewerOptions {
   onRefuse?: (token: Id) => void;
   // A click on a token (its id) or on empty space (null).
   onSelect?: (token: Id | null) => void;
+  // During a run the camera follows the moving objects and settles on the answer. A drag, the wheel
+  // or a double-click pauses that: called with true then, so the app can offer a Follow button
+  // (resumeFollow), and with false when there is nothing to resume.
+  onFollowPaused?: (paused: boolean) => void;
 }
 
 const VIEW_MARGIN = 1.2;
@@ -199,15 +206,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   banner.textContent = 'Yes to all';
   banner.style.right = `${insetRight}px`;
   container.appendChild(banner);
-  // Shown while a run's follow camera is paused because the person moved the view: one press puts the
-  // camera back on the moving object.
-  const followBtn = document.createElement('button');
-  followBtn.type = 'button';
-  followBtn.className = 'ep-follow';
-  followBtn.textContent = 'Follow';
-  followBtn.title = 'Keep the view on the moving object';
-  followBtn.setAttribute('aria-label', 'Keep the view on the moving object');
-  container.appendChild(followBtn);
   // Under the pointer while a token is carried: where it would land, or that it cannot land there.
   const hint = document.createElement('div');
   hint.className = 'ep-hint';
@@ -247,12 +245,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let glideAt = 0; // the last frame it moved
   let focused: Id | null | undefined; // last onFocus; undefined: tell the app again at the next fit
   let chromeStale = false; // floor labels moved since the last panel check
-  // The follow camera (follow.ts). 'run': it frames the figures while a run plays and settles on the
-  // answer; 'back': the run's routes went, so it eases back to the camera the person had before it;
-  // 'off': the camera is the person's. A drag, the wheel or a double-click pauses it (`paused`).
-  const follow: { mode: 'off' | 'run' | 'back'; paused: boolean; before: CameraFrame | null; at: number; points: Vec3[] } = {
-    mode: 'off', paused: false, before: null, at: 0, points: [],
-  };
+  // The follow camera (follow.ts): who has the camera, the last frame time and what it frames.
+  let follow: FollowState = { mode: 'off', paused: false, before: null };
+  let followAt = 0;
+  let followPoints: Vec3[] = [];
+  let toldPaused = false; // last onFollowPaused
   let followBase = { half: 1, aspect: 1 }; // fit(): half the view height at zoom 1 (metres) and the free view's width over height
   let sized = { w: 0, h: 0 }; // the renderer size last set
   let smokeSpread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null = null;
@@ -535,9 +532,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     // Only at the framed view itself: once the person pans or glides to a floor, the cut is theirs.
     // While the camera follows a run, the floor the followed figures are on is the open one, raised
     // as at the framed view until none of them is cut away.
-    if (following() && follow.points.length) {
-      const ys = follow.points.map((p) => p[1]);
-      cut = answersCut(drawn, cutLevel(drawn, Math.min(...ys)), Math.max(...ys));
+    if (following() && followPoints.length) {
+      const ys = followPoints.map((p) => p[1]);
+      cut = answersCut(drawn, floorUnder(drawn, Math.min(...ys)), Math.max(...ys));
     } else if (!revealed(zoom) && pan.x === 0 && pan.y === 0 && glideTo === null) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
     pickCeiling = dropCeiling(drawn, cut);
     if (glideTo === null) {
@@ -564,7 +561,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       span.style.right = `${FLOOR_TAG_GAP - rect.shift}px`;
       if (rect.top >= 0 && rect.bottom <= h && rect.right <= w - insetRight) tag.rect = rect;
       // A label that moved waits for the next panel check (within 100 ms) before it shows again.
-      if (!was || was.left !== rect.left || was.top !== rect.top) tag.free = false;
+      // Not while the follow camera eases: every label moves a little every frame, and they would
+      // blink for the whole run. The panel check (every 100 ms while labels move) still hides one under a panel.
+      if (!following() && (!was || was.left !== rect.left || was.top !== rect.top)) tag.free = false;
     }
     chromeStale = true;
 
@@ -667,10 +666,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       out.push({ left: x - tw / 2, right: x + tw / 2, top: y - 1.4 * th, bottom: y - 0.4 * th });
     }
     if (avoidBoxes.length) out.push(...avoidBoxes);
-    if (followBtn.classList.contains('on')) {
-      const f = followBtn.getBoundingClientRect();
-      out.push({ left: f.left - box.left, right: f.right - box.left, top: f.top - box.top, bottom: f.bottom - box.top });
-    }
     return out;
   }
 
@@ -855,13 +850,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   // One frame of the follow camera: ease the pan and zoom towards the figures (or, going back, towards
   // the camera from before the run).
   function followCamera(now: number): void {
-    const dt = Math.min(0.1, Math.max(0, (now - follow.at) / 1000));
-    follow.at = now;
+    const dt = Math.min(0.1, Math.max(0, (now - followAt) / 1000));
+    followAt = now;
     let target: CameraFrame | null = null;
     if (following()) {
-      follow.points = followSet(runs.map((run) => ({ at: [run.token.position.x, run.token.position.y, run.token.position.z], phase: run.phase, fail: run.fail })));
+      followPoints = followSet(runs.map((run) => ({ at: [run.token.position.x, run.token.position.y, run.token.position.z], phase: run.phase, fail: run.fail })));
       const c = bounds.getCenter(new THREE.Vector3());
-      target = followFrame({ points: follow.points, centre: [c.x, c.y, c.z], view, baseHalf: followBase.half, aspect: followBase.aspect, userZoom: follow.before?.zoom ?? zoom });
+      target = followFrame({ points: followPoints, centre: [c.x, c.y, c.z], view, baseHalf: followBase.half, aspect: followBase.aspect, userZoom: follow.before?.zoom ?? zoom });
     } else if (follow.mode === 'back') target = follow.before;
     if (!target || bounds.isEmpty()) return;
     const next = followStep({ pan: { ...pan }, zoom }, target, dt, reduced);
@@ -870,27 +865,22 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     pan.y = next.pan.y;
     if (next.zoom !== zoom) setZoom(next.zoom);
     else if (moved) fit();
-    if (follow.mode === 'back' && next.pan.x === target.pan.x && next.pan.y === target.pan.y && next.zoom === target.zoom) {
-      follow.mode = 'off';
-      follow.before = null;
-    }
+    if (follow.mode === 'back' && next.pan.x === target.pan.x && next.pan.y === target.pan.y && next.zoom === target.zoom) setFollow({ mode: 'off', paused: false, before: null });
+  }
+
+  function setFollow(next: FollowState): void {
+    follow = next;
+    const paused = followButton(follow);
+    if (paused !== toldPaused) options.onFollowPaused?.((toldPaused = paused));
   }
 
   // The person moved the view: the follow camera lets go of it until Follow is pressed or the next run.
-  function pauseFollow(): void {
-    if (follow.mode === 'run') follow.paused = true;
-    else if (follow.mode === 'back') {
-      follow.mode = 'off';
-      follow.before = null;
-    }
-    followBtn.classList.toggle('on', follow.mode === 'run' && follow.paused);
-  }
+  const pauseFollow = (): void => setFollow(followOnPause(follow, (performance.now() - t0) / 1000 < plan.end && !reduced));
 
-  followBtn.addEventListener('click', () => {
-    follow.paused = false;
-    follow.at = performance.now();
-    followBtn.classList.remove('on');
-  });
+  function resumeFollow(): void {
+    followAt = performance.now();
+    setFollow(followOnResume(follow));
+  }
 
   let lastFrame = 0;
   function frame(now: number): void {
@@ -1194,7 +1184,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
     if (dx === 0 && dy === 0) return;
-    pauseFollow();
+    // A press that stays inside the click slop is still a click (it selects): it leaves the camera be.
+    if (movedPastSlop(e.clientX - drag.x0, e.clientY - drag.y0)) pauseFollow();
     if (drag.mode === 'rotate') {
       view = orbit(view, dx, dy);
     } else {
@@ -1262,22 +1253,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     drawSmoke();
     win = results.length > 0 && results.every((r) => r.status === 'pass');
     banner.classList.remove('on', 'small');
-    // A run with routes: the camera follows it, from the camera the person had (kept over runs in a row).
-    // No routes (the objects parked again): the camera goes back to where the person had it.
-    if (routesShown(results)) {
-      if (follow.mode === 'off' || follow.paused) follow.before = { zoom, pan: { ...pan } };
-      follow.mode = 'run';
-      follow.paused = false;
-      glideTo = null;
-    } else if (follow.mode === 'run' && !follow.paused && follow.before) follow.mode = 'back';
-    else {
-      follow.mode = 'off';
-      follow.before = null;
-      follow.paused = false;
-    }
-    follow.points = [];
-    follow.at = performance.now();
-    followBtn.classList.toggle('on', follow.mode === 'run' && follow.paused);
+    // A run with routes: the camera follows it. No routes (the objects parked again): it goes back to
+    // where the person had it (follow.ts followOnShow).
+    setFollow(followOnShow(follow, routesShown(results), { zoom, pan: { ...pan } }));
+    if (follow.mode === 'run') glideTo = null;
+    followPoints = [];
+    followAt = performance.now();
     fit();
     t0 = performance.now();
     return plan.answered;
@@ -1301,7 +1282,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function endGlide(): void {
     if (glideTo === null) return;
     glideTo = null;
-    focused = undefined; // the thumb may be ahead of the camera
+    focused = undefined; // the app may be ahead of the camera
     fit();
   }
 
@@ -1309,7 +1290,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     pauseFollow();
     const at = shown?.building.levels.find((l) => l.id === level);
     if (!at || !Number.isFinite(at.elevation) || !floorLevels.has(level) || bounds.isEmpty()) {
-      focused = undefined; // nothing to go to: put the app's thumb back where the camera is
+      focused = undefined; // nothing to go to: tell the app again where the camera is
       fit();
       return;
     }
@@ -1377,7 +1358,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setInsetLeft, setInsetBottom, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
+  return { show, setBackdrop, setFloors, focusLevel, resumeFollow, setInsetRight, setInsetLeft, setInsetBottom, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
@@ -1404,11 +1385,6 @@ function injectStyles(): void {
   const style = document.createElement('style');
   style.textContent = `
 .ep-labels { position: absolute; inset: 0; pointer-events: none; }
-.ep-follow { position: absolute; left: 16px; top: 16px; z-index: 100003; display: none; height: 40px; padding: 0 16px;
-  border-radius: 20px; border: 1px solid ${ACCENT}; background: ${GLASS_STRONG}; color: ${TEXT}; font: 600 15px ${FONT_BODY}; cursor: pointer;
-  box-shadow: 0 6px 18px rgba(20, 30, 50, 0.14); }
-.ep-follow.on { display: block; }
-.ep-follow:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; }
 .ep-fail, .ep-tag { width: 0; height: 0; }
 .ep-floor { width: 0; height: 0; }
 /* Floor names while the facade is open: a calm pill left of the plate corner, under every other text. */

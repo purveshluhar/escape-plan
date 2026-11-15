@@ -101,8 +101,10 @@ const viewer = createViewer($('viewer'), {
     applyReveal();
   },
   // Floor labels and fail cards keep clear of the panels over the model: the banner, the review panel,
-  // the strip and the Hint panel.
-  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint')],
+  // the strip, the Hint panel and the Follow button.
+  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint'), $('follow')],
+  // The person moved the view during a run: offer to put the camera back on the moving objects.
+  onFollowPaused: (paused) => $('follow').classList.toggle('on', paused),
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
     const what = S.placed.includes(token) ? 'not moved' : 'not placed';
@@ -119,6 +121,7 @@ const viewer = createViewer($('viewer'), {
 // Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
 // so framing them shows an empty 424 m view until (or unless) the real floors load.
 viewer.setCovered(coveredNodes(building));
+$('follow').addEventListener('click', () => viewer.resumeFollow());
 // The model centres in the whole view, and moves left of the fix sheet or the all-yes banner after
 // a run (both float on the right on wider screens; on phones they sit at the bottom).
 // The all-yes banner uses the same slot, so the model also moves left of it when every answer is yes.

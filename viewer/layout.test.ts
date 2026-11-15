@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import {
+import { floorUnder,
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
   graphMarks, routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan, DEFAULT_VIEW, MAX_ELEVATION, MIN_ELEVATION, ORBIT_SPEED, orbit, viewDirection,
 } from './layout.ts';
@@ -231,4 +231,12 @@ test('graph marks: no slice room is drawn as a box; their extent still frames th
 test('the viewer draws no ground grid under the building (the real 432 Park and Cityweft ground is the floor)', () => {
   const viewer = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(viewer, /GridHelper|\bGRID\b/);
+});
+
+test('floorUnder: the drawn floor a figure stands on, never the one above it, even past half a storey', () => {
+  const drawn = [{ id: 'L2', elevation: 9.4488 }, { id: 'T04', elevation: 28.3464 }];
+  assert.equal(floorUnder(drawn, 20), 9.4488); // nearest would be T04
+  assert.equal(floorUnder(drawn, 28.8464), 28.3464); // on T04 (route points run 0.5 m up)
+  assert.equal(floorUnder(drawn, 0.5), 9.4488); // under every drawn floor: the lowest
+  assert.equal(floorUnder([], 3), Infinity);
 });

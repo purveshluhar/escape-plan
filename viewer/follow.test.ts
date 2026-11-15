@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_VIEW } from './layout.ts';
-import { FOLLOW_ZOOM, followFrame, followSet, followStep } from './follow.ts';
-import type { FollowInput } from './follow.ts';
+import { FOLLOW_ZOOM, followButton, followFrame, followOnPause, followOnResume, followOnShow, followSet, followStep } from './follow.ts';
+import type { FollowInput, FollowState } from './follow.ts';
 
 // followFrame for inputs that have points: never null.
 const frame = (input: FollowInput) => {
@@ -66,9 +66,9 @@ test('followFrame: figures far apart widen the view to hold both', () => {
   near(f.zoom, 0.8); // (20 + 4 m margin) / 1.5 aspect / 20 m
 });
 
-test('followFrame: a person already zoomed in closer keeps that zoom; never past the framed view', () => {
+test('followFrame: a person already zoomed in closer keeps that zoom; a wide group never past the framed view', () => {
   assert.equal(frame({ points: [[0, 0, 0]], centre: [0, 0, 0], view: DEFAULT_VIEW, baseHalf: 20, aspect: 1.5, userZoom: 0.3 }).zoom, 0.3);
-  const a = 80 / Math.SQRT2;
+  const a = 26 / Math.SQRT2; // (26 + 4) / 1.5 = 20 m: just fits the framed view
   assert.equal(frame({ points: [[a, 0, -a], [-a, 0, a]], centre: [0, 0, 0], view: DEFAULT_VIEW, baseHalf: 20, aspect: 1.5, userZoom: 1 }).zoom, 1);
 });
 
@@ -87,4 +87,44 @@ test('followStep: eases a share of the way each frame, and lands when close', ()
 
 test('followStep: reduced motion cuts straight to the frame', () => {
   assert.deepEqual(followStep({ pan: { x: 0, y: 0 }, zoom: 1 }, { pan: { x: 10, y: -10 }, zoom: 0.25 }, 0, true), { pan: { x: 10, y: -10 }, zoom: 0.25 });
+});
+
+test('followFrame: figures too far apart for the framed view: the lead (the first) is framed', () => {
+  const a = 80 / Math.SQRT2;
+  const f = frame({ points: [[a, 0, -a], [-a, 0, a]], centre: [0, 0, 0], view: DEFAULT_VIEW, baseHalf: 20, aspect: 1.5, userZoom: 1 });
+  near(f.pan.x, 80);
+  near(f.pan.y, 0);
+  assert.equal(f.zoom, FOLLOW_ZOOM);
+});
+
+const cam = (x: number, zoom: number) => ({ pan: { x, y: 0 }, zoom });
+const OFF: FollowState = { mode: 'off', paused: false, before: null };
+
+test('followOnShow: a run takes the camera and keeps the camera the person had', () => {
+  assert.deepEqual(followOnShow(OFF, true, cam(2, 1)), { mode: 'run', paused: false, before: cam(2, 1) });
+  // A second run in a row keeps the first camera, not the follow camera.
+  assert.deepEqual(followOnShow({ mode: 'run', paused: false, before: cam(2, 1) }, true, cam(9, 0.5)), { mode: 'run', paused: false, before: cam(2, 1) });
+  // After the person took the camera, the next run starts from theirs.
+  assert.deepEqual(followOnShow({ mode: 'run', paused: true, before: cam(2, 1) }, true, cam(5, 0.7)), { mode: 'run', paused: false, before: cam(5, 0.7) });
+});
+
+test('followOnShow: no routes: back to the person\'s camera, unless they took it', () => {
+  assert.deepEqual(followOnShow({ mode: 'run', paused: false, before: cam(2, 1) }, false, cam(9, 0.5)), { mode: 'back', paused: false, before: cam(2, 1) });
+  assert.deepEqual(followOnShow({ mode: 'run', paused: true, before: cam(2, 1) }, false, cam(9, 0.5)), OFF);
+  assert.deepEqual(followOnShow(OFF, false, cam(9, 0.5)), OFF);
+});
+
+test('followOnPause: during a run it pauses (Follow shows); after the run or going back the camera is the person\'s', () => {
+  const run: FollowState = { mode: 'run', paused: false, before: cam(2, 1) };
+  assert.deepEqual(followOnPause(run, true), { ...run, paused: true });
+  assert.equal(followButton(followOnPause(run, true)), true);
+  assert.deepEqual(followOnPause(run, false), OFF);
+  assert.deepEqual(followOnPause({ mode: 'back', paused: false, before: cam(2, 1) }, false), OFF);
+  assert.deepEqual(followOnPause(OFF, true), OFF);
+  assert.equal(followButton(run), false);
+});
+
+test('followOnResume: Follow takes the camera again', () => {
+  assert.deepEqual(followOnResume({ mode: 'run', paused: true, before: cam(2, 1) }), { mode: 'run', paused: false, before: cam(2, 1) });
+  assert.deepEqual(followOnResume(OFF), OFF);
 });
