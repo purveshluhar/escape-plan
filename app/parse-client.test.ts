@@ -98,6 +98,16 @@ test('server down: the app reader answers', async () => {
   assert.deepEqual(r.out.edit, { op: 'widen', target: 'lobby-door', value: 1.5, source: 'text' });
 });
 
+test('server down behind the Vite proxy (502, no x-decider): the strip says down, not refused', async () => {
+  const r = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => new Response('', { status: 502 })) });
+  assert.equal(r.why, 'down');
+  assert.equal(r.decider, null);
+  assert.ok(r.out.edit);
+  // A server error that carries x-decider came from the server itself: refused.
+  const own = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => reply({ error: 'internal error', details: [] }, 'strands', 500)) });
+  assert.equal(own.why, 'refused');
+});
+
 test('server slower than the timeout: the request is cut and the app reader answers', async () => {
   assert.equal(PARSE_TIMEOUT_MS, 2500);
   let aborted = false;

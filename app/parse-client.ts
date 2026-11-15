@@ -90,7 +90,8 @@ export async function readEdit(text: string, fixes: readonly DemoButton[], build
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req), signal: ctl.signal,
     });
     const decider = res.headers.get('x-decider');
-    if (!res.ok) return local('refused', decider);
+    // A 5xx with no x-decider is the Vite proxy saying it could not reach the server (502).
+    if (!res.ok) return decider === null && res.status >= 500 ? local('down', null) : local('refused', decider);
     if (decider !== 'strands') return local(decider === 'keywords' ? 'keywords' : 'refused', decider);
     const body: unknown = await res.json().catch(() => undefined);
     if (ctl.signal.aborted) return local('slow', null);
