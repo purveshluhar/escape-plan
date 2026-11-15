@@ -129,7 +129,7 @@ function hazeTexture(): THREE.CanvasTexture {
   const g = canvas.getContext('2d')!;
   const img = g.createImageData(n, n);
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-    const e = Math.min(x, y, n - 1 - x, n - 1 - y) / (n * 0.22); // 0 at the edge, 1 a fifth of the way in
+    const e = Math.min(x, y, n - 1 - x, n - 1 - y) / (n * 0.1); // 0 at the edge, 1 a tenth of the way in (long rooms stay dense near their ends)
     const a = Math.min(1, e);
     const i = (y * n + x) * 4;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
@@ -558,7 +558,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const sides = labelSides(xs.map(({ at, width, card }) => {
       const v = at.clone().project(camera);
       return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width: card?.w ?? width, height: card?.h };
-    }), { height: xs.some((x) => x.callout) ? LABEL_HEIGHT_CALLOUT : LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8, avoid });
+    }), { height: xs.some((x) => x.callout) ? LABEL_HEIGHT_CALLOUT : LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8, maxY: h - 8, avoid });
     xs.forEach(({ obj }, i) => {
       for (const side of ['left', 'right', 'above', 'none']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
     });

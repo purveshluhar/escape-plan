@@ -117,7 +117,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 #scorePanel{position:fixed;top:78px;left:50%;transform:translateX(-50%);border-radius:28px;padding:10px 16px;
   width:min(560px,calc(100vw - 24px));display:none;max-height:calc(100vh - 380px);overflow-y:auto}
 #scorePanel.open{display:block;animation:fadeup .4s var(--soft)}
-#scorePanel.glass{z-index:5;background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(246,246,244,.95))} /* near-opaque, and over Hint and the strip: the person opened it */
+#scorePanel.glass{background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(246,246,244,.95))} /* near-opaque: cards on the model must not show through the rows */
 .srow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:10px 4px;border-bottom:1px solid rgba(20,22,28,.08)}
 .srow:last-child{border-bottom:0}
 .srow .nm{font:600 17px/1.2 var(--font)} .srow .word{font-size:20px}
@@ -305,7 +305,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 }
 /* 701 to 1400 px (where a centred panel reaches the sheet): the Answers panel opens in the free column left of the fix sheet or the all-yes banner, never over them */
 @media (max-width:1400px) and (min-width:701px){
-  body:has(#sheet.on) #scorePanel,body:has(#banner.on) #scorePanel{left:16px;transform:none;width:min(560px,calc(100vw - 436px));animation:sheetIn .4s var(--soft)}
+  body:has(#sheet.on) #scorePanel,body:has(#banner.on) #scorePanel{left:16px;transform:none;width:min(560px,calc(100vw - 436px));animation:sheetIn .4s var(--soft);z-index:5} /* over Hint and the strip in that column */
 }
 
 /* ---------- Compact (phone) ---------- */

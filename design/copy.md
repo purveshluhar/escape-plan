@@ -28,7 +28,7 @@ play, token, race, PASS or FAIL.
 - Assumption 2026-11-15: one line on the Answers panel says "A quick check of sizes and routes,
   not a code review." ADR 0007's no-compliance rule still holds.
 - Assumption 2026-11-15 (final walkthrough): a corner jam says "2.2 m long, longest that fits
-  2.0 m", and a smoke No says "people at step 4, smoke at step 3" or, on a tie, "both at step 1, a tie goes to the smoke" (the model card: "2.2 m long, fits 2.0 m", "both at step 1, a tie"). "Needs 2.2 m, has 2.0 m" next to
+  2.0 m", and a smoke No says "people at step 4, smoke at step 3" or, on a tie, "both at step 1, a tie goes to the smoke" (the model card: "2.2 m long, fits 2.0 m", "both at step 1, tie goes to smoke"). "Needs 2.2 m, has 2.0 m" next to
   the fix "Widen lobby door to 1.6 m" read as making the door narrower; "needs 1, has 1" read as a Yes.
 - Assumption 2026-11-15 (final walkthrough): the chiller chip asks "Does a new chiller fit through
   the shaft?". "Can I widen this shaft?" answered "No: too narrow" did not answer the question.
@@ -159,7 +159,7 @@ letter at the start of a line):
 | S28 | app/main.ts:359 | card aria `Sofa failed` | `Can my sofa get in? No` | Question framing |
 | S29 | app/main.ts:360 | card header `Sofa` + `FAIL` | person label, question, `No` | Section 2, point 2 |
 | S30 | app/main.ts:357, 361 | `Cannot turn` + ` at Lobby door`; fallback `Blocked` | `Cannot turn the corner at Lobby door`; fallback `Stuck` | Section 3 reason words |
-| S31 | app/main.ts:362 | `Needs 2.2 m, has 2 m` | `Needs 2.2 m, has 2.0 m` | One-decimal metres |
+| S31 | app/main.ts:362 | `Needs 2.2 m, has 2 m` | `2.2 m long, longest that fits 2.0 m` (final walkthrough) | One-decimal metres; a corner is about length |
 | S32 | app/main.ts:363 | `No preset fix for this object.` | `No suggested fix here yet. Type an edit.` | "object" |
 | S33 | app/main.ts:366, 368 | aria `Fix for Sofa`; `More fixes` | keep | Plain |
 | S34 | app/main.ts:344, 345 | foot `Type an edit`, `Reset` | `Type an edit`, `Undo edits` | Match S07 |

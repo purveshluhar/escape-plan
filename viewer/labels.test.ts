@@ -108,7 +108,7 @@ test('a load stays on its beam; a token that starts in a room has no such line',
 
 test('one step is "1 step", on the model as on the sheet', () => {
   const tie = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 1, available: 1 }));
-  assert.equal(tie?.detail, 'Office door: both at step 1, a tie');
+  assert.equal(tie?.detail, 'Office door: both at step 1, tie goes to smoke');
 });
 
 test('a card that would cover another card, another red X or the caption is left out, not drawn over it', () => {
@@ -130,6 +130,8 @@ test('a card uses its measured height when it has one', () => {
   assert.notEqual(labelSides(spots, layout)[0], 'right');
 });
 
-test('a card that would run past the top of the screen is left out too', () => {
+test('a card that would run past the top or the bottom of the screen is left out too', () => {
   assert.deepEqual(labelSides([{ x: 250, y: 40, width: 300 }], { height: 56, gap: 36, minX: 8, maxX: 492 }), ['none']);
+  assert.deepEqual(labelSides([{ x: 250, y: 740, width: 160 }], { height: 56, gap: 36, minX: 8, maxX: 492, maxY: 760 }), ['above']);
+  assert.deepEqual(labelSides([{ x: 250, y: 740, width: 300 }], { height: 56, gap: 36, minX: 8, maxX: 380, maxY: 760 }), ['none'], 'sides cut at the bottom, above cut at the right');
 });

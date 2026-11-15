@@ -12,8 +12,8 @@ the ground. Each trade checks its own path alone and late, and the clash shows u
 ## What the demo shows
 
 Escape Plan answers the questions people ask about a building. A home buyer asks if the sofa
-gets in. A family asks if a parent's wheelchair gets out. An owner asks if the shaft can be
-widened for a new chiller. Press **Show me** and the building answers each one, with the place
+gets in. A family asks if a parent's wheelchair gets out. An owner asks if a new chiller
+fits through the shaft. Press **Show me** and the building answers each one, with the place
 and the numbers. Fix one answer and every other answer is checked again: widen the shaft and
 the structure answer turns to No at beam B2. It is a quick check of sizes and routes, not a
 code review.

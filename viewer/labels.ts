@@ -67,7 +67,7 @@ export function failText(b: Building, r: SolverResult): FailText | null {
     // app/scoreboard.ts numbersText's words for a corner turn and the smoke, shortened so the card keeps
     // the width of "needs 2.2 m, has 2.0 m" (a wider card is left out more often).
     numbers = reason === 'cannot_turn' ? `${show(r.needed)} long, fits ${show(r.available)}`
-      : reason === 'smoke_first' ? (r.needed === r.available ? `both at step ${r.needed}, a tie` : `people at step ${r.needed}, smoke at step ${r.available}`)
+      : reason === 'smoke_first' ? (r.needed === r.available ? `both at step ${r.needed}, tie goes to smoke` : `people at step ${r.needed}, smoke at step ${r.available}`)
       : `needs ${show(r.needed)}, has ${show(r.available)}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');
@@ -89,6 +89,7 @@ export interface LabelLayout {
   gap: number; // from the X centre to the near edge of the box
   minX: number; // free screen, left and right edges
   maxX: number;
+  maxY?: number; // free screen, bottom edge (default: no limit)
   xSize?: number; // half the size of a red X
   avoid?: readonly Rect[]; // boxes a card must not cover (the selection caption)
 }
@@ -100,10 +101,10 @@ const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < 
 // and only its X shows (the fix sheet still says it). Text is never drawn over text.
 export type LabelSide = 'right' | 'left' | 'above' | 'none';
 const SIDES: LabelSide[] = ['right', 'left', 'above'];
-const offEdge = (r: Rect, minX: number, maxX: number): number => (r.l < minX || r.r > maxX || r.t < 0 ? 1 : 0); // or past the top
+const offEdge = (r: Rect, minX: number, maxX: number, maxY = Infinity): number => (r.l < minX || r.r > maxX || r.t < 0 || r.b > maxY ? 1 : 0); // or past the top or bottom
 
 export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[] {
-  const { gap, minX, maxX, xSize = 26, avoid = [] } = layout;
+  const { gap, minX, maxX, maxY = Infinity, xSize = 26, avoid = [] } = layout;
   const marks: Rect[] = spots.map((p) => ({ l: p.x - xSize, r: p.x + xSize, t: p.y - xSize, b: p.y + xSize }));
   const placed: Rect[] = [];
   const sides: LabelSide[] = new Array(spots.length).fill('right');
@@ -123,7 +124,7 @@ export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[]
       marks.filter((m, j) => j !== i && overlaps(r, m)).length
       + placed.filter((q) => overlaps(r, q)).length
       + avoid.filter((q) => overlaps(r, q)).length
-      + offEdge(r, minX, maxX);
+      + offEdge(r, minX, maxX, maxY);
     let best: { side: LabelSide; rect: Rect; n: number } | null = null;
     for (const side of SIDES) {
       const rect = box(side);

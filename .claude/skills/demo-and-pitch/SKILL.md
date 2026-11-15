@@ -12,7 +12,7 @@ the words in `design/copy.md`: question, Yes or No, Show me, Answers, Yes to all
 ## How to tell each scene
 
 1. Open with the person and their question: "A home buyer asks: can my sofa get in?"
-2. Give the answer with the place and the numbers: "No. The sofa is stuck at the lobby door: it
+2. Give the answer with the place and the numbers: "No. The sofa is stuck at the lobby door. It
    cannot turn the corner: it is 2.2 m long, and the longest that fits is 2.0 m."
 3. Then the fix, and the answer after it: "Widen the lobby door to 1.6 m. Yes, the sofa gets in."
 
@@ -20,8 +20,8 @@ End the demo on the line "a quick check, not a code review".
 
 ## 30-second pitch beats
 
-1. The hook: "In fifteen years your building's chiller dies. Can you widen the shaft to get the
-   new one in?"
+1. The hook: "In fifteen years your building's chiller dies. Does a new chiller fit through the
+   shaft? And if you widen it, does the structure still hold?"
 2. The problem: everyone with a building has the same question: can my thing get through?
 3. The answer: ask your building. Press Show me and each person's question gets a Yes or a No.
 4. Jev (only if green): it turns words into edits, and every discipline votes, live.
