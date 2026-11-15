@@ -157,6 +157,8 @@ private-context/
 *.glb
 # The two 432 Park package models the viewer draws (our own approximate tower, not Cityweft).
 !data/432-park/*.glb
+# The token figurines: Kenney CC0 models (viewer/figures/CREDITS.md).
+!viewer/figures/*.glb
 *.gltf
 *.obj
 *.fbx

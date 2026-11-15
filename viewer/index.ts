@@ -1,18 +1,18 @@
 // Viewer: draws the building as an isometric cutaway and animates every token. Owner: P2.
-// The look is design/look.md (Liquid Glass v2): route dots the token travels over, a low-poly
-// figure for each token (figures.ts), a shake and a blinking red X on a No, a calm Yes to all when every answer is yes.
+// The look is design/look.md (Liquid Glass v2): route dots the token travels over, a figurine
+// for each token (figures.ts), a shake and a blinking red X on a No, a calm Yes to all when every answer is yes.
 // The building on screen is the real 432 Park backdrop; the graph's own rooms are not drawn.
 // A press on a token picks it up: drop it on any floor (drop.ts), or click it to select it.
 import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import type { Building, Id, SolverResult } from '../contract/types.ts';
+import type { Building, Discipline, Id, SolverResult } from '../contract/types.ts';
 import {
   ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_STYLESHEET,
   GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED,
 } from '../design/tokens.ts';
 import { dropTarget, figureScale, movedPastSlop, pickToken, pressIntent } from './drop.ts';
 import type { DropTarget, Ray } from './drop.ts';
-import { figureLights, makeFigure } from './figures.ts';
+import { disposeTree, figureLights, loadFigureModels, makeFigure } from './figures.ts';
 import type { Figure } from './figures.ts';
 import { coveredBy, failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import type { Rect } from './labels.ts';
@@ -63,7 +63,6 @@ const LABEL_HEIGHT = 56; // pixels, about two lines of label
 const ROOM_LABEL_HEIGHT = 16; // pixels, one line of room name
 const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px caps with 1.2 px tracking
 const UP = new THREE.Vector3(0, 1, 0);
-const FIGURE_PIXELS = 64; // a figure is never drawn smaller than this on screen
 const HIT_PIXELS = 36; // a press this close to a figure's middle picks it up
 const SNAP_PIXELS = 56; // a drop this close to a room's token spot lands on that room
 const REFUSED = 'Not placed: drop it on a floor of the tower';
@@ -81,6 +80,7 @@ interface Run {
   pellets: Pellet[];
   trail: TrailPiece[];
   id: Id;
+  discipline: Discipline;
   token: THREE.Group;
   figure: Figure;
   x: { obj: CSS2DObject; at: THREE.Vector3; width: number } | null;
@@ -175,6 +175,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   }
 
   function buildRuns(b: Building, results: SolverResult[]): void {
+    for (const run of runs) run.figure.dispose();
     clear(fx, shared);
     fx.add(...figureLights());
     runs = [];
@@ -247,7 +248,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       if (r.path.length > 0) for (const p of route.points) bounds.expandByPoint(new THREE.Vector3(...p));
       runs.push({
         points: route.points, cum, total, stopAt: route.stopAt, fail: r.status === 'fail',
-        delay: runs.length * MOTION.staggerSeconds, pellets, trail, id: token.id, token: tokenGroup, figure, x, reachedAt: null,
+        delay: runs.length * MOTION.staggerSeconds, pellets, trail, id: token.id, discipline: token.discipline, token: tokenGroup, figure, x,
+        reachedAt: null,
       });
     });
     markSelected();
@@ -324,6 +326,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       }
     }
     run.token.position.set(...pointAt(run.points, run.cum, d));
+    // Walk (or roll) while on the way; idle when parked, arrived or stopped.
+    run.figure.setMotion(local >= 0 && run.reachedAt === null && run.total > 1e-6 ? 'moving' : 'idle');
     const since = run.reachedAt === null ? Infinity : (local - run.reachedAt) * 1000;
     if (run.fail && since < MOTION.failShakeMs && !reduced) {
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -334,13 +338,18 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   // Figures keep their real size close up and grow to stay readable further out.
   function scaleFigures(): void {
     const mpp = (camera.top - camera.bottom) / (canvas.clientHeight || 600);
-    for (const run of runs) run.figure.object.scale.setScalar(figureScale(mpp, run.figure.size, FIGURE_PIXELS));
-    if (carried) carried.figure.object.scale.setScalar(figureScale(mpp, carried.figure.size, FIGURE_PIXELS));
+    for (const run of runs) run.figure.object.scale.setScalar(figureScale(mpp, run.figure.size, run.figure.minPixels));
+    if (carried) carried.figure.object.scale.setScalar(figureScale(mpp, carried.figure.size, carried.figure.minPixels));
   }
 
+  let lastFrame = 0;
   function frame(now: number): void {
     const t = reduced ? allDone + 60 : (now - t0) / 1000;
+    const dt = reduced || !lastFrame ? 0 : Math.min(0.1, (now - lastFrame) / 1000); // clips hold still on reduced motion
+    lastFrame = now;
     for (const run of runs) update(run, t - run.delay);
+    for (const run of runs) run.figure.tick(dt);
+    carried?.figure.tick(dt);
     scaleFigures();
     if (win && t >= allDone) {
       const since = t - allDone;
@@ -496,6 +505,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!carried) return;
     for (const run of runs) run.token.visible = true;
     if (captionObj) captionObj.visible = true;
+    carried.figure.dispose();
     carry.add(carried.figure.object); // so clear() frees it even when it was never shown
     clear(carry, shared);
     carry.add(...figureLights());
@@ -598,6 +608,28 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   new ResizeObserver(fit).observe(container);
   renderer.setAnimationLoop(frame);
 
+  // The figure models load once, in the background. Until then (or if a file fails) each figure
+  // uses its stand-in shapes; when they arrive, the stand-ins on screen are swapped in place, so a
+  // run in progress carries on.
+  function swapIn(old: Figure, id: Id, discipline: Discipline): Figure {
+    if (old.source !== 'fallback') return old;
+    const next = makeFigure(id, discipline);
+    if (next.source === 'fallback') return old;
+    next.object.position.copy(old.object.position);
+    old.object.parent?.add(next.object);
+    old.object.removeFromParent();
+    old.dispose();
+    disposeTree(old.object, shared);
+    return next;
+  }
+  void loadFigureModels().then(() => {
+    for (const run of runs) run.figure = swapIn(run.figure, run.id, run.discipline);
+    const c = carried;
+    const discipline = c && shown?.building.tokens.find((t) => t.id === c.id)?.discipline;
+    if (c && discipline) c.figure = swapIn(c.figure, c.id, discipline);
+    markSelected();
+  });
+
   function show(building: Building, results: SolverResult[]): void {
     shown = { building, results };
     drawBuilding(building);
@@ -647,15 +679,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
 // (three only removes a label's element when the label itself, not its parent, is removed).
+// The figure models' shared data is never freed (disposeTree), and skinned figures free their bones.
 function clear(scene: THREE.Scene, shared: Set<object>): void {
   scene.traverse((o) => {
     if (o instanceof CSS2DObject) o.element.remove();
-    if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
-      if (!shared.has(o.geometry)) o.geometry.dispose();
-      const mats: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) if (!shared.has(m)) m.dispose();
-    }
   });
+  disposeTree(scene, shared);
   scene.clear();
 }
 
