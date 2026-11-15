@@ -1,17 +1,40 @@
-// Loads the real 432 Park floor plans for the viewer: the demo slice's apartment level, and every
-// apartment level of the whole tower with the plan it was given. Browser only; the placement math
-// is in typical-floors.ts. Resolves to null when the package is not on this machine, so the game
-// keeps the plain building. Owner: P5.
+// Loads the real 432 Park for the viewer: the demo slice's apartment level, every apartment level of
+// the whole tower with the plan it was given, and the facade from the package's Lightweight model.
+// Browser only; the placement math is in typical-floors.ts. Resolves to null when the package is not
+// on this machine, so the game keeps the plain building. Owner: P5.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Building } from '../contract/types.ts';
+import { TOWER_CENTRE } from '../app/backdrop.ts';
 import { TOWER_FLOORS } from './tower-floors.ts';
-import { TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, floorPlacement, looksLikeGlb, towerFloors, towerSlabs } from './typical-floors.ts';
+import {
+  FACADE_URL, TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, floorPlacement, isInterior, looksLikeGlb, towerFloors, towerSlabs,
+} from './typical-floors.ts';
 
 export interface TypicalFloor {
   object: THREE.Object3D;
   // Put the floors on the levels of this building (call again after each edit).
   place(b: Building): void;
+}
+
+// The outside of the tower from the package's complete Lightweight model, or null without it. Only
+// the exterior is kept; the interior comes from our own floor plans.
+async function loadFacade(): Promise<THREE.Object3D | null> {
+  const res = await fetch(FACADE_URL);
+  if (!res.ok) return null;
+  const bytes = await res.arrayBuffer();
+  if (!looksLikeGlb(bytes)) return null;
+  const { scene } = await new GLTFLoader().parseAsync(bytes, '');
+  const drop: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (isInterior(o.name)) drop.push(o);
+  });
+  for (const o of drop) o.removeFromParent();
+  const facade = new THREE.Group();
+  facade.name = 'facade';
+  facade.add(scene);
+  facade.position.set(TOWER_CENTRE.x, 0, TOWER_CENTRE.z); // the package centres the tower on the origin
+  return facade;
 }
 
 export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
@@ -46,6 +69,12 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
   sliceFloor.add(slice.clone(true));
   const tower = new THREE.Group();
   object.add(sliceFloor, tower);
+  try {
+    const facade = await loadFacade();
+    if (facade) object.add(facade);
+  } catch (err) {
+    console.warn('Facade not loaded:', err); // the floors still show without it
+  }
 
   return {
     object,
