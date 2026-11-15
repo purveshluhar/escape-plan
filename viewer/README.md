@@ -9,6 +9,8 @@ takes node ids whose boxes are not drawn because the backdrop stands in for them
 them, and the camera frames only the boxes that are drawn).
 The mouse wheel zooms out from the framed view (up to 60x) to see the backdrop; scroll back to 1x to
 reframe on the building.
+`onZoom(zoom)` in the options reports each change; the app uses it to lift the backdrop's 4 m cut as you
+zoom out (`cutHeight` in `app/backdrop.ts`), so the context shows at full height.
 Pure layout math lives in `viewer/layout.ts` so it can be tested without a browser.
 
 Route math (`tokenRoute`), fail label words (`labels.ts`) and the rest of the pure logic are

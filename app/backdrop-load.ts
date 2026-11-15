@@ -9,6 +9,11 @@ import { CUT_HEIGHT, backdropMatrix, coversPoint, layerColor, metaToBlock } from
 const BASE = '/data/cityweft/';
 const CUT = [new THREE.Plane(new THREE.Vector3(0, -1, 0), CUT_HEIGHT)]; // keeps y <= CUT_HEIGHT
 
+// Move the cut (viewer metres above the ground); every block material shares this plane.
+export function setCutHeight(height: number): void {
+  CUT[0]!.constant = height;
+}
+
 interface Meta {
   local: { target: { x: number; z: number } };
 }

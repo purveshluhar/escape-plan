@@ -49,6 +49,18 @@ export function toViewer(m: number[], p: { x: number; y?: number; z: number }): 
 // camera frames our 30 m tower closely, so anything taller walls it off: keep streets and footprints.
 export const CUT_HEIGHT = 4;
 
+// Zoomed out (the mouse wheel in the viewer) the whole building is small in frame and nothing
+// walls it off, so the context rises to its real height: from the framed view's zoom of 1.5 the
+// cut climbs smoothly to this, reached at zoom 4. The building is drawn over the context anyway.
+export const CUT_FULL = 500;
+const ZOOM_FROM = 1.5;
+const ZOOM_TO = 4;
+
+export function cutHeight(zoom: number): number {
+  const t = Math.min(1, Math.max(0, (zoom - ZOOM_FROM) / (ZOOM_TO - ZOOM_FROM)));
+  return CUT_HEIGHT + t * t * (3 - 2 * t) * (CUT_FULL - CUT_HEIGHT);
+}
+
 // Pale daylight colours per Cityweft layer (the node names start with the layer name).
 export const LAYER_COLOR: [RegExp, string][] = [
   [/buildings/i, '#eef0f4'],
