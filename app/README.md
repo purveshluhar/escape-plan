@@ -22,3 +22,13 @@ the same `JevParse` shape either way.
 Keys go in `.env` only, never in code and never with a `VITE_` prefix. A Jev or LLM call that
 needs a key, and the T3 phone sockets, go through P1's local server in `server/` (ADR 0008).
 Browser code never imports `server/`.
+
+## Typed edits
+
+`app/parse-client.ts` posts the sentence and the fixes on screen to `/parse` (same origin; the
+root `vite.config.ts` proxies it to the server on 127.0.0.1) with a 2.5 s timeout. The server's
+answer is used only when it sends `x-decider: strands`. With `keywords`, or when the server is
+down, slow or refuses, the page's own `parseEdit` reads the sentence, because it reads loose
+wording better ("make the lobby door 1.5 metres wide"). An answer applies only as one of the
+fixes on screen with every part at 0.8 or more. `app/strip.ts` (tested) and `app/strip-view.ts`
+draw the "who decided" strip.

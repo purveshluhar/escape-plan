@@ -55,6 +55,21 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
   -d '{"text":"widen the plant shaft to 2 m","ops":["widen","reset"],"targets":[{"id":"plant-shaft","name":"Plant shaft"}],"value_range":{"min":0,"max":5}}'
 ```
 
+## Called from the page (Vite proxy)
+
+The page posts to `/parse` on its own origin, so it works on localhost and through a tunnel. The
+root `vite.config.ts` forwards it to `http://127.0.0.1:<SERVER_PORT>` (`npm run dev` and
+`npm run preview`). It sets Host to the server's own, so the Host check above holds. A tunnel
+origin is not on the Origin list, so `proxy-guard.ts` does that job in front of the proxy: a call
+with an Origin passes only when the browser marks it `Sec-Fetch-Site: same-origin`, and then goes
+on without Origin. Any other call with an Origin gets `403` from Vite. Vite's own Host check and
+CORS run first. The server itself is unchanged: called directly, it still refuses foreign Hosts
+and Origins.
+
+The app uses this server's answer only when it sends `x-decider: strands`. With `keywords` it
+reads the sentence itself (`app/parse-client.ts`), so keywords can stay the default here until
+the demo laptop is timed (below).
+
 ## Plan C rules (`keywords.ts`)
 
 - Op: the op's own word gives confidence 1 (`widen`, `ramp`, `transfer beam`, `close`, `sleeve`,

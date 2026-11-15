@@ -87,5 +87,8 @@ Units are metres and kN.
 - **Vote**: `accept`, `object` or `review`, with a confidence. Shown as a bubble only.
 - **Plan B**: a general LLM forced to return the same typed answers as Jev.
 - **Plan C**: a keyword parser and the buttons.
+- **Strands Decider**: the open-source (Apache-2.0) typed-decision model that fills Jev's parse slot today, with `DECIDER=strands` (server/README.md). It reads the op and the target only; on screen it is named "Strands Decider". ADRs keep the name Jev for history.
+- **Who decided strip**: the panel after a typed edit: the sentence, the reading with a confidence per part, then the rules' answer. Below 0.8 it turns amber, says "Not sure" and changes nothing.
+- **Reader**: who read a typed sentence: Strands Decider (on the server), or the page's own keyword reader (`app/shell.ts parseEdit`) when the server runs keywords, is down, or takes over 2.5 s.
 - **Phone messages** (T3): `join`, `escape`, `vote` from a phone; `result` back to it.
 - **Cityweft** (T2): the source of the city-block backdrop. Its files never enter the repo.

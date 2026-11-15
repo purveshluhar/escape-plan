@@ -77,6 +77,24 @@ test('parse: a vague sentence asks "Did you mean" with the closest fixes first',
   assert.equal(parseEdit('hello there', buttons).edit, null);
 });
 
+test('parse: short phrases that name one fix apply (audit gap 8)', () => {
+  assert.deepEqual(parseEdit('ramp terrace', buttons).edit, { op: 'add_ramp', target: 'terrace-door', value: null, source: 'text' });
+  assert.deepEqual(parseEdit('widen shaft 2.0', buttons).edit, { op: 'widen', target: 'plant-shaft', value: 2, source: 'text' });
+  assert.deepEqual(parseEdit('transfer beam', buttons).edit, { op: 'add_transfer_beam', target: 'beam-b2', value: null, source: 'text' });
+});
+
+test('parse: a word shared by several fixes, or no part at all, still asks', () => {
+  assert.equal(parseEdit('widen the door to 2 m', buttons).edit, null, '"door" names three fixes');
+  assert.equal(parseEdit('widen the corridor', buttons).edit, null, 'three widen fixes, none named');
+  assert.equal(parseEdit('make the lobby bigger', buttons).edit, null);
+});
+
+test('typed edits are read against every demo fix, so the shaft and the beam are known', () => {
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  assert.match(main, /const typedFixes = demoButtons\(building, expected\)/);
+  assert.match(main, /readEdit\(text, typedFixes, building/);
+});
+
 test('the page has no Later group and no sample label', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(page, /laterGroup|id="sample"|#sample/);

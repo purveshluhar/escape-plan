@@ -121,10 +121,13 @@ export function runSeconds(count: number, perToken: number, stagger: number): nu
 
 // ---------- Plan C: keyword parser for typed edits ----------
 
-const OP_WORDS: [EditOp, RegExp][] = [
-  ['add_transfer_beam', /\btransfer\b|\bbeam\b/],
-  ['add_ramp', /\bramps?\b|\bslope\b|\bstep\b/],
-  ['widen', /\bwide[nr]?\b|\bwidth\b|\bbigger\b|\blarger\b|\benlarge\b|\bopen up\b/],
+// The third field is true for a loose word: "bigger" or "open up" could mean a room, not one door,
+// so a loose word never makes a part of a name sure on its own.
+const OP_WORDS: [EditOp, RegExp, boolean][] = [
+  ['add_transfer_beam', /\btransfer\b|\bbeam\b/, false],
+  ['add_ramp', /\bramps?\b|\bslope\b|\bstep\b/, false],
+  ['widen', /\bwide[nr]?\b|\bwidth\b/, false],
+  ['widen', /\bbigger\b|\blarger\b|\benlarge\b|\bopen up\b/, true],
 ];
 
 const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9.]+/).filter((w) => w.length > 1);
@@ -145,14 +148,25 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   const opConf = opHit ? 0.95 : 0.3;
 
   const said = new Set(words(t).filter((w) => !STOP.has(w)));
+  const nameOf = (b: DemoButton): string[] => words(b.label).filter((w) => !STOP.has(w) && !/^\d/.test(w) && w !== 'm');
+  // A word in only one fix's name ("terrace", "shaft") points at that fix; "door" is in three.
+  const uses = new Map<string, number>();
+  for (const b of buttons) for (const w of new Set(nameOf(b))) uses.set(w, (uses.get(w) ?? 0) + 1);
   const scored = buttons.map((b) => {
-    const name = words(b.label).filter((w) => !STOP.has(w) && !/^\d/.test(w) && w !== 'm');
+    const name = nameOf(b);
     const hits = name.filter((w) => said.has(w)).length;
     const score = name.length ? hits / name.length : 0;
-    return { b, score: score + (b.edit.op === op && opHit ? 0.5 : 0), match: score };
+    const own = name.some((w) => said.has(w) && uses.get(w) === 1);
+    return { b, score: score + (b.edit.op === op && opHit ? 0.5 : 0), match: score, own };
   }).sort((a, z) => z.score - a.score);
   const best = scored[0];
-  const targetConf = best ? Math.min(1, best.match + (best.b.edit.op === op && opHit ? 0.2 : 0)) : 0;
+  const sameOp = best !== undefined && best.b.edit.op === op && opHit !== undefined;
+  const firm = sameOp && opHit?.[2] === false;
+  let targetConf = best ? Math.min(1, best.match + (sameOp ? 0.2 : 0)) : 0;
+  // Audit gap 8: "ramp terrace", "widen shaft 2.0". A firm op word and a word only this fix has.
+  if (firm && best?.own) targetConf = Math.max(targetConf, 0.9);
+  // "transfer beam": no part named, but only one fix on screen does this op.
+  if (firm && best?.match === 0 && buttons.filter((b) => b.edit.op === op).length === 1) targetConf = Math.max(targetConf, 0.85);
 
   const num = t.match(/(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?)?/);
   const raw = num ? Number(num[1]) : null;

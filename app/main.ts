@@ -22,9 +22,13 @@ import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
-  countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
+  countText, dropPlaced, parkedResults, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
-import type { ParseOutcome, Phase, PickItem } from './shell.ts';
+import type { Phase, PickItem } from './shell.ts';
+import { readEdit } from './parse-client.ts';
+import type { Reading } from './parse-client.ts';
+import { answerLines } from './strip.ts';
+import { renderStrip } from './strip-view.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
@@ -32,6 +36,8 @@ import type { GameState } from './state.ts';
 const building = buildingJson as Building;
 const expected = expectedJson as ExpectedFile;
 const buttons = mvpButtons(building, demoButtons(building, expected));
+// Typed edits are read against every demo fix, so "widen shaft 2.0" and "transfer beam" are known.
+const typedFixes = demoButtons(building, expected);
 const items = pickerItems(building, MVP_TOKENS);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -44,12 +50,14 @@ interface State {
   results: Answer[] | null; // last Escape! run, placed objects only
   note: string; // live-region line: "Re-solved after ..."
   editOpen: boolean;
-  jev: { text: string; out: ParseOutcome } | null; // a typed edit that was not clear enough
+  read: Reading | null; // the last typed edit, shown in the "who decided" strip
+  reading: string | null; // a typed edit still being read
+  solveMs: number | null;
   scoreOpen: boolean;
 }
 
 const S: State = {
-  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, jev: null, scoreOpen: false,
+  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false,
 };
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -136,8 +144,10 @@ function idle(): void {
 }
 
 function escape(): void {
-  if (S.placed.length === 0 || S.phase === 'running') return;
+  if (S.placed.length === 0 || S.phase === 'running' || S.reading !== null) return;
+  const t0 = performance.now();
   const { edited: b, results } = solvePlaced();
+  S.solveMs = performance.now() - t0;
   S.results = results;
   S.scoreOpen = false;
   viewer.setInsetRight(insetFor(results));
@@ -191,7 +201,7 @@ function applyFix(edit: Edit, label: string): void {
   if (S.phase === 'running') return;
   S.game = applyEdit(S.game, edit);
   S.editOpen = false;
-  S.jev = null;
+  S.read = null;
   ($('editInput') as HTMLInputElement).value = '';
   S.note = `Checked again after: ${label}`;
   if (S.placed.length) escape();
@@ -233,19 +243,23 @@ function openEdit(): void {
 
 function closeEdit(): void {
   S.editOpen = false;
-  S.jev = null;
+  if (S.read && !S.read.out.edit) S.read = null;
   render();
 }
 
-function submitText(text: string): void {
-  // Jev is not connected yet, so typed edits go through plan C (shell.ts parseEdit), which returns
-  // the same JevParse shape. A sure parse applies at once; anything else asks "Did you mean".
-  const out = parseEdit(text, buttons);
-  if (out.edit) applyFix(out.edit, editLabel(building, out.edit));
-  else {
-    S.jev = { text, out };
-    render();
-  }
+// The server reads the sentence when it runs Strands Decider; otherwise this page does
+// (parse-client.ts). A sure parse applies at once; anything else asks "Did you mean" in the strip.
+async function submitText(text: string): Promise<void> {
+  if (S.reading !== null || S.phase === 'running') return;
+  S.reading = text;
+  S.read = null;
+  render();
+  const r = await readEdit(text, typedFixes, building);
+  S.reading = null;
+  // Escape! waits while a sentence is read, so no run is playing here.
+  if (r.out.edit) applyFix(r.out.edit, editLabel(building, r.out.edit));
+  S.read = r;
+  render();
 }
 
 // ---------- Render ----------
@@ -269,7 +283,7 @@ function render(): void {
 
   // Dock tools
   const esc = $('btnEscape') as HTMLButtonElement;
-  esc.disabled = running || S.placed.length === 0;
+  esc.disabled = running || S.placed.length === 0 || S.reading !== null;
   if (S.placed.length) esc.removeAttribute('aria-describedby');
   else esc.setAttribute('aria-describedby', 'escHint');
   const n = S.game.edits.length;
@@ -378,7 +392,6 @@ function renderEdit(): void {
   document.body.classList.toggle('editing', S.editOpen);
   const ep = $('editPanel');
   ep.classList.toggle('open', S.editOpen);
-  ep.classList.toggle('err', S.jev !== null);
   $('quick').replaceChildren(
     ...buttons.map((f) => {
       const on = isApplied(S.game, f.edit);
@@ -386,22 +399,23 @@ function renderEdit(): void {
     }),
     btn('Undo edits', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
   );
-  const jev = $('jev');
-  jev.classList.toggle('on', S.jev !== null);
-  if (!S.jev) return jev.replaceChildren();
-  const { text, out } = S.jev;
-  jev.replaceChildren(
-    h('div', { class: 'q' }, 'Not sure what you meant by ', h('b', {}, `"${text}"`), '.'),
-    h('div', { class: 'dym' }, 'Did you mean'),
-    h('div', { class: 'opts' },
-      ...out.suggestions.filter((f) => !isApplied(S.game, f.edit)).map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))),
-      btn('Cancel', 'fixbtn ghost', () => {
-        S.jev = null;
-        render();
-        $('editInput').focus();
-      })),
-    h('div', { class: 'src' }, 'Matched by keywords for now. Jev is not connected yet.'),
-  );
+  ($('editApply') as HTMLButtonElement).disabled = S.reading !== null;
+  const placed = S.results !== null && S.placed.length > 0;
+  renderStrip($('strip'), building, {
+    pending: S.reading, reading: S.read,
+    answers: placed ? answerLines(S.results!, edited()) : null,
+    checking: S.phase === 'running', solveMs: S.solveMs,
+    suggestions: (S.read?.out.suggestions ?? []).filter((f) => !isApplied(S.game, f.edit)).map((f) => ({ label: f.label, onPick: () => applyFix(f.edit, f.label) })),
+    onCancel: () => {
+      S.read = null;
+      render();
+      if (S.editOpen) $('editInput').focus();
+    },
+    onClose: () => {
+      S.read = null;
+      render();
+    },
+  });
 }
 
 // ---------- Build the dock once ----------
@@ -455,7 +469,7 @@ $('summary').addEventListener('click', () => {
 $('editForm').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const text = ($('editInput') as HTMLInputElement).value.trim();
-  if (text) submitText(text);
+  if (text) void submitText(text);
 });
 
 document.addEventListener('keydown', (ev) => {

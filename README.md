@@ -33,7 +33,12 @@ npm ci
 npm run dev      # http://localhost:5173
 npm test         # contract, solver, data schema checks
 npm run check    # typecheck + test + build: run before every merge
+npm run server   # optional: reads typed edits on 127.0.0.1 (server/README.md)
 ```
+
+Typed edits go to the local server through Vite's `/parse` proxy (`vite.config.ts`). With
+`DECIDER=strands` the Strands Decider reads them; otherwise, or with no server, the page reads
+them by keywords. The "who decided" strip shows which one read the sentence. The rules decide.
 
 ## Folder map
 
