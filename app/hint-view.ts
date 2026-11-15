@@ -28,7 +28,7 @@ export function renderHint(el: HTMLElement, v: HintView): void {
   el.replaceChildren(
     h('div', { class: 'hbtns' }, ...v.asks.map((a) => button(many ? `Hint for ${a.name}` : 'Hint', 'fixbtn', a.onHint,
       { 'aria-label': `Hint for ${a.name}` }))),
-    ...(v.shown && m ? [h('div', { class: 'hbody', role: 'status' },
+    ...(v.shown && m ? [h('div', { class: 'hbody' },
       h('div', { class: 'hhead' }, h('b', {}, v.shown.name), h('span', { class: 'htried num' }, m.tried)),
       m.found
         ? h('div', { class: 'hfix' },

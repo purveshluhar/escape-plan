@@ -239,6 +239,8 @@ function askHint(token: Id): void {
   const result = findHint(played(), S.game.edits, token, (e) => solvePlaced(e).results);
   S.hint = { token, result, run: S.results };
   render();
+  // The Hint button was redrawn under the click; keep keyboard focus inside the panel.
+  $('hint').querySelector<HTMLElement>('.hact .fixbtn')?.focus();
 }
 
 function reset(): void {

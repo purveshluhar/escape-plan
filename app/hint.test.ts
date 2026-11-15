@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import type { Building, Edit, Id } from '../contract/types.ts';
+import type { Building, Edit, Id, SolverResult } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
 import { findHint, hintModel } from './hint.ts';
 
@@ -121,4 +121,45 @@ test('words: nothing found, by reason', () => {
   assert.equal(slow.note, 'Stopped at the time limit. None made this Yes.');
   const yes = hintModel(building, findHint(building, [], 'load', over(['load'])), 'load');
   assert.equal(yes.note, 'This answer is already Yes.');
+});
+
+// ---- review round 1 ----
+
+test('a fix already in the edit list is never offered again (Apply would do nothing)', () => {
+  const edits = [btn('widen', 'plant-shaft', 1.6), btn('widen', 'plant-shaft', 1)];
+  const h = findHint(building, edits, 'chiller', over(['chiller']));
+  assert.equal(key(h.fix), 'widen plant-shaft 1.7');
+});
+
+test('widths go up one tenth at a time from the current width, also after a hundredths digit of 5 or more', () => {
+  const odd = structuredClone(building);
+  odd.edges.find((e) => e.id === 'office-door')!.clear_width = 0.57;
+  const h = findHint(odd, [], 'people', over(['people'], odd));
+  assert.equal(key(h.fix), 'widen office-door 0.6');
+  const wide = structuredClone(building);
+  wide.edges.find((e) => e.id === 'office-door')!.clear_width = 0.25;
+  assert.equal(key(findHint(wide, [], 'people', over(['people'], wide)).fix), 'widen office-door 0.6');
+});
+
+test('a door that is too low is not widened: no edit is offered for a height', () => {
+  const tall = structuredClone(building);
+  tall.tokens.find((t) => t.id === 'sofa')!.size.height = 5;
+  const h = findHint(tall, [], 'sofa', over(['sofa'], tall));
+  assert.equal(h.stop, 'exhausted');
+  assert.equal(h.tried, 0);
+  assert.equal(hintModel(tall, h, 'sofa').note, 'The rules have no edit to try at the stuck place. Type an edit instead.');
+});
+
+test('a stuck room (not a door) is not fixed by widening the doors around it for a size reason', () => {
+  const room = structuredClone(building);
+  const r: SolverResult = { token: 'sofa', status: 'fail', path: [], blocked_at: 'lobby', reason: 'too_narrow', needed: 1, available: 0.5 };
+  const h = findHint(room, [], 'sofa', () => [r]);
+  assert.equal(h.tried, 0);
+  assert.equal(h.stop, 'exhausted');
+});
+
+test('only a beam becomes a transfer beam, never a column or a foundation', () => {
+  const r: SolverResult = { token: 'load', status: 'fail', path: [], blocked_at: 'c1', reason: 'no_support', needed: null, available: null };
+  const h = findHint(building, [], 'load', () => [r]);
+  assert.equal(h.tried, 0);
 });

@@ -10,7 +10,6 @@ import { editLabel } from './state.ts';
 
 export const HINT_MAX_TRIES = 100;
 export const HINT_MAX_MS = 250;
-const WIDEN_FROM_STEP = 1; // tenths of a metre above the current width
 const WIDEN_MAX_TENTHS = 30; // no door or shaft is widened past 3.0 m
 
 export interface HintOptions {
@@ -39,7 +38,8 @@ function edgeCandidates(edited: Building, id: Id, reason: Reason | null): Edit[]
   if (!edge) return [];
   const widen = (): Edit[] => {
     const out: Edit[] = [];
-    for (let t = Math.round(edge.clear_width * 10) + WIDEN_FROM_STEP; t <= WIDEN_MAX_TENTHS; t++) out.push(button('widen', id, t / 10));
+    // the next tenth of a metre above the current width (the 1e-9 keeps 1.2 from reading as 11.999)
+    for (let t = Math.floor(edge.clear_width * 10 + 1e-9) + 1; t <= WIDEN_MAX_TENTHS; t++) out.push(button('widen', id, t / 10));
     return out;
   };
   const ramp = (): Edit[] => (edge.kind === 'ramp' && edge.step_height === 0 ? [] : [button('add_ramp', id)]);
@@ -48,18 +48,22 @@ function edgeCandidates(edited: Building, id: Id, reason: Reason | null): Edit[]
   switch (reason) {
     case 'too_narrow': case 'cannot_turn': return widen();
     case 'step': return ramp();
-    case 'uphill': case 'crosses_beam': return sleeve();
+    case 'crosses_beam': return sleeve();
     case 'smoke_first': return close();
+    case 'too_low': case 'uphill': return []; // no edit changes a height or a slope
     default: return [...widen(), ...ramp(), ...sleeve(), ...close()];
   }
 }
 
 export function candidateEdits(edited: Building, at: Id | null, reason: Reason | null): Edit[] {
   if (at === null) return [];
-  const member = edited.members.find((m) => m.id === at);
-  if (member) return member.kind === 'transfer_beam' ? [] : [button('add_transfer_beam', at)];
+  if (reason === 'no_support') {
+    // Only a beam is turned into a transfer beam, never a column or a foundation.
+    return edited.members.some((m) => m.id === at && m.kind === 'beam') ? [button('add_transfer_beam', at)] : [];
+  }
   if (edited.edges.some((e) => e.id === at)) return edgeCandidates(edited, at, reason);
-  // A stuck room: the ways in and out of it.
+  // A stuck room. Its size is its own, so no door edit fixes a size reason; a blocked way in or out might.
+  if (reason === 'too_narrow' || reason === 'too_low' || reason === 'cannot_turn') return [];
   return edited.edges.filter((e) => e.from === at || e.to === at).flatMap((e) => edgeCandidates(edited, e.id, reason));
 }
 
@@ -76,7 +80,9 @@ export function findHint(
   const done = (stop: HintStop, tried: number, fix: Edit | null, breaks: SolverResult[], at: Id | null): HintResult =>
     ({ fix, tried, stop, at, limit: maxTries, breaks });
   if (!mine || mine.status === 'pass') return done('yes', 0, null, [], null);
-  const candidates = candidateEdits(applyEdits(start, edits), mine.blocked_at, mine.reason);
+  const applied = (c: Edit): boolean => edits.some((e) => e.op === c.op && e.target === c.target && e.value === c.value);
+  // An edit already in the list is skipped: applying it again changes nothing.
+  const candidates = candidateEdits(applyEdits(start, edits), mine.blocked_at, mine.reason).filter((c) => !applied(c));
   let tried = 0;
   for (const c of candidates) {
     if (tried >= maxTries) return done('tries', tried, null, [], mine.blocked_at);

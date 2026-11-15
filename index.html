@@ -165,9 +165,9 @@ body.editing #banner.on{display:none}
 #sheet .foot .fixbtn{flex:1;height:40px;text-align:center}
 
 /* ---------- Hint: the fix the rules found, stacked above the "who decided" strip ---------- */
-#hint{position:fixed;left:24px;bottom:calc(104px + var(--strip-h,0px));width:min(520px,calc(100vw - 48px));border-radius:26px;padding:12px 14px;display:none}
+#hint{position:fixed;left:24px;bottom:calc(104px + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
 #hint.on{display:block;animation:sheetIn .45s var(--soft)}
-body.editing #hint{width:min(520px,calc(100vw - 592px))}
+body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
 #hint .hbtns{display:flex;flex-wrap:wrap;gap:6px}
 #hint .hbtns .fixbtn{height:40px;font-size:15px;padding:0 14px}
 #hint .hbody{margin-top:10px}
@@ -292,7 +292,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #editPanel{bottom:136px;left:8px;right:8px;width:auto}
   #strip,body.editing #strip{top:96px;bottom:auto;left:8px;right:8px;width:auto;max-height:50vh;overflow:auto}
   #strip .boxes{grid-template-columns:1fr} #strip .arrow,#strip .caps{display:none}
-  #hint,body.editing #hint{top:calc(96px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:40vh;overflow:auto}
+  #hint,body.editing #hint{top:calc(96px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
   #banner{left:8px;right:8px;width:auto;bottom:136px}
   #banner .sub{font-size:16px}
 }
@@ -334,7 +334,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
     <div class="quick" id="quick"></div>
   </div>
   <div id="strip" class="glass" role="region" aria-label="Who decided" aria-live="polite"></div>
-  <div id="hint" class="glass" role="region" aria-label="Hint"></div>
+  <div id="hint" class="glass" role="region" aria-label="Hint" aria-live="polite"></div>
   <span id="escHint" hidden>Pick a question first</span>
 </div>
 <script type="module" src="/app/main.ts"></script>
