@@ -26,6 +26,7 @@ const drawn = new WeakMap<HTMLElement, string>();
 
 export function renderHint(el: HTMLElement, v: HintView): void {
   el.classList.toggle('on', v.asks.length > 0);
+  el.classList.toggle('open', v.shown !== null); // a result is showing: the panel is full width
   const sig = JSON.stringify([v.asks.map((a) => a.name), v.shown && [v.shown.name, v.shown.model]]);
   if (drawn.get(el) === sig) return;
   drawn.set(el, sig);

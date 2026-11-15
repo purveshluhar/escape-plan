@@ -167,6 +167,7 @@ body.editing #banner.on{display:none}
 /* ---------- Hint: the fix the rules found, stacked above the "who decided" strip ---------- */
 #hint{position:fixed;left:24px;bottom:calc(104px + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
 #hint.on{display:block;animation:sheetIn .45s var(--soft)}
+#hint:not(.open){width:max-content;max-width:min(520px,calc(100vw - 48px))}
 body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
 @media (max-width:950px){body.editing #hint{display:none}} /* the edit box takes the room */
 #hint .hbtns{display:flex;flex-wrap:wrap;gap:6px}
@@ -293,7 +294,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #editPanel{bottom:136px;left:8px;right:8px;width:auto}
   #strip,body.editing #strip{top:96px;bottom:auto;left:8px;right:8px;width:auto;max-height:50vh;overflow:auto}
   #strip .boxes{grid-template-columns:1fr} #strip .arrow,#strip .caps{display:none}
-  #hint,body.editing #hint{top:calc(96px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
+  #hint:not(.open){right:auto;width:max-content}
+  #hint,body.editing #hint{top:calc(114px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
   #banner{left:8px;right:8px;width:auto;bottom:136px}
   #banner .sub{font-size:16px}
 }
