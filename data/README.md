@@ -57,6 +57,10 @@ plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
   4. `tower-floors.ts` (generated, do not edit) records the plan and turn per level for the viewer.
 - `typical-floors.ts` and `typical-floors-load.ts` draw the real floor plan at every apartment level
   (and the slice's level 10) in the viewer, when the package is on the machine.
+- The outside is the package's complete Lightweight model (`432_Park_Avenue_Lightweight.glb`): its
+  exterior concrete grid, facade and window modules and roof parapet, 28.5 m by 425.5 m, centred on
+  the tower. Its own levels, interiors and ground plinth are dropped (our floors and the backdrop
+  draw those). Without the file the floors show without a facade.
 - Levels with no plan (lobby, services, open mechanical) get a plain slab and the fixed core as a
   stand-in, using the GLB's own `Slab` and `Core` nodes: the package has no layout for them.
 - Elevations are real (86 levels, 425 m). The package has no door data: doors and lifts are ours.

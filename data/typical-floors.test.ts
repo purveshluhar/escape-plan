@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Building } from '../contract/types.ts';
-import { TYPICAL_TURN_DEG, floorPlacement, looksLikeGlb, towerFloors, towerSlabs, coveredNodes } from './typical-floors.ts';
+import { TYPICAL_TURN_DEG, floorPlacement, looksLikeGlb, towerFloors, towerSlabs, coveredNodes, isInterior, FACADE_URL } from './typical-floors.ts';
 
 const building = JSON.parse(readFileSync(new URL('./building.json', import.meta.url), 'utf8')) as Building;
 
@@ -61,4 +61,14 @@ test('the real floors cover every tower node (units and cores) and none of the d
   }
   const tower = building.nodes.filter((n) => /^T\d\d$/.test(n.level));
   assert.equal(covered.length, tower.length);
+});
+
+test('the facade keeps the exterior of the Lightweight tower and drops its interior levels and plinth', () => {
+  for (const name of ['Exterior_Concrete_Grid', 'Facade_Module_001', 'Windows_Module_042', 'Flat_Roof_Parapet']) {
+    assert.equal(isInterior(name), false, name);
+  }
+  for (const name of ['Model_Level_010', 'Model_Level_010_Slab', 'Residential_Interiors', 'Local_Ground_Plinth']) {
+    assert.equal(isInterior(name), true, name);
+  }
+  assert.match(FACADE_URL, /432_Park_Avenue_Lightweight\.glb$/);
 });

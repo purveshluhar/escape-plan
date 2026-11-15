@@ -66,3 +66,13 @@ export function towerSlabs(floors: Record<string, FloorPlan>, b: Building): Floo
 export function coveredNodes(b: Building): string[] {
   return b.nodes.filter((n) => /^T\d\d$/.test(n.level)).map((n) => n.id);
 }
+
+// The outside of the tower comes from the package's complete Lightweight model: its exterior concrete
+// grid, facade and window modules and roof parapet. Everything inside it (its own levels and
+// interiors, drawn from our floor plans instead) and its ground plinth (the backdrop has the ground)
+// is left out. The exterior is 28.5 m square and 425.5 m tall, centred on the origin like the floors.
+export const FACADE_URL = '/private-context/432-park/432_Park_Avenue_Lightweight.glb';
+
+export function isInterior(name: string): boolean {
+  return /^(Model_Level_|Residential_Interiors|Local_Ground_Plinth)/.test(name);
+}
