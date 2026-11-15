@@ -69,8 +69,8 @@ Optional, after the beat, to show "not sure": press `R`, press `/`, type `make i
 | Click "Widen office door to 0.9 m" | "Smoke gets there first at North service corridor", "People reach North service corridor at step 1. Smoke gets there at step 1. A tie goes to the smoke." | "Now they get out of the office, but the smoke reaches the corridor at the same step. A tie goes to the smoke." |
 | Click "Close lobby door" | "Yes", "Everyone gets out before the smoke. With 2 edits." | "Close the lobby door. The smoke is now one step behind them." |
 
-Say it plainly: "This answer is for the ground floor. On every floor above it, the smoke reaches
-the stairs first, whatever door is closed. So the app offers no fix up there."
+Say it plainly: "This answer is for the ground floor. We also checked people starting on Level 10
+and Level 20: there the smoke reaches the stairs first, even with the lobby door closed."
 
 ## Beat 5. The whole tower
 
@@ -138,7 +138,7 @@ of the Answers panel: "A quick check of sizes and routes, not a code review."
 | Question | Answer |
 |---|---|
 | Does the AI decide? | No. Plain rules in the solver decide every Yes and No, the same every time. The model only reads the sentence and votes. |
-| Why not just try everything? | We do, where it is cheap. In a test, every single edit across the building took 6,934 solves in 8.2 s. That is too slow to feel live. Trying edits only at the stuck places took 69 solves in about 0.1 s, and found a fix for each stuck question. That is what Hint does: on the sofa it needed 4 tries. It stops at 100 tries or 250 ms. |
+| Why not just try everything? | We do, where it is cheap. On this build, trying every single edit across the building takes 11,922 solves in about 25 s. That is too slow to feel live. Trying edits only at the stuck places takes 10 tries in about 35 ms, and finds a fix for each stuck question. That is what Hint does: on the sofa it needed 4 tries. It stops at 100 tries or 250 ms. |
 | Is this a code check? | No. It is a quick check of sizes and routes, so the right expert looks early. |
 | Is the building real? | The tower is a 432 Park Avenue model we built from published diagrams and sources: the real height and floor-to-floor, approximate plans. The doors, lifts and stairs are self-made. |
 | Which model reads the words? | Today, on this laptop, the page reads them by keywords; the strip says "Read by: this page". The server can run Strands Decider, an open-source (Apache-2.0) decision model, on this computer. Then the strip says "Read by: the model". |
