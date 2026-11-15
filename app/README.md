@@ -43,11 +43,12 @@ edit (`applyFix` in `main.ts`); Undo edits removes it.
 
 ## Review panel (votes)
 
-After each edit (a button or a typed edit, not Undo edits), `app/main.ts` asks `/votes` for one
-vote per discipline in the data (`app/votes.ts voteRequests`), with the rules' answers before and
-after the edit. `app/votes-view.ts` draws one bubble per discipline in `#votes`: the vote, its
-confidence, a one-line reason (what the rules found for that discipline's question) and the rules'
-answer. A vote that says the opposite of the rules (accept while the rules say No, object while
-they say Yes) is marked "Rules disagree". Votes never change a colour or an answer. The budget is
-2.5 s; when the server is down, slow or answers something unusable, the panel says so and shows no
-votes. A newer edit drops an older answer.
+After each edit (a button, a typed edit or a Hint, not Undo edits), `app/main.ts` asks `/votes` for
+one vote per discipline in the data (`app/votes.ts voteRequests`), with the rules' answers before
+and after the edit. `app/votes-view.ts` draws one bubble per discipline in `#votes`: the vote, who
+voted, its confidence ("not sure" under 0.80) and a line that starts "Rules:" with what the rules
+found for that discipline's question. A vote that accepts an edit that turned Yes to No, or objects
+to one that turned No to Yes, says "This vote disagrees with the rules". Votes never change a
+colour or an answer. The budget is 2.5 s; when the server is down, slow or answers something
+unusable, the panel says so and shows no votes. A newer edit, or a question placed, moved or
+cleared, drops the panel.
