@@ -111,4 +111,10 @@ test('a selected object says where it is and how it did', () => {
   const fail: SolverResult = { ...res('wheelchair', 'fail'), reason: 'step', blocked_at: 'terrace-door' };
   assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - FAIL: step in the way');
   assert.equal(tokenCaption(mvp, 'wheelchair', res('wheelchair', 'pass')), 'Wheelchair - Terrace - PASS');
+  assert.equal(tokenCaption(mvp, 'wheelchair', null, true), 'Wheelchair - Terrace - Escaping', 'during a run');
+});
+
+test('an open scoreboard hides the LEVEL COMPLETE banner, so the route under it reads', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(page, /body\.scoring #banner\.on\{display:none\}/);
 });

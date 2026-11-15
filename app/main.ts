@@ -320,7 +320,7 @@ function render(): void {
   renderSheet(b);
   renderEdit();
   const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
-  viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel)));
+  viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel), running));
 }
 
 function failLine(r: Answer, b: Building): string {

@@ -60,11 +60,12 @@ export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Bui
   };
 }
 
-// The line shown over a selected object: its name, where it starts, and how it did.
-export function tokenCaption(building: Building, token: Id, result: SolverResult | null): string {
+// The line shown over a selected object: its name, where it starts, and how it did (Escaping while
+// a run plays).
+export function tokenCaption(building: Building, token: Id, result: SolverResult | null, running = false): string {
   const t = building.tokens.find((x) => x.id === token);
   const where = t ? placeName(building, t.start) : '';
-  const state = !result ? 'Ready'
+  const state = running ? 'Escaping' : !result ? 'Ready'
     : result.status === 'pass' ? 'PASS'
     : `FAIL: ${REASON_TEXT[result.reason ?? 'no_route']}`;
   return [tokenName(token), where, state].filter(Boolean).join(' - ');
