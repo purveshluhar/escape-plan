@@ -197,8 +197,10 @@ function moveTo(id: Id, node: Id): void {
   render();
 }
 
+// While a typed sentence is read (up to 2.5 s), no other edit applies: its answer would land on a
+// building that changed under it.
 function applyFix(edit: Edit, label: string): void {
-  if (S.phase === 'running') return;
+  if (S.phase === 'running' || S.reading !== null) return;
   S.game = applyEdit(S.game, edit);
   S.editOpen = false;
   S.read = null;
@@ -212,7 +214,7 @@ function applyFix(edit: Edit, label: string): void {
 }
 
 function reset(): void {
-  if (S.phase === 'running' || S.game.edits.length === 0) return;
+  if (S.phase === 'running' || S.reading !== null || S.game.edits.length === 0) return;
   S.game = initialState();
   S.note = 'Checked again with the original building';
   if (S.results && S.placed.length) escape();

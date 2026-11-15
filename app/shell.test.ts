@@ -89,6 +89,14 @@ test('parse: a word shared by several fixes, or no part at all, still asks', () 
   assert.equal(parseEdit('make the lobby bigger', buttons).edit, null);
 });
 
+test('parse: negations, questions and words of other fixes never apply (review C1)', () => {
+  for (const s of [
+    'do not widen the shaft', 'no transfer beam', 'undo ramp terrace', 'remove the ramp terrace',
+    'is the terrace step a ramp?', 'ramp lobby', 'ramp the office', 'widen beam 2', 'beam', 'transfer',
+    'widen shaft 20', 'widen shaft 0.1', 'widen shaft and terrace 2', "don't widen the lobby door to 1.6 m",
+  ]) assert.equal(parseEdit(s, buttons).edit, null, s);
+});
+
 test('typed edits are read against every demo fix, so the shaft and the beam are known', () => {
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   assert.match(main, /const typedFixes = demoButtons\(building, expected\)/);

@@ -63,14 +63,14 @@ export function renderStrip(el: HTMLElement, building: Building, v: StripView): 
 
   const lines = !m ? [h('div', { class: 'quiet' }, 'Waiting for the reading.')]
     : !m.sure ? [h('div', { class: 'quiet' }, 'Nothing was changed, so nothing was checked again.')]
-    : v.answers === null ? [h('div', { class: 'quiet' }, 'The building was checked again. Pick a question to see an answer.')]
+    : v.answers === null ? [h('div', { class: 'quiet' }, 'The edit was made. Pick a question to see an answer.')]
     : v.checking ? [h('div', { class: 'quiet' }, 'Checking...')]
     : v.answers.map((a) => h('div', { class: 'ans' },
       h('span', { class: 'an' }, a.name),
       h('b', { class: `word ${a.answer === 'Yes' ? 'yes' : 'no'}` }, a.answer),
       a.detail && h('span', { class: 'ad num' }, a.detail)));
   const decided = h('div', { class: 'box decided' },
-    h('div', { class: 'bh' }, h('span', { class: 'step' }, '2'), `Decided: building rules${m?.sure ? solveText(v.solveMs) : ''}`),
+    h('div', { class: 'bh' }, h('span', { class: 'step' }, '2'), `Decided: building rules${m?.sure && v.answers !== null ? solveText(v.solveMs) : ''}`),
     ...lines);
 
   el.replaceChildren(

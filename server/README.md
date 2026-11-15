@@ -59,12 +59,18 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
 
 The page posts to `/parse` on its own origin, so it works on localhost and through a tunnel. The
 root `vite.config.ts` forwards it to `http://127.0.0.1:<SERVER_PORT>` (`npm run dev` and
-`npm run preview`). It sets Host to the server's own, so the Host check above holds. A tunnel
-origin is not on the Origin list, so `proxy-guard.ts` does that job in front of the proxy: a call
-with an Origin passes only when the browser marks it `Sec-Fetch-Site: same-origin`, and then goes
-on without Origin. Any other call with an Origin gets `403` from Vite. Vite's own Host check and
-CORS run first. The server itself is unchanged: called directly, it still refuses foreign Hosts
-and Origins.
+`npm run preview`), exactly `/parse` and nothing under it. It sets Host to the server's own, so
+the Host check above holds. A tunnel origin is not on the Origin list, so `proxy-guard.ts` does
+that job in front of the proxy: a call passes only when the browser marks it
+`Sec-Fetch-Site: same-origin`, and then goes on without Origin. Every other call, including one
+with no browser headers (curl), gets `403` from Vite. More than 4 calls at once get `429`. Vite's
+own Host check and CORS run first. The server itself is unchanged: called directly, it still
+refuses foreign Hosts and Origins. The proxy reads `SERVER_PORT` and `SERVER_HOST` the way the
+server does: from `.env`, and the shell wins.
+
+This is not a login. Any program that can reach Vite can send those headers. So who can reach
+Vite is the gate: 127.0.0.1 by default, or a tunnel with its own sign-in. Do not run
+`npm run dev -- --host` while this server runs: that puts `/parse` on the network.
 
 The app uses this server's answer only when it sends `x-decider: strands`. With `keywords` it
 reads the sentence itself (`app/parse-client.ts`), so keywords can stay the default here until

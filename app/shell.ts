@@ -145,7 +145,10 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   const t = text.toLowerCase();
   const opHit = OP_WORDS.find(([, re]) => re.test(t));
   const op: EditOp = opHit?.[0] ?? 'widen';
-  const opConf = opHit ? 0.95 : 0.3;
+  // Never sure of the op when the sentence says no, asks a question, or names two ops ("widen beam 2").
+  const negated = /\b(not|don'?t|no|never|cancel|undo|remove|without)\b|\?/.test(t);
+  const twoOps = new Set(OP_WORDS.filter(([, re]) => re.test(t)).map(([o]) => o)).size > 1;
+  const opConf = !opHit ? 0.3 : negated || twoOps ? 0.4 : 0.95;
 
   const said = new Set(words(t).filter((w) => !STOP.has(w)));
   const nameOf = (b: DemoButton): string[] => words(b.label).filter((w) => !STOP.has(w) && !/^\d/.test(w) && w !== 'm');
@@ -161,16 +164,22 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   }).sort((a, z) => z.score - a.score);
   const best = scored[0];
   const sameOp = best !== undefined && best.b.edit.op === op && opHit !== undefined;
-  const firm = sameOp && opHit?.[2] === false;
+  const firm = sameOp && opHit?.[2] === false && opConf >= JEV_ACCEPT_CONFIDENCE;
   let targetConf = best ? Math.min(1, best.match + (sameOp ? 0.2 : 0)) : 0;
-  // Audit gap 8: "ramp terrace", "widen shaft 2.0". A firm op word and a word only this fix has.
-  if (firm && best?.own) targetConf = Math.max(targetConf, 0.9);
-  // "transfer beam": no part named, but only one fix on screen does this op.
-  if (firm && best?.match === 0 && buttons.filter((b) => b.edit.op === op).length === 1) targetConf = Math.max(targetConf, 0.85);
 
   const num = t.match(/(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?)?/);
   const raw = num ? Number(num[1]) : null;
   const inRange = raw !== null && raw >= range.min && raw <= range.max;
+  // Audit gap 8, for short phrases only when nothing else is in doubt: a firm op word, a number (if
+  // any) in range, and only one fix named at all.
+  const named = scored.filter((x) => x.match > 0).length;
+  if (firm && (raw === null || inRange)) {
+    // "ramp terrace", "widen shaft 2.0": a word only this fix has.
+    if (best?.own && named === 1) targetConf = Math.max(targetConf, 0.9);
+    // "transfer beam", "add a ramp": no part named, the op said in full, and only one fix does it.
+    const fullOp = op === 'add_transfer_beam' ? /\btransfer\s+beam\b/.test(t) : op === 'add_ramp';
+    if (named === 0 && fullOp && buttons.filter((b) => b.edit.op === op).length === 1) targetConf = Math.max(targetConf, 0.85);
+  }
   const value = op === 'widen'
     ? { score: inRange ? raw! : best?.b.edit.value ?? range.min, confidence: inRange ? 0.95 : best?.b.edit.value != null ? 0.85 : 0.2 }
     : null;

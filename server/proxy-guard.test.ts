@@ -14,7 +14,10 @@ import type { Building, ExpectedFile } from '../contract/types.ts';
 import { readEdit } from '../app/parse-client.ts';
 import { demoButtons } from '../app/state.ts';
 import { readConfig, startServer } from './http.ts';
-import { guardParseProxy, parseProxyTarget } from './proxy-guard.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { PROXY_MAX_IN_FLIGHT, guardParseProxy, parseProxyTarget, proxyEnv } from './proxy-guard.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -60,6 +63,48 @@ function call(port: number, headers: Record<string, string>, body: string, metho
 const body = JSON.stringify({ text: 'widen the lobby door to 1.6 m', ops: ['widen'], targets: [{ id: 'lobby-door', name: 'Lobby door' }], value_range: { min: 0.5, max: 6 } });
 const json = { 'content-type': 'application/json' };
 
+test('the proxy reads SERVER_* the way the server does: .env, then the shell (review S3)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ep-env-'));
+  try {
+    writeFileSync(join(dir, '.env'), 'SERVER_PORT=8801\nVITE_X=1\n');
+    writeFileSync(join(dir, '.env.local'), 'SERVER_PORT=8802\n');
+    assert.equal(proxyEnv(dir, {}).SERVER_PORT, '8801', '.env.local is not read; the server never reads it');
+    assert.equal(proxyEnv(dir, { SERVER_PORT: '8803' }).SERVER_PORT, '8803', 'the shell wins, as with node --env-file');
+    assert.equal(proxyEnv(join(dir, 'none'), {}).SERVER_PORT, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('only /parse itself goes through the proxy: /parsex and /parse/x do not (review S2)', async () => {
+  for (const path of ['/parsex', '/parse/x']) {
+    const r = await new Promise<number>((resolve, reject) => {
+      const q = request({ host: '127.0.0.1', port: vitePort, method: 'POST', path, headers: { ...json, 'sec-fetch-site': 'same-origin' } }, (res) => { res.resume(); resolve(res.statusCode ?? 0); });
+      q.on('error', reject);
+      q.end(body);
+    });
+    assert.notEqual(r, 200, path);
+  }
+});
+
+test('more than a few calls at once through the proxy get 429 (cse: unthrottled)', () => {
+  const holds: (() => void)[] = [];
+  let refused = 0;
+  for (let i = 0; i < PROXY_MAX_IN_FLIGHT + 2; i++) {
+    const req = { headers: { 'sec-fetch-site': 'same-origin' } } as unknown as IncomingMessage;
+    let done: () => void = () => {};
+    const fake = { statusCode: 0, setHeader() {}, end() { if (fake.statusCode === 429) refused++; }, once(_e: string, f: () => void) { done = f; } };
+    guardParseProxy(req, fake as unknown as ServerResponse, () => {});
+    holds.push(() => done());
+  }
+  assert.equal(refused, 2);
+  for (const h of holds) h();
+  const req = { headers: { 'sec-fetch-site': 'same-origin' } } as unknown as IncomingMessage;
+  let passed = false;
+  guardParseProxy(req, { statusCode: 0, setHeader() {}, end() {}, once() {} } as unknown as ServerResponse, () => { passed = true; });
+  assert.ok(passed, 'a finished call frees its place');
+});
+
 test('the proxy target is the server on 127.0.0.1, at SERVER_PORT or 8787', () => {
   assert.equal(parseProxyTarget({}), 'http://127.0.0.1:8787');
   assert.equal(parseProxyTarget({ SERVER_PORT: '8797' }), 'http://127.0.0.1:8797');
@@ -85,8 +130,9 @@ test('another web page (cross-site or same-site) is refused by the proxy, before
     assert.equal(r.status, 403, site);
     assert.equal(r.headers['x-decider'], undefined, site);
   }
-  // An Origin with no Sec-Fetch-Site (an old browser) is refused too: fail closed.
+  // An Origin with no Sec-Fetch-Site (an old browser), or no headers at all (curl), is refused: fail closed.
   assert.equal((await call(vitePort, { ...json, origin: 'https://evil.example' }, body)).status, 403);
+  assert.equal((await call(vitePort, json, body)).status, 403);
   // A cross-site preflight never gets a go-ahead for the POST.
   const pre = await call(vitePort, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site', 'access-control-request-method': 'POST' }, '', 'OPTIONS');
   assert.equal(pre.headers['access-control-allow-origin'], undefined);
@@ -117,16 +163,20 @@ test('demo sentence through Vite and the real keywords server: the app applies w
   assert.deepEqual(r.out.edit, { op: 'widen', target: 'lobby-door', value: 1.5, source: 'text' });
 });
 
-test('the guard on its own: no Origin passes untouched; a same-origin Origin is dropped before the proxy', () => {
+test('the guard on its own: only a same-origin browser call passes, and Origin is dropped (review S1, cse)', () => {
   const run = (headers: Record<string, string>) => {
     const req = { headers: { ...headers } } as unknown as IncomingMessage;
     let status = 0;
     let passed = false;
-    const fake = { statusCode: 0, setHeader() {}, end() { status = fake.statusCode; } };
+    // `once('close')` fires at once here, so this test holds no place in the in-flight count.
+    const fake = { statusCode: 0, setHeader() {}, end() { status = fake.statusCode; }, once(_e: string, f: () => void) { f(); } };
     guardParseProxy(req, fake as unknown as ServerResponse, () => { passed = true; });
     return { passed, status, headers: req.headers };
   };
-  assert.deepEqual(run({ 'content-type': 'application/json' }).passed, true);
+  const bare = run({ 'content-type': 'application/json' });
+  assert.equal(bare.passed, false, 'no Sec-Fetch-Site: not the page');
+  assert.equal(bare.status, 403);
+  assert.equal(run({ 'sec-fetch-site': 'same-origin' }).passed, true, 'a same-origin call with no Origin');
   const same = run({ origin: 'https://t.test', 'sec-fetch-site': 'same-origin' });
   assert.equal(same.passed, true);
   assert.equal(same.headers.origin, undefined);

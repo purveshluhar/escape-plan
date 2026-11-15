@@ -103,9 +103,18 @@ test('server down behind the Vite proxy (502, no x-decider): the strip says down
   assert.equal(r.why, 'down');
   assert.equal(r.decider, null);
   assert.ok(r.out.edit);
-  // A server error that carries x-decider came from the server itself: refused.
-  const own = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => reply({ error: 'internal error', details: [] }, 'strands', 500)) });
+  // The server's own 500 carries no x-decider either (server/http.ts sets it on 200 only): refused.
+  const own = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => reply({ error: 'internal error', details: [] }, null, 500)) });
   assert.equal(own.why, 'refused');
+});
+
+test('Strands gave no answer (down, slow or busy: every confidence 0): the app reader answers (review C3)', async () => {
+  const none: JevParse = { op: { choice: 'widen', confidence: 0 }, target: { choice: 'plant-shaft', confidence: 0 }, value: { score: 1.5, confidence: 1 } };
+  const r = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => reply(none, 'strands')) });
+  assert.equal(r.why, 'no-model');
+  assert.equal(r.decider, 'strands');
+  assert.equal(r.reader, 'local');
+  assert.deepEqual(r.out.edit, { op: 'widen', target: 'lobby-door', value: 1.5, source: 'text' });
 });
 
 test('server slower than the timeout: the request is cut and the app reader answers', async () => {

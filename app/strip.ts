@@ -35,8 +35,11 @@ export function metresText(v: number): string {
   return `${s.includes('.') ? s : `${s}.0`} m`;
 }
 
+// A no-break space between a number and its unit, so "0.15 m" never wraps as "0.15" and "m".
+const NBSP = '\u00a0';
+const keepUnits = (s: string): string => s.replace(/(\d) (m|s|ms)\b/g, `$1${NBSP}$2`);
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
-const LOCAL = 'so this page read it by keywords';
+const LOCAL = 'so this page read it';
 
 function sourceText(r: Reading): string {
   switch (r.why) {
@@ -45,6 +48,7 @@ function sourceText(r: Reading): string {
     case 'down': return `x-decider: none - the server is not reachable, ${LOCAL}`;
     case 'slow': return `x-decider: none - the server took over ${seconds(PARSE_TIMEOUT_MS)}, ${LOCAL}`;
     case 'refused': return `x-decider: ${r.decider ?? 'none'} - the server answer could not be used, ${LOCAL}`;
+    case 'no-model': return `x-decider: strands - the model gave no answer (down or busy), ${LOCAL}`;
   }
 }
 
@@ -59,10 +63,10 @@ export function stripModel(r: Reading, building: Building): StripModel {
   const sure = edit !== null;
   const verdict = sure ? `Every part is ${JEV_ACCEPT_CONFIDENCE.toFixed(2)} or more, so the edit was made.`
     : lowest < JEV_ACCEPT_CONFIDENCE ? `Not sure (${lowest.toFixed(2)}). Nothing was changed.`
-    : 'Not sure: that is not one of the edits on screen. Nothing was changed.';
+    : 'Not sure: that is not one of the edits offered here. Nothing was changed.';
   return {
     typed: r.text, reader: r.reader === 'strands' ? 'Strands Decider' : 'Keyword reader in this page',
-    source: sourceText(r), rows, sure, lowest, verdict,
+    source: keepUnits(sourceText(r)), rows, sure, lowest, verdict,
   };
 }
 
@@ -78,6 +82,6 @@ export function answerLines(results: readonly SolverResult[], building: Building
     if (r.status === 'pass') return { name: tokenName(r.token), answer: 'Yes', detail: '' };
     const where = r.blocked_at ? ` at ${placeName(building, r.blocked_at)}` : '';
     const nums = numbersText(r);
-    return { name: tokenName(r.token), answer: 'No', detail: `Stuck${where}: ${REASON_TEXT[r.reason ?? 'no_route']}${nums ? `, ${nums}` : ''}` };
+    return { name: tokenName(r.token), answer: 'No', detail: keepUnits(`Stuck${where}: ${REASON_TEXT[r.reason ?? 'no_route']}${nums ? `, ${nums}` : ''}`) };
   });
 }

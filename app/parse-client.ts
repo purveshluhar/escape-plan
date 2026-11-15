@@ -17,8 +17,9 @@ export const PARSE_TIMEOUT_MS = 2500;
 export const VALUE_RANGE = { min: 0.5, max: 6 }; // the range parseEdit reads widths in
 
 // Why this reader answered: the server's Strands Decider, or this page because the server runs
-// keywords, is down, took too long, or gave an answer that cannot be used.
-export type ReadWhy = 'strands' | 'keywords' | 'down' | 'slow' | 'refused';
+// keywords, is down, took too long, gave an answer that cannot be used, or ran Strands but the
+// model gave no answer (server/strands.ts answers every confidence 0 when it is down, slow or busy).
+export type ReadWhy = 'strands' | 'keywords' | 'down' | 'slow' | 'refused' | 'no-model';
 
 export interface Reading {
   text: string;
@@ -90,12 +91,14 @@ export async function readEdit(text: string, fixes: readonly DemoButton[], build
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req), signal: ctl.signal,
     });
     const decider = res.headers.get('x-decider');
-    // A 5xx with no x-decider is the Vite proxy saying it could not reach the server (502).
-    if (!res.ok) return decider === null && res.status >= 500 ? local('down', null) : local('refused', decider);
+    // 502, 503 or 504 with no x-decider is the Vite proxy saying it could not reach the server.
+    // The server's own errors (400 to 500) are refused.
+    if (!res.ok) return decider === null && res.status >= 502 && res.status <= 504 ? local('down', null) : local('refused', decider);
     if (decider !== 'strands') return local(decider === 'keywords' ? 'keywords' : 'refused', decider);
     const body: unknown = await res.json().catch(() => undefined);
     if (ctl.signal.aborted) return local('slow', null);
     if (!usable(body, req)) return local('refused', decider);
+    if (body.op.confidence === 0 && body.target.confidence === 0) return local('no-model', decider);
     return { text, out: outcomeFrom(body, text, fixes), reader: 'strands', why: 'strands', decider, ms: now() - started };
   } catch {
     return local(ctl.signal.aborted ? 'slow' : 'down', null);

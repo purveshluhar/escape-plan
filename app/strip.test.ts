@@ -21,7 +21,7 @@ test('applied: three parts with their confidences, and the edit was made', () =>
   assert.equal(m.typed, DEMO);
   assert.equal(m.reader, 'Strands Decider');
   assert.match(m.source, /x-decider: strands/);
-  assert.match(m.source, /1\.0 s/);
+  assert.match(m.source, /1\.0\ss/);
   assert.deepEqual(m.rows.map((r) => [r.name, r.text]), [['Edit', 'Widen'], ['Where', 'Lobby door'], ['Size', '1.5 m']]);
   assert.ok(m.rows.every((r) => r.confidence !== null && r.confidence >= 0.8));
   assert.equal(m.sure, true);
@@ -37,7 +37,27 @@ test('keywords server: the strip says the header value and that this page read t
 
 test('server down or slow: the strip says so and shows x-decider: none', () => {
   assert.match(stripModel(local(DEMO, 'down'), building).source, /x-decider: none.*not reachable/);
-  assert.match(stripModel(local(DEMO, 'slow'), building).source, /x-decider: none.*2\.5 s/);
+  assert.match(stripModel(local(DEMO, 'slow'), building).source, /x-decider: none.*2\.5\ss/);
+});
+
+test('Strands gave no answer: the strip says so', () => {
+  assert.match(stripModel(local(DEMO, 'no-model', 'strands'), building).source, /x-decider: strands.*no answer/);
+});
+
+test('no repeated reader words, and a number never wraps away from its unit', () => {
+  const m = stripModel(local(DEMO, 'keywords', 'keywords'), building);
+  assert.doesNotMatch(m.source, /by keywords.*by keywords/);
+  assert.match(stripModel({ ...local(DEMO, 'strands', 'strands'), reader: 'strands', ms: 500 }, building).source, /0\.5\u00a0s/);
+  const fail: SolverResult = { token: 'wheelchair', status: 'fail', path: [], blocked_at: 'terrace-door', reason: 'step', needed: 0, available: 0.15 };
+  assert.match(answerLines([fail], building)[0]!.detail, /0\.15\u00a0m/);
+  assert.doesNotMatch(answerLines([fail], building)[0]!.detail, /\d m\b/);
+});
+
+test('a sure reading that is not a fix says "offered here", not "on screen" (review C6)', () => {
+  const odd: Reading = { ...local('widen beam b2 to 2 m', 'strands', 'strands'), reader: 'strands', out: {
+    parse: { op: { choice: 'widen', confidence: 0.95 }, target: { choice: 'beam-b2', confidence: 0.95 }, value: { score: 2, confidence: 0.95 } },
+    edit: null, suggestions: [] } };
+  assert.match(stripModel(odd, building).verdict, /not one of the edits offered here/);
 });
 
 test('not sure: amber, the lowest confidence named, nothing changed', () => {
