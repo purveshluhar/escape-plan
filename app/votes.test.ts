@@ -94,13 +94,13 @@ test('model votes: a vote that disagrees with the rules is shown as a disagreeme
   const r = await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(MODEL, 'strands')), now: () => (t += 1210) });
   assert.equal(r.why, 'strands');
   const m = panelModel(r, building);
-  assert.equal(m.title, 'Review panel: Strands Decider');
+  assert.equal(m.title, 'Review panel: the model');
   assert.equal(m.source, 'Votes by: the model, on this computer, 1.2\u00a0s');
   assert.deepEqual(m.bubbles.map((b) => [b.discipline, b.who, b.vote, b.confidence, b.reason, b.rules]), [
-    ['MEP', 'Strands Decider', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
+    ['MEP', 'Model', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
     ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Glass is stuck at Lobby door: cannot turn the corner, needs 4.0 m, has 3.71 m', ''],
     ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Wheelchair is stuck at Terrace door: step in the way, 0.15 m high, needs level', ''],
-    ['Structure', 'Strands Decider', 'Accept', '0.72', 'Rules: was Yes, now No. Load is stuck at beam B2: nothing holds it up, no path down to a foundation', 'This vote disagrees with the rules'],
+    ['Structure', 'Model', 'Accept', '0.72', 'Rules: was Yes, now No. Load is stuck at beam B2: nothing holds it up, no path down to a foundation', 'This vote disagrees with the rules'],
     ['Life safety', 'Rules, no change', 'Review', '1.00', 'Rules: still No. People are stuck at Office door: too narrow, needs 0.6 m, has 0.5 m', ''],
   ]);
   assert.deepEqual(m.bubbles.map((b) => b.clash), [false, false, false, true, false]);

@@ -30,7 +30,7 @@ import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
-  focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, facadeOpen, routesShown, FLOOR_TAG_GAP,
+  focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, facadeOpen, routesShown, answersCut, FLOOR_TAG_GAP,
   glideStep, panForFocus,
   type Fade, type ScreenRect,
 } from './layout.ts';
@@ -101,6 +101,7 @@ export interface ViewerOptions {
 }
 
 const VIEW_MARGIN = 1.2;
+const RELAYOUT_AFTER = 0.3; // seconds after the last answer shows: the app has redrawn its caption by then
 // The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
 const X_LIFT = -48; // pixels
 const LABEL_GAP = 36; // pixels from the X centre to its label
@@ -240,6 +241,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let dragEnabled = true;
   let t0 = performance.now();
   let plan: Plan = { starts: [], beats: [], end: 0, answered: 0 };
+  let laidOut = true; // the cards were laid out again after this run's answers showed
   // Two objects at one corner (glass and sofa at the lobby door) each have a diagram with their own
   // numbers, but only one shows: the object that last reached the turn owns the edge.
   const cornerOwner = new Map<Id, Run>();
@@ -476,6 +478,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     // The level in the middle of the free view stays the top one drawn.
     const drawn = shown ? shown.building.levels.filter((l) => floorLevels.has(l.id)) : [];
     cut = cutLevel(drawn, focusHeight(centre.y, view, pan));
+    // Opened for answers, not by zooming in: no figure on the model is cut away with its floor.
+    if (!revealed(zoom)) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
     pickCeiling = dropCeiling(drawn, cut);
     if (glideTo === null) {
       const now = drawn.find((l) => l.elevation === cut)?.id ?? null;
@@ -789,6 +793,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const dt = reduced || !lastFrame ? 0 : Math.min(0.1, (now - lastFrame) / 1000); // clips hold still on reduced motion
     lastFrame = now;
     runs.forEach((run, k) => update(run, k, t));
+    // Once every answer shows, the cards lay out again: they now have their measured size, and the
+    // selection caption its final words (the app rewrites it when the run ends).
+    if (!laidOut && t >= plan.answered + RELAYOUT_AFTER) {
+      laidOut = true;
+      fit();
+    }
     // A figure, and its corner diagram, on a floor the open facade cuts away is not drawn with it.
     for (const run of runs) {
       const shownFloor = opened <= 0 || run.token.position.y < pickCeiling;
@@ -806,14 +816,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     carried?.figure.tick(dt);
     scaleFigures();
     if (beating.length > 0) {
-      // A member without support blinks as often as the red X (MOTION.failBlinkHz, failBlinkCount) once the run ends, then stays red.
-      const since = t - plan.end;
+      // A member without support blinks as often as the red X (MOTION.failBlinkHz, failBlinkCount) once the answers show, then stays red.
+      const since = t - plan.answered;
       const blinking = !reduced && since >= 0 && since < MOTION.failBlinkCount / MOTION.failBlinkHz;
       const pale = blinking && Math.floor(since * MOTION.failBlinkHz * 2) % 2 === 1;
       for (const mat of beating) mat.color.set(pale ? FAIL_TINT : FAIL);
     }
-    if (win && t >= plan.end) {
-      const since = t - plan.end;
+    if (win && t >= plan.answered) {
+      const since = t - plan.answered;
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
@@ -1133,6 +1143,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   function show(building: Building, results: SolverResult[]): number {
     shown = { building, results };
+    laidOut = false;
     retargetFade();
     drawBuilding(building);
     buildRuns(building, results);

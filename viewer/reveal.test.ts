@@ -9,7 +9,7 @@ import { drawnLevels } from '../data/typical-floors.ts';
 import { dropTarget } from './drop.ts';
 import {
   focusHeight, belowCut, cutLevel, dropCeiling, FOCUS_GAIN_MAX, easeGlass, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent,
-  retarget, revealed, REVEAL_MS, REVEAL_ZOOM, viewDirection, zoomFactor, DEFAULT_VIEW, facadeOpen, routesShown,
+  retarget, revealed, REVEAL_MS, REVEAL_ZOOM, viewDirection, zoomFactor, DEFAULT_VIEW, facadeOpen, routesShown, answersCut,
 } from './layout.ts';
 import type { Fade, Vec3 } from './layout.ts';
 
@@ -39,6 +39,20 @@ test('with answers on the model the framed view opens too, so routes run on the 
   assert.equal(facadeOpen(0.5, true, false), true); // zoomed in opens as before
   assert.equal(facadeOpen(1.2, true, true), false); // zoomed out to the city: closed
   assert.equal(facadeOpen(0.5, false, true), false); // no real floors loaded: nothing to open to
+});
+
+test('opened for answers at the framed view, the cut rises until every figure on the model stays drawn', () => {
+  const lv = (id: string, elevation: number) => ({ id, name: id, elevation });
+  const drawn = [lv('L2', 3.5), lv('T04', 10.5), lv('T05', 14)];
+  // A sofa started on T04 (route points 0.5 m above it): a cut at L2 would hide T04 and up.
+  assert.equal(dropCeiling(drawn, 3.5) <= 11, true);
+  const cut = answersCut(drawn, 3.5, 11);
+  assert.equal(cut, 10.5);
+  assert.ok(dropCeiling(drawn, cut) > 11);
+  // Everything at or below the cut already: the cut stays.
+  assert.equal(answersCut(drawn, 3.5, 4), 3.5);
+  // Above the top drawn floor: no cut hides anything (Infinity ceiling).
+  assert.equal(answersCut(drawn, 3.5, 99), 14);
 });
 
 // Reference cubic-bezier: bisect the x curve, then read y. Slow and plain, so it checks the fast one.

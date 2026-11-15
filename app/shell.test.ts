@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, stepShown, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, stepShown, togglePlaced, tokenCaption, withStarts, openable, focusFloor } from './shell.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -214,4 +214,22 @@ test('zoomed in, an arrow step skips floors the view cannot open, so the questio
   assert.ok(to !== null, 'there is a drawn floor above');
   assert.ok(shown.has(levelOf(to)!), `lands on a drawn floor, got ${levelOf(to)}`);
   assert.equal(stepShown(b, start, 1, () => true), stepLevel(b, start, 1), 'with every floor shown it is the plain step');
+});
+
+test('zoomed in, the slice floors with no plan (terrace L1, plant L3) stay reachable, and the view follows to a floor it can open', async () => {
+  const { withSmoke } = await import('../data/smoke.ts');
+  const { drawnLevels } = await import('../data/typical-floors.ts');
+  const { stepLevel } = await import('../viewer/drop.ts');
+  const b = withSmoke(building);
+  const drawn = drawnLevels(b);
+  const can = openable(b, drawn);
+  const levelOf = (id: string | null): string | undefined => b.nodes.find((n) => n.id === id)?.level;
+  // Down from Level 2 goes to the terrace on L1, never "already on the bottom floor".
+  assert.equal(levelOf(stepShown(b, 'unit1-living', -1, can)), 'L1');
+  assert.equal(stepShown(b, 'unit1-living', -1, can), stepLevel(b, 'unit1-living', -1));
+  // Up from Level 2 goes to the plant floor, as a drag can.
+  assert.equal(levelOf(stepShown(b, 'unit1-living', 1, can)), 'L3');
+  // The camera can only glide to a drawn floor: for L1 and L3 it goes to the nearest one.
+  for (const lv of ['L1', 'L3']) assert.ok(drawn.includes(focusFloor(b, drawn, lv)), lv);
+  assert.equal(focusFloor(b, drawn, 'L2'), 'L2');
 });

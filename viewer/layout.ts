@@ -357,6 +357,19 @@ export function dropCeiling(drawn: readonly Level[], cut: number): number {
   return above.length ? Math.min(...above) - 1e-3 : Infinity;
 }
 
+// The facade opened for answers at the framed view (facadeOpen) must not cut a figure away: the cut
+// rises, one drawn floor at a time, until the highest point any route reaches (`top`, metres) sits
+// under the ceiling. Zoomed in, the person picks the floor, so this is not used there.
+export function answersCut(drawn: readonly Level[], cut: number, top: number): number {
+  let at = cut;
+  while (dropCeiling(drawn, at) <= top) {
+    const next = drawn.filter((l) => l.elevation > at + 1e-6).sort((a, z) => a.elevation - z.elevation)[0];
+    if (!next) break;
+    at = next.elevation;
+  }
+  return at;
+}
+
 // The building as drawn when cut: no level above `cut` and no node on one, so a drop cannot land on
 // a floor that is not on screen. Edges are left as they are (drop picking does not read them).
 export function belowCut(b: Building, cut: number): Building {

@@ -29,7 +29,7 @@ import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
-  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, stepShown, togglePlaced, phaseWord, tokenCaption, withStarts,
+  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, stepShown, openable, focusFloor, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
 import type { Phase, PickItem } from './shell.ts';
 import { readEdit } from './parse-client.ts';
@@ -540,13 +540,19 @@ function renderEdit(): void {
       render();
     },
   });
-  // On a wide screen the model moves right of the open strip, so the strip never covers the answer
-  // it explains. Narrower screens keep the model where it is: the space left would be too small.
+  clearOfStrip();
+}
+
+// On a wide screen the model moves right of the open strip, so the strip never covers the answer
+// it explains. Narrower screens keep the model where it is: the space left would be too small.
+// Run on each render and on a window resize (the strip's width and the free space change with it).
+function clearOfStrip(): void {
   const strip = $('strip');
   const stripRight = strip.classList.contains('on') ? strip.offsetLeft + strip.offsetWidth + STRIP_GAP : 0;
-  const roomLeft = innerWidth - stripRight - (S.results && S.results.length > 0 ? SIDE_PANEL : 0);
+  const roomLeft = innerWidth - stripRight - (S.results && S.results.length > 0 ? insetFor(S.results) : 0);
   viewer.setInsetLeft(stripRight > 0 && innerWidth >= WIDE && roomLeft >= MIN_MODEL_WIDTH ? stripRight : 0);
 }
+window.addEventListener('resize', clearOfStrip);
 
 // The Hint panel stacks above the "who decided" strip, so it draws after the strip does.
 function renderHintPanel(): void {
@@ -664,14 +670,16 @@ document.addEventListener('keydown', (ev) => {
     const from = played().tokens.find((t) => t.id === S.selected)?.start;
     const open = view.zoom < REVEAL_ZOOM && view.floors.size > 0;
     const to = from === undefined ? null : open
-      ? stepShown(building, from, up ? 1 : -1, (level) => view.floors.has(level))
+      ? stepShown(building, from, up ? 1 : -1, openable(building, [...view.floors]))
       : stepLevel(building, from, up ? 1 : -1);
     if (to !== null) {
       moveTo(S.selected, to);
       const level = building.nodes.find((n) => n.id === to)?.level;
       if (open && level !== undefined) {
-        viewer.focusLevel(level);
-        rail.follow(level); // the rail names the floor at once, not only when the glide ends
+        // The camera glides only to a drawn floor; the terrace and plant levels go to the nearest one.
+        const floor = focusFloor(building, [...view.floors], level);
+        viewer.focusLevel(floor);
+        rail.follow(floor); // the rail names the floor at once, not only when the glide ends
       }
       return;
     }

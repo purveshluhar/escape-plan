@@ -3,6 +3,7 @@
 import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, Token } from '../contract/types.ts';
 import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
+import { coveredNodes } from '../data/typical-floors.ts';
 import { isMemberStart, stepLevel } from '../viewer/drop.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { REASON_TEXT, placeName } from './scoreboard.ts';
@@ -228,6 +229,24 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
 
 // The arrow keys' floor step (viewer/drop.ts stepLevel), skipping floors for which `shown` is false:
 // zoomed in, the view opens only the drawn floors, so a step onto another one would hide the question.
+// The levels a zoomed-in view keeps on screen: the drawn floors (`drawn`) and the slice's own levels,
+// which the backdrop does not stand in for (the terrace and plant levels have no plan, but their
+// rooms are always drawn).
+export function openable(building: Building, drawn: readonly Id[]): (level: Id) => boolean {
+  const covered = new Set(coveredNodes(building));
+  const slice = new Set(building.nodes.filter((n) => !covered.has(n.id)).map((n) => n.level));
+  const shown = new Set(drawn);
+  return (level) => shown.has(level) || slice.has(level);
+}
+
+// The floor the camera glides to for `level`: itself when drawn, else the nearest drawn floor.
+export function focusFloor(building: Building, drawn: readonly Id[], level: Id): Id {
+  if (drawn.includes(level)) return level;
+  const at = building.levels.find((l) => l.id === level)?.elevation ?? 0;
+  const near = building.levels.filter((l) => drawn.includes(l.id)).sort((a, z) => Math.abs(a.elevation - at) - Math.abs(z.elevation - at))[0];
+  return near?.id ?? level;
+}
+
 export function stepShown(building: Building, from: Id, dir: 1 | -1, shown: (level: Id) => boolean): Id | null {
   for (let at = stepLevel(building, from, dir); at !== null; at = stepLevel(building, at, dir)) {
     const level = building.nodes.find((n) => n.id === at)?.level;

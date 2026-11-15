@@ -112,7 +112,7 @@ const VOTE_WORD: Record<Vote, 'Accept' | 'Object' | 'Review'> = { accept: 'Accep
 
 export interface Bubble {
   discipline: string;
-  who: 'Strands Decider' | 'Rules' | 'Rules, no change'; // who voted this one
+  who: 'Model' | 'Rules' | 'Rules, no change'; // who voted this one
   vote: 'Accept' | 'Object' | 'Review';
   confidence: string; // "0.72"
   sure: boolean; // confidence at JEV_ACCEPT_CONFIDENCE (0.8) or more; else the bubble says "not sure"
@@ -182,12 +182,12 @@ export function panelModel(r: PanelReading, building: Building): PanelModel {
     const req = r.requests[i]!;
     const clash = clashes(v.vote, req);
     const rules = clash ? 'This vote disagrees with the rules' : changed(req) && v.vote !== 'review' ? 'This vote agrees with the rules' : '';
-    const who = r.why === 'rules' ? 'Rules' : changed(req) ? 'Strands Decider' : 'Rules, no change';
+    const who = r.why === 'rules' ? 'Rules' : changed(req) ? 'Model' : 'Rules, no change';
     return { discipline: DISCIPLINE_LABEL[v.discipline], who, vote: VOTE_WORD[v.vote], confidence: v.confidence.toFixed(2), sure: Number(v.confidence.toFixed(2)) >= JEV_ACCEPT_CONFIDENCE, reason: reasonLine(building, req), rules, clash };
   });
   const n = bubbles.filter((b) => b.clash).length;
   const title = r.why === 'pending' ? 'Review panel'
-    : r.why === 'strands' ? 'Review panel: Strands Decider'
+    : r.why === 'strands' ? 'Review panel: the model'
     : r.why === 'rules' ? 'Review panel: rules only'
     : r.why === 'down' ? 'Review panel is off'
     : 'Review panel: no votes';
