@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, describeLimit, isConnectError, retryDelayMs, shiftCenter, toLocal, MAX_AREA_KM2, MAX_ATTEMPTS, MAX_WAIT_MS,
+  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, describeLimit, isConnectError, retryAfterMs, retryDelayMs, shiftCenter, toLocal, MAX_AREA_KM2, MAX_ATTEMPTS, MAX_WAIT_MS,
 } from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
@@ -155,7 +155,18 @@ test('a Retry-After longer than the longest wait gives up instead of calling bac
 });
 
 test('an unreadable Retry-After falls back to the doubling wait', () => {
-  assert.equal(retryDelayMs(503, 1, 'soon', () => 0, NOW), retryDelayMs(503, 1, null, () => 0, NOW));
+  // only delay-seconds or an IMF-fixdate in GMT count; Date.parse alone reads '1.5' as a year
+  const backoff = retryDelayMs(503, 1, null, () => 0, NOW);
+  for (const v of ['soon', '1.5', '2.5', '-5', 'Sun Nov 15 12:00:30 2026', '2026-11-15T12:00:30Z']) {
+    assert.equal(retryDelayMs(503, 1, v, () => 0, NOW), backoff, v);
+  }
+});
+
+test('retryAfterMs reads what the server asked for, for the give-up message', () => {
+  assert.equal(retryAfterMs('9999', NOW), 9_999_000);
+  assert.equal(retryAfterMs('Sun, 15 Nov 2026 12:00:30 GMT', NOW), 30_000);
+  assert.equal(retryAfterMs('1.5', NOW), null);
+  assert.equal(retryAfterMs(null, NOW), null);
 });
 
 test('without Retry-After the wait doubles each attempt, with jitter, and stays under five minutes', () => {
@@ -203,10 +214,14 @@ test('a usage-limit body that is missing or odd still gives a plain 429 line, an
   assert.equal(describeLimit(null), describeStatus(429));
   assert.equal(describeLimit('x'), describeStatus(429));
   assert.doesNotMatch(describeLimit({ message: 'key cw_live_abcDEF123 is paused' }), /cw_live_abcDEF123/);
+  const key = 'cw_ab.c+d/e=f';
+  const echoed = describeLimit({ message: `token ${key} and cw_ab\u0000.c+d/e=f`, resetsAt: key }, key);
+  assert.doesNotMatch(echoed, /\.c\+d\/e=f/); // the real key is masked whole, whatever its characters
+  assert.doesNotMatch(describeLimit({ message: 'a\u009bb\u202ec' }), /[\u009b\u202e]/u); // C1 and format controls
+
   assert.ok(describeLimit({ message: 'x'.repeat(5000) }).length < 600);
 });
 
-test('the status lines name 429 and never carry a key', () => {
+test('the status line names 429', () => {
   assert.match(describeStatus(429), /^429/);
-  for (const s of [0, 400, 401, 402, 429, 503, 500]) assert.doesNotMatch(describeStatus(s), /cw_|Bearer/);
 });

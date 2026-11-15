@@ -4,8 +4,8 @@
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  buildInstancesRequest, buildRequest, describeLimit, describeStatus, extractInstances, isConnectError, retryDelayMs, shiftCenter, toLocal,
-  MAX_ATTEMPTS,
+  buildInstancesRequest, buildRequest, describeLimit, describeStatus, extractInstances, isConnectError, retryAfterMs, retryDelayMs, shiftCenter,
+  toLocal, MAX_ATTEMPTS, MAX_WAIT_MS,
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
@@ -51,8 +51,13 @@ async function post(payload: object): Promise<Response> {
     const status = res?.status ?? 0;
     console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: ${status === 0 ? 'could not connect' : status}.`);
     if (res?.ok) return res;
-    const wait = retryDelayMs(status, attempt, res?.headers.get('Retry-After') ?? null);
+    const retryAfter = res?.headers.get('Retry-After') ?? null;
+    const wait = retryDelayMs(status, attempt, retryAfter);
     if (wait === null) {
+      const asked = retryAfterMs(retryAfter, Date.now());
+      if (status === 503 && asked !== null && asked > MAX_WAIT_MS) {
+        console.error(`Cityweft asked to wait ${Math.round(asked / 1000)} s, longer than this script waits. Run it again later.`);
+      }
       if (res) return res;
       console.error(describeStatus(0));
       process.exit(1);
@@ -66,7 +71,7 @@ async function post(payload: object): Promise<Response> {
 // What went wrong, for a final non-ok answer. A 429 carries the usage-limit details in its body.
 async function explain(res: Response): Promise<string> {
   if (res.status !== 429) return describeStatus(res.status);
-  return describeLimit(await res.json().catch(() => null));
+  return describeLimit(await res.json().catch(() => null), key);
 }
 
 console.log(`Requesting a ${SIZE_METRES} m block around 432 Park Avenue (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
@@ -76,18 +81,31 @@ if (!res.ok) {
   process.exit(1);
 }
 
-const { downloadUrl, spatialReference } = (await res.json()) as {
+// Body reads and the download fail with one fixed line: an error message could carry the
+// temporary download link, and the request is already billed.
+function fail(what: string, err: unknown): never {
+  console.error(`${what} failed (${err instanceof Error ? err.name : 'error'}). Run the script again.`);
+  process.exit(1);
+}
+
+const { downloadUrl, spatialReference } = (await res.json().catch((err: unknown) => fail('Reading the answer', err))) as {
   downloadUrl: string;
   spatialReference: unknown;
 };
 
 // The download link is temporary, so fetch it now. It is not a Cityweft API call: send no key.
-const file = await fetch(downloadUrl);
-if (!file.ok) {
-  console.error(`Download failed with ${file.status}. Run the script again for a fresh link.`);
-  process.exit(1);
+const DOWNLOAD_TIMEOUT_MS = 300_000;
+let glb: Buffer;
+try {
+  const file = await fetch(downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  if (!file.ok) {
+    console.error(`Download failed with ${file.status}. Run the script again for a fresh link.`);
+    process.exit(1);
+  }
+  glb = Buffer.from(await file.arrayBuffer());
+} catch (err) {
+  fail('The download', err);
 }
-const glb = Buffer.from(await file.arrayBuffer());
 
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(new URL('block.glb', OUT_DIR), glb);
@@ -118,7 +136,7 @@ if (!instancesRes.ok) {
   console.error(`Instances: ${await explain(instancesRes)} The GLB is saved; run again for instances.`);
   process.exit(1);
 }
-const instances = extractInstances(await instancesRes.json());
+const instances = extractInstances(await instancesRes.json().catch((err: unknown) => fail('Reading the instances', err)));
 writeFileSync(new URL('instances.json', OUT_DIR), JSON.stringify(instances));
 const perType: Record<string, number> = {};
 for (const i of instances) perType[i.type] = (perType[i.type] ?? 0) + 1;

@@ -146,8 +146,9 @@ const ROOF_MATERIAL: Record<string, string> = {
   thatch: calmColor(0xb39b5f),
   eternit: calmColor(0x8c8c86),
 };
-// The premium tier gives most buildings no colour or material, some a building type: homes read
-// a touch warm, work places a touch cool, public buildings a touch lilac.
+// Some buildings carry no colour or material, only a building type (in the 432 Park block, most
+// premium-tier buildings): homes read a touch warm, work places a touch cool, public buildings a
+// touch lilac.
 const HOME = calmColor(0xd9b48f);
 const WORK = calmColor(0x8fa8c8);
 const PUBLIC = calmColor(0xa898c0);

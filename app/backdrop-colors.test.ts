@@ -20,10 +20,12 @@ const hsl = (hex: string): { s: number; l: number } => {
 function* cube(): Generator<number> {
   for (let r = 0; r < 256; r += 17) for (let g = 0; g < 256; g += 17) for (let b = 0; b < 256; b += 17) yield (r << 16) | (g << 8) | b;
 }
-// Tolerances: one 8-bit step (at lightness 0.9 one step moves saturation about 0.02).
+// Tolerances: 8-bit rounding. Lightness moves up to half a step; saturation up to one step in
+// (max - min) over (1 - |2l - 1|), which is about 0.04 at lightness 0.95.
 const inBand = (hexColour: string): boolean => {
   const { s, l } = hsl(hexColour);
-  return l >= 0.87 - 0.004 && l <= 0.95 + 0.004 && s <= 0.2 + 0.03;
+  const sStep = 1 / 255 / (1 - Math.abs(2 * l - 1));
+  return l >= 0.87 - 0.5 / 255 && l <= 0.95 + 0.5 / 255 && s <= 0.2 + sStep + 1e-9;
 };
 const contrast = (a: string, b: string): number => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
 
@@ -31,7 +33,7 @@ test('every Cityweft colour is softened into the pale daylight band', () => {
   for (const rgb of cube()) assert.ok(inBand(calmColor(rgb)), `${rgb.toString(16)} -> ${calmColor(rgb)}`);
 });
 
-test('softening keeps order (darker in, darker out) and keeps the hue family', () => {
+test('softening keeps HSL lightness order and the hue family', () => {
   assert.ok(luminance(calmColor(0x000000)) < luminance(calmColor(0x808080)));
   assert.ok(luminance(calmColor(0x808080)) < luminance(calmColor(0xffffff)));
   const green = calmColor(0x006400);
@@ -78,7 +80,7 @@ test("a 'default' roof material, or none, takes the facade colour", () => {
   assert.equal(c.roof, c.facade);
 });
 
-test('with only a building type (the premium tier), homes read warm and work places read cool', () => {
+test('with only a building type, homes read warm and work places read cool', () => {
   const home = buildingColors({ buildingType: 'apartments' });
   const office = buildingColors({ buildingType: 'office' });
   assert.equal(home.facade, buildingColors({ buildingType: 'residential' }).facade);

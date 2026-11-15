@@ -173,11 +173,14 @@ export const MAX_ATTEMPTS = 5;
 export const MAX_WAIT_MS = 120_000;
 const BASE_WAIT_MS = 2000;
 
-// Retry-After as milliseconds from `now`: delay-seconds or an HTTP date. Null when unreadable.
-function retryAfterMs(retryAfter: string | null, now: number): number | null {
+// Retry-After as milliseconds from `now`: delay-seconds, or an HTTP date in its IMF-fixdate form
+// (RFC 9110), always GMT. Anything else is unreadable (null): Date.parse alone reads '1.5' as a year.
+const IMF_FIXDATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+export function retryAfterMs(retryAfter: string | null, now: number): number | null {
   const v = retryAfter?.trim();
   if (!v) return null;
   if (/^\d+$/.test(v)) return Number(v) * 1000;
+  if (!IMF_FIXDATE.test(v)) return null;
   const at = Date.parse(v);
   return Number.isFinite(at) ? Math.max(0, at - now) : null;
 }
@@ -203,10 +206,14 @@ export function isConnectError(err: unknown): boolean {
 }
 
 // One line for a 429 usage-limit answer, from its JSON body (message, resetsAt, remainingKm2).
-// Server text is flattened, cut short and has anything shaped like a key masked.
-const flat = (v: string, max: number): string =>
-  v.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/cw_[A-Za-z0-9_-]+/g, 'cw_***').slice(0, max).trim();
-export function describeLimit(body: unknown): string {
+// Server text loses its control and format characters (line breaks become spaces), then has the
+// real key (when given) and anything shaped like a key masked, and is cut short.
+export function describeLimit(body: unknown, key?: string): string {
+  const flat = (v: string, max: number): string => {
+    const plain = v.replace(/[\p{Cc}\p{Cf}]/gu, (c) => (/\s/.test(c) ? ' ' : ''));
+    const masked = key ? plain.replaceAll(key, 'cw_***') : plain;
+    return masked.replace(/cw_[A-Za-z0-9_-]+/g, 'cw_***').replace(/\s+/g, ' ').slice(0, max).trim();
+  };
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const parts: string[] = [];
   if (typeof b.message === 'string' && b.message.trim()) parts.push(flat(b.message, 300));
