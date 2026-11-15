@@ -227,8 +227,6 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   return { parse, edit, suggestions: scored.slice(0, 3).map((s) => s.b) };
 }
 
-// The arrow keys' floor step (viewer/drop.ts stepLevel), skipping floors for which `shown` is false:
-// zoomed in, the view opens only the drawn floors, so a step onto another one would hide the question.
 // The levels a zoomed-in view keeps on screen: the drawn floors (`drawn`) and the slice's own levels,
 // which the backdrop does not stand in for (the terrace and plant levels have no plan, but their
 // rooms are always drawn).
@@ -247,6 +245,8 @@ export function focusFloor(building: Building, drawn: readonly Id[], level: Id):
   return near?.id ?? level;
 }
 
+// The arrow keys' floor step (viewer/drop.ts stepLevel), skipping floors for which `shown` is false:
+// zoomed in, the view keeps only some floors on screen (openable), so a step onto another one would hide the question.
 export function stepShown(building: Building, from: Id, dir: 1 | -1, shown: (level: Id) => boolean): Id | null {
   for (let at = stepLevel(building, from, dir); at !== null; at = stepLevel(building, at, dir)) {
     const level = building.nodes.find((n) => n.id === at)?.level;

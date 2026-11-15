@@ -551,6 +551,7 @@ function clearOfStrip(): void {
   const stripRight = strip.classList.contains('on') ? strip.offsetLeft + strip.offsetWidth + STRIP_GAP : 0;
   const roomLeft = innerWidth - stripRight - (S.results && S.results.length > 0 ? insetFor(S.results) : 0);
   viewer.setInsetLeft(stripRight > 0 && innerWidth >= WIDE && roomLeft >= MIN_MODEL_WIDTH ? stripRight : 0);
+  if (S.results) viewer.setInsetRight(insetFor(S.results)); // the sheet's slot moves below the model under 701 px
 }
 window.addEventListener('resize', clearOfStrip);
 

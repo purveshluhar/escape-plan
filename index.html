@@ -63,7 +63,8 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 #dock.pop{animation:settle .6s var(--spring)}
 @keyframes settle{from{transform:translateX(-50%) scale(.94);opacity:.6}to{transform:translateX(-50%) scale(1);opacity:1}}
 .dock-full{display:flex;align-items:center;gap:var(--s2);min-width:0}
-#picker{display:flex;gap:8px;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none}
+#picker{display:flex;gap:8px;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none;
+  padding:5px 4px;margin:-5px -4px} /* room inside the scroll box for a chip's focus ring */
 #picker::-webkit-scrollbar{display:none}
 .scrollwrap{position:relative;min-width:0;display:flex;flex:1}
 .scroller{display:flex;align-items:center;gap:var(--s2);min-width:0;overflow-x:auto;scrollbar-width:none}

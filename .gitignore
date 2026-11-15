@@ -183,3 +183,6 @@ private-context/
 *.e57
 *.las
 *.laz
+
+# tools/legibility-check.mjs output (screenshots show the Cityweft block)
+legibility-out/

@@ -479,7 +479,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const drawn = shown ? shown.building.levels.filter((l) => floorLevels.has(l.id)) : [];
     cut = cutLevel(drawn, focusHeight(centre.y, view, pan));
     // Opened for answers, not by zooming in: no figure on the model is cut away with its floor.
-    if (!revealed(zoom)) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
+    // Only at the framed view itself: once the person pans or glides to a floor, the cut is theirs.
+    if (!revealed(zoom) && pan.x === 0 && pan.y === 0 && glideTo === null) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
     pickCeiling = dropCeiling(drawn, cut);
     if (glideTo === null) {
       const now = drawn.find((l) => l.elevation === cut)?.id ?? null;
@@ -1224,6 +1225,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (selected?.id === token && selected?.caption === caption) return;
     selected = token === null ? null : { id: token, caption };
     markSelected();
+    // The cards keep clear of the new caption: lay them out once it has been drawn where it goes.
+    if (shown) requestAnimationFrame(() => requestAnimationFrame(fit));
   }
 
   function flash(target: Id): void {
