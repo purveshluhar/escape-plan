@@ -14,6 +14,7 @@ import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { isMemberStart, movedPastSlop, stepLevel } from '../viewer/drop.ts';
 import { MOTION } from '../design/tokens.ts';
 import { createViewer } from '../viewer/index.ts';
+import { REVEAL_ZOOM } from '../viewer/layout.ts';
 import { stayText } from '../viewer/labels.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
@@ -28,7 +29,7 @@ import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
-  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, togglePlaced, phaseWord, tokenCaption, withStarts,
+  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, stepShown, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
 import type { Phase, PickItem } from './shell.ts';
 import { readEdit } from './parse-client.ts';
@@ -90,9 +91,15 @@ const applyReveal = (): void => {
   context3d.dimmed = context3d.amount;
 };
 // The floor scroller on the right edge; it lists the drawn floors once they load and drives viewer.focusLevel.
+// The zoom (1 = framed) and the floors the view can open, for the arrow keys: zoomed in, a question
+// steps only onto a floor that can be shown, and the view follows it there.
+const view = { zoom: 1, floors: new Set<Id>() };
 const rail = mountScroller($('hud'), (level) => viewer.focusLevel(level));
 const viewer = createViewer($('viewer'), {
-  onZoom: (zoom) => setCutHeight(cutHeight(zoom)),
+  onZoom: (zoom) => {
+    setCutHeight(cutHeight(zoom));
+    view.zoom = zoom;
+  },
   onReveal: (amount, cut) => {
     Object.assign(context3d, { amount, cut });
     applyReveal();
@@ -641,8 +648,19 @@ document.addEventListener('keydown', (ev) => {
       return;
     }
     const from = played().tokens.find((t) => t.id === S.selected)?.start;
-    const to = from === undefined ? null : stepLevel(building, from, up ? 1 : -1);
-    if (to !== null) return moveTo(S.selected, to);
+    const open = view.zoom < REVEAL_ZOOM && view.floors.size > 0;
+    const to = from === undefined ? null : open
+      ? stepShown(building, from, up ? 1 : -1, (level) => view.floors.has(level))
+      : stepLevel(building, from, up ? 1 : -1);
+    if (to !== null) {
+      moveTo(S.selected, to);
+      const level = building.nodes.find((n) => n.id === to)?.level;
+      if (open && level !== undefined) {
+        viewer.focusLevel(level);
+        rail.follow(level); // the rail names the floor at once, not only when the glide ends
+      }
+      return;
+    }
     S.note = `${itemOf(S.selected).label} is already on the ${up ? 'top' : 'bottom'} floor`;
     render();
     return;
@@ -679,6 +697,7 @@ Promise.all([
   viewer.setBackdrop(context);
   applyReveal();
   const drawn = floor ? drawnLevels(building) : [];
+  view.floors = new Set(drawn);
   rail.setStops(scrollerStops(building.levels, drawn)); // before setFloors: its first frame tells the rail where the view is
   viewer.setFloors(drawn); // only real floors can be opened
 });

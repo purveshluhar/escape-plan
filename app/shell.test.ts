@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, stepShown, togglePlaced, tokenCaption, withStarts } from './shell.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -199,4 +199,19 @@ test('the smoke caption gives the answer as the people\'s, not as if the smoke w
   assert.match(caption, /People: No, too narrow$/, caption);
   assert.match(tokenCaption(b, 'smoke', res('smoke', 'pass')), /People: Yes$/);
   assert.match(tokenCaption(b, 'smoke', null), /Ready$/);
+});
+
+test('zoomed in, an arrow step skips floors the view cannot open, so the question never lands out of sight', async () => {
+  const { withSmoke } = await import('../data/smoke.ts');
+  const { drawnLevels } = await import('../data/typical-floors.ts');
+  const { stepLevel } = await import('../viewer/drop.ts');
+  const b = withSmoke(building);
+  const shown = new Set(drawnLevels(b));
+  const levelOf = (id: string | null): string | undefined => b.nodes.find((n) => n.id === id)?.level;
+  const start = 'unit1-living'; // Level 2, one floor up from the wheelchair's terrace; the plant floor above is not drawn
+  assert.ok(!shown.has(levelOf(stepLevel(b, start, 1))!), 'the plain step goes to a floor that is not drawn (the reason for this test)');
+  const to = stepShown(b, start, 1, (lv) => shown.has(lv));
+  assert.ok(to !== null, 'there is a drawn floor above');
+  assert.ok(shown.has(levelOf(to)!), `lands on a drawn floor, got ${levelOf(to)}`);
+  assert.equal(stepShown(b, start, 1, () => true), stepLevel(b, start, 1), 'with every floor shown it is the plain step');
 });

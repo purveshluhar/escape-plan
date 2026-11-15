@@ -3,7 +3,7 @@
 import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, Token } from '../contract/types.ts';
 import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
-import { isMemberStart } from '../viewer/drop.ts';
+import { isMemberStart, stepLevel } from '../viewer/drop.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { REASON_TEXT, placeName } from './scoreboard.ts';
 import type { DemoButton } from './state.ts';
@@ -224,4 +224,14 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
     ? { op, target: best.b.edit.target, value: value ? value.score : null, source: 'text' }
     : null;
   return { parse, edit, suggestions: scored.slice(0, 3).map((s) => s.b) };
+}
+
+// The arrow keys' floor step (viewer/drop.ts stepLevel), skipping floors for which `shown` is false:
+// zoomed in, the view opens only the drawn floors, so a step onto another one would hide the question.
+export function stepShown(building: Building, from: Id, dir: 1 | -1, shown: (level: Id) => boolean): Id | null {
+  for (let at = stepLevel(building, from, dir); at !== null; at = stepLevel(building, at, dir)) {
+    const level = building.nodes.find((n) => n.id === at)?.level;
+    if (level !== undefined && shown(level)) return at;
+  }
+  return null;
 }
