@@ -91,6 +91,9 @@ export async function readEdit(text: string, fixes: readonly DemoButton[], build
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req), signal: ctl.signal,
     });
     const decider = res.headers.get('x-decider');
+    // An answer this page does not use is still read to the end: left unread, the browser cuts it off
+    // and logs the request as aborted.
+    if (!res.ok || decider !== 'strands') await res.arrayBuffer().catch(() => undefined);
     // 502, 503 or 504 with no x-decider is the Vite proxy saying it could not reach the server.
     // The server's own errors (400 to 500) are refused.
     if (!res.ok) return decider === null && res.status >= 502 && res.status <= 504 ? local('down', null) : local('refused', decider);

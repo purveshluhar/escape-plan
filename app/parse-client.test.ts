@@ -65,6 +65,13 @@ test('demo sentence, keywords server: the app reader applies it, not the server 
   assert.ok(r.out.parse.op.confidence >= 0.8, 'the app reader is sure of widen');
 });
 
+test('an answer the page does not use is still read to the end, so the browser does not cut it off', async () => {
+  for (const res of [reply(keywordsAnswer, 'keywords'), reply({ error: 'no' }, 'keywords', 403)]) {
+    await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => res) });
+    assert.equal(res.bodyUsed, true);
+  }
+});
+
 test('demo sentence, Strands server: the server answer is used and applied', async () => {
   const r = await readEdit(DEMO, buttons, building, { fetch: fakeFetch(() => reply(strandsAnswer, 'strands')) });
   assert.equal(r.why, 'strands');
