@@ -1,14 +1,15 @@
 // The daylight shell (design B): which objects the dock offers, what the summary pill says, and the
 // plan C keyword parser behind the "Type an edit" box. Pure, so Node tests can check it. Owner: P3.
-import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult } from '../contract/types.ts';
+import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, Token } from '../contract/types.ts';
 import { DISCIPLINES, JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
+import { tokenName } from '../viewer/labels.ts';
 import type { DemoButton } from './state.ts';
 
 // ---------- Dock picker ----------
 
 export interface PickItem {
-  token: Id | null; // null = a later discipline with no token in building.json yet
+  token: Id | null; // null = a Later chip: not in this game yet
   discipline: Discipline;
   label: string;
   glyph: string;
@@ -17,13 +18,22 @@ export interface PickItem {
   key: number | null; // keyboard shortcut 1..9, placeable objects only
 }
 
-// Every token in the building can be placed, in data order. Disciplines with no token yet are
-// listed after them as "Later" chips, so the audience sees what is coming.
-export function pickerItems(building: Building): PickItem[] {
-  const placeable = building.tokens.map((t, i): PickItem => {
+// The objects the dock offers. With no `roster`, every token in the building can be placed, in
+// data order, and disciplines with no token yet follow as "Later" chips. With a `roster` (the MVP
+// game), only those tokens can be placed, in roster order, and the building's other tokens are the
+// "Later" chips, so the audience sees what is coming.
+export function pickerItems(building: Building, roster?: readonly Id[]): PickItem[] {
+  // index: the token's place in the dock (its key is index + 1, for 1..9); null for a Later chip.
+  const item = (t: Token, index: number | null): PickItem => {
     const s = DISCIPLINE_STYLE[t.discipline];
-    return { token: t.id, discipline: t.discipline, label: s.label, glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: i < 9 ? i + 1 : null };
-  });
+    return {
+      token: index === null ? null : t.id, discipline: t.discipline, label: tokenName(t.id),
+      glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: index !== null && index < 9 ? index + 1 : null,
+    };
+  };
+  const play = roster ? roster.flatMap((id) => building.tokens.filter((t) => t.id === id)) : building.tokens;
+  const placeable = play.map((t, i) => item(t, i));
+  if (roster) return [...placeable, ...building.tokens.filter((t) => !roster.includes(t.id)).map((t) => item(t, null))];
   const have = new Set(building.tokens.map((t) => t.discipline));
   const later = DISCIPLINES.filter((d) => !have.has(d)).map((d): PickItem => {
     const s = DISCIPLINE_STYLE[d];
@@ -38,6 +48,15 @@ export function togglePlaced(building: Building, placed: readonly Id[], token: I
   const on = placed.includes(token) ? placed.filter((id) => id !== token) : [...placed, token];
   const order = building.tokens.map((t) => t.id);
   return order.filter((id) => on.includes(id));
+}
+
+// What the viewer is shown before a run: each placed object parked in its start room. The viewer
+// only draws tokens for results, and an empty path with no block draws the token at its start with
+// no route and no red X, so placing an object shows it on the model straight away.
+export function parkedResults(placed: readonly Id[]): SolverResult[] {
+  return placed.map((token) => ({
+    token, status: 'pass', path: [], blocked_at: null, reason: null, needed: null, available: null,
+  }));
 }
 
 // ---------- Phases and the summary pill ----------

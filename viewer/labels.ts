@@ -1,7 +1,6 @@
 // Words for the fail moment (design/look.md): a title and a line of numbers next to the red X.
 // Pure, so it is easy to test.
 import type { Building, Reason, SolverResult } from '../contract/types.ts';
-import { DISCIPLINE_STYLE } from '../design/tokens.ts';
 
 const REASON_WORDS: Record<Reason, string> = {
   too_narrow: 'TOO NARROW',
@@ -28,7 +27,7 @@ export interface FailText {
 export function failText(b: Building, r: SolverResult): FailText | null {
   if (r.status !== 'fail') return null;
   const token = b.tokens.find((t) => t.id === r.token);
-  const label = token ? DISCIPLINE_STYLE[token.discipline].label.toUpperCase() : r.token.toUpperCase();
+  const label = tokenName(r.token).toUpperCase();
   const reason = r.reason ?? 'no_route';
   const place = b.edges.find((e) => e.id === r.blocked_at)?.name
     ?? b.nodes.find((n) => n.id === r.blocked_at)?.name
@@ -103,4 +102,16 @@ export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[]
 // About how wide a fail label is in pixels, from its text (14 px title, 15 px detail).
 export function labelWidth(text: FailText): number {
   return Math.max(text.title.length * 10, text.detail.length * 7.6) + 28;
+}
+
+// The words on a room: its name, and "exit" on the way out (so the goal reads before a run).
+export function roomLabel(name: string, isExit: boolean): string {
+  return isExit ? `${name} - exit` : name;
+}
+
+// A token's name for people: its id in words ("sofa" -> "Sofa"). Two tokens can share a
+// discipline (glass and sofa are both logistics), so the discipline label cannot name them.
+export function tokenName(id: string): string {
+  const words = id.replace(/[-_]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

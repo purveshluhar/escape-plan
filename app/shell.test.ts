@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { countText, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
+import { countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
 import { demoButtons } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -29,6 +29,14 @@ test('togglePlaced keeps building order and takes an object off on a second clic
   const two = togglePlaced(building, one, a!);
   assert.deepEqual(two, [a, b]);
   assert.deepEqual(togglePlaced(building, two, a!), [b]);
+});
+
+test('parked results put each placed object at its start, with no route and no block', () => {
+  const placed = building.tokens.slice(0, 2).map((t) => t.id);
+  const parked = parkedResults(placed);
+  assert.deepEqual(parked.map((r) => r.token), placed);
+  assert.ok(parked.every((r) => r.path.length === 0 && r.blocked_at === null && r.reason === null));
+  assert.deepEqual(parkedResults([]), []);
 });
 
 test('phase and summary words', () => {

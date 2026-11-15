@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { failText, labelSides } from './labels.ts';
+import { failText, labelSides, roomLabel } from './labels.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
 
 const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -50,4 +50,10 @@ test('labels on nearby rows do not stack on top of each other', () => {
 test('a label never runs off the edge of the free screen when the other side is clear', () => {
   assert.deepEqual(labelSides([{ x: 1100, y: 300, width: 250 }], layout), ['left']);
   assert.deepEqual(labelSides([{ x: 60, y: 300, width: 250 }], layout), ['right']);
+});
+
+test('room labels use the building names and mark the exit', () => {
+  const street = b.nodes.find((n) => n.is_exit)!;
+  assert.equal(roomLabel(street.name, street.is_exit), `${street.name} - exit`);
+  assert.equal(roomLabel('Lobby', false), 'Lobby');
 });
