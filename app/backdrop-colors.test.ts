@@ -16,13 +16,19 @@ const hsl = (hex: string): { s: number; l: number } => {
   return { s, l };
 };
 
-test('a Cityweft colour is softened into the pale daylight band, whatever it was', () => {
-  for (const rgb of [0x000000, 0xffffff, 0x006400, 0xff0000, 0x0000ff, 0xbbbbbb, 0x8a8a8a]) {
-    const { s, l } = hsl(calmColor(rgb));
-    // tolerances: one 8-bit step (saturation at lightness 0.9 moves about 0.02 per step)
-    assert.ok(l >= 0.86 - 0.004 && l <= 0.95 + 0.004, `${rgb.toString(16)} lightness ${l}`);
-    assert.ok(s <= 0.22 + 0.02, `${rgb.toString(16)} saturation ${s}`);
-  }
+// Every 0x11 step on each channel: 16^3 = 4096 source colours.
+function* cube(): Generator<number> {
+  for (let r = 0; r < 256; r += 17) for (let g = 0; g < 256; g += 17) for (let b = 0; b < 256; b += 17) yield (r << 16) | (g << 8) | b;
+}
+// Tolerances: one 8-bit step (at lightness 0.9 one step moves saturation about 0.02).
+const inBand = (hexColour: string): boolean => {
+  const { s, l } = hsl(hexColour);
+  return l >= 0.87 - 0.004 && l <= 0.95 + 0.004 && s <= 0.2 + 0.03;
+};
+const contrast = (a: string, b: string): number => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
+
+test('every Cityweft colour is softened into the pale daylight band', () => {
+  for (const rgb of cube()) assert.ok(inBand(calmColor(rgb)), `${rgb.toString(16)} -> ${calmColor(rgb)}`);
 });
 
 test('softening keeps order (darker in, darker out) and keeps the hue family', () => {
@@ -34,12 +40,23 @@ test('softening keeps order (darker in, darker out) and keeps the hue family', (
   assert.equal(calmColor(0xbbbbbb), calmColor(0xbbbbbb)); // pure
 });
 
-test('nothing in the backdrop is darker than 1.25:1 against the plain building tone', () => {
+test('no building colour is more than 1.25:1 from the plain building tone', () => {
   // low contrast keeps the tower and the figures the focus
-  for (const rgb of [0x000000, 0x003366, 0x660000]) {
-    const ratio = (luminance(BUILDING) + 0.05) / (luminance(calmColor(rgb)) + 0.05);
-    assert.ok(ratio <= 1.25, `${rgb.toString(16)}: ${ratio.toFixed(2)}`);
+  for (const rgb of cube()) {
+    const ratio = contrast(BUILDING, calmColor(rgb));
+    assert.ok(ratio <= 1.25, `${rgb.toString(16)}: ${ratio.toFixed(3)}`);
   }
+});
+
+test('every material and building-type tint sits in the same band', () => {
+  // values from https://cityweft.gitbook.io/docs/basics/metadata-descriptors.md
+  const facades = ['plaster', 'brick', 'wood', 'glass', 'cementBlock'];
+  const roofs = ['tiles', 'metal', 'concrete', 'thatch', 'eternit', 'grass', 'glass', 'tar'];
+  const types = ['residential', 'apartments', 'house', 'hotel', 'commercial', 'industrial', 'retail', 'office', 'school', 'hospital', 'church'];
+  for (const m of facades) assert.ok(inBand(buildingColors({ buildingFacadeMaterial: m }).facade), m);
+  for (const m of roofs) assert.ok(inBand(buildingColors({ buildingRoofMaterial: m }).roof), m);
+  for (const t of types) assert.ok(inBand(buildingColors({ buildingType: t }).facade), t);
+  assert.ok(inBand(surfaceColor({ type: 'wall', wallType: 'hedge' }, 'wall_1')), 'hedge');
 });
 
 test('facade and roof use the Cityweft colours when the descriptor has them', () => {

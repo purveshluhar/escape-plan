@@ -91,10 +91,10 @@ export function coversPoint(box: { minX: number; maxX: number; minZ: number; max
 export const BUILDING = '#eef0f4'; // the plain building tone, when the descriptor says nothing
 
 // The daylight band every backdrop building colour is pulled into (HSL lightness and saturation).
-const L_MIN = 0.86;
+const L_MIN = 0.87;
 const L_MAX = 0.95;
 const S_KEEP = 0.4; // share of the source saturation that survives
-const S_MAX = 0.22;
+const S_MAX = 0.2;
 
 function hex(r: number, g: number, b: number): string {
   const to = (v: number): string => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');
@@ -127,29 +127,30 @@ export function calmColor(rgb: number): string {
   return hex(r1 + m, g1 + m, b1 + m);
 }
 
-// When there is no colour: tints by material class (Cityweft's coarse classes "intended for rendering").
+// When there is no colour: tints by material class (Cityweft's coarse classes "intended for
+// rendering"), each a typical colour of that material passed through calmColor, so it sits in the band.
 const FACADE_MATERIAL: Record<string, string> = {
-  plaster: '#efede8',
-  brick: '#eddcd4',
-  glass: '#dfe7ef',
-  wood: '#ece3d6',
-  cementBlock: '#e6e6e3',
+  plaster: calmColor(0xe8e2d0),
+  brick: calmColor(0xa0522d),
+  wood: calmColor(0x8b6b4a),
+  glass: calmColor(0x7f9fbf),
+  cementBlock: calmColor(0xa9a9a4),
 };
 const ROOF_MATERIAL: Record<string, string> = {
-  concrete: '#e4e5e7',
-  tiles: '#ebd9d0',
-  metal: '#dfe3e9',
-  glass: '#dde6ef',
-  grass: '#d6e3d0',
-  tar: '#dddee1',
-  thatch: '#e9e1cd',
-  eternit: '#e2e3e1',
+  concrete: calmColor(0x9a9a9a),
+  tiles: calmColor(0xb5523b),
+  metal: calmColor(0x7d8a99),
+  glass: calmColor(0x8fb3cc),
+  grass: calmColor(0x5a8f3c),
+  tar: calmColor(0x3a3a3c),
+  thatch: calmColor(0xb39b5f),
+  eternit: calmColor(0x8c8c86),
 };
 // The premium tier gives most buildings no colour or material, some a building type: homes read
 // a touch warm, work places a touch cool, public buildings a touch lilac.
-const HOME = '#f1ede7';
-const WORK = '#e8edf3';
-const PUBLIC = '#ece9f1';
+const HOME = calmColor(0xd9b48f);
+const WORK = calmColor(0x8fa8c8);
+const PUBLIC = calmColor(0xa898c0);
 const BUILDING_TYPE: Record<string, string> = {
   residential: HOME, apartments: HOME, house: HOME, hotel: HOME, dormitory: HOME,
   commercial: WORK, office: WORK, retail: WORK, industrial: WORK, warehouse: WORK,
@@ -181,7 +182,7 @@ export function buildingColors(descriptor: unknown): { facade: string; roof: str
 
 const ROAD = '#d9dde4'; // roadways and crossings: a touch deeper than the sidewalk
 const SIDEWALK = '#e6e9ee';
-const HEDGE = '#d3dfcf';
+const HEDGE = calmColor(0x4f7942);
 
 // Ground, walls and fences: by the descriptor's type where it says something useful, else by
 // the layer name (LAYER_COLOR).

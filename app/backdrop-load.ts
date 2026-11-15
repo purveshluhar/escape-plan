@@ -29,6 +29,24 @@ async function readMeta(): Promise<Meta | null> {
   }
 }
 
+// Colour one Cityweft building from its descriptor (userData.descriptor): per-vertex facade and
+// roof colours (linear RGB, as three expects for vertex colours) and the shared `material`. A
+// vertex is roof when its normal looks up in the world, so any node rotation works. Needs the
+// mesh's matrixWorld up to date.
+const linear = (hex: string): number[] => new THREE.Color(hex).toArray();
+export function colourBuilding(mesh: THREE.Mesh, material: THREE.Material): void {
+  const geometry = mesh.geometry as THREE.BufferGeometry;
+  if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+  const { facade, roof } = buildingColors(mesh.userData.descriptor);
+  const normal = geometry.getAttribute('normal');
+  const toWorld = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+  const v = new THREE.Vector3();
+  // the world up part of each normal (interleaved or quantised normals too)
+  const up = Float32Array.from({ length: normal.count }, (_, i) => v.fromBufferAttribute(normal, i).applyMatrix3(toWorld).normalize().y);
+  geometry.setAttribute('color', new THREE.BufferAttribute(roofOrFacade(up, linear(facade), linear(roof)), 3));
+  mesh.material = material;
+}
+
 export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   const meta = await readMeta();
   if (!meta) return null;
@@ -44,28 +62,17 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   // share one vertex-colour material (facade and roof per vertex); the ground shares one per colour.
   const mats = new Map<string, THREE.Material>();
   const buildingMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: CUT });
-  const linear = (hex: string): number[] => new THREE.Color(hex).toArray();
-  const n = new THREE.Vector3();
   block.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const name = o.name || o.parent?.name || '';
-    const descriptor = o.userData.descriptor;
     if (/buildings/i.test(name)) {
       const box = new THREE.Box3().setFromObject(o);
       const covers = coversPoint({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z }, target);
       if (covers && (!tower || box.max.y > tower.box.max.y)) tower = { mesh: o, box };
-      const geometry = o.geometry as THREE.BufferGeometry;
-      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
-      const { facade, roof } = buildingColors(descriptor);
-      const normal = geometry.getAttribute('normal');
-      // the world up part of each normal (any node rotation; interleaved or quantised normals too)
-      const toWorld = new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
-      const up = Float32Array.from({ length: normal.count }, (_, i) => n.fromBufferAttribute(normal, i).applyMatrix3(toWorld).normalize().y);
-      geometry.setAttribute('color', new THREE.BufferAttribute(roofOrFacade(up, linear(facade), linear(roof)), 3));
-      o.material = buildingMat;
+      colourBuilding(o, buildingMat);
       return;
     }
-    const color = surfaceColor(descriptor, name);
+    const color = surfaceColor(o.userData.descriptor, name);
     let mat = mats.get(color);
     if (!mat) {
       mat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, clippingPlanes: CUT });

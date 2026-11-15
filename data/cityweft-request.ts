@@ -154,7 +154,7 @@ export function describeStatus(status: number): string {
     case 429:
       return '429: this key reached its Cityweft usage limit. It resets with the billing period, or an admin raises it.';
     case 0:
-      return 'No answer from Cityweft (network error).';
+      return 'Could not connect to Cityweft (network error).';
     case 503:
       return '503: Cityweft is busy. Retry shortly.';
     default:
@@ -162,27 +162,57 @@ export function describeStatus(status: number): string {
   }
 }
 
-// Retries for /v1/context. The API documents 503 (busy, with Retry-After) and 402 (no balance):
-// https://cityweft.gitbook.io/docs/getting-started/api-reference.md. Other 5xx and a network
-// error (status 0) clear on their own, so they are retried too; 402, 400 and 401 do not.
-// Cityweft answers 429 when a key reaches its usage limit, which holds until the billing period
-// resets (https://cityweft.gitbook.io/docs/basics/usage-limits.md), so a 429 is retried only
-// when it says when to come back (Retry-After). Up to MAX_ATTEMPTS tries, each wait under MAX_WAIT_MS.
+// Retries for /v1/context. Every successful request is billed by its area
+// (https://cityweft.gitbook.io/docs/basics/usage-limits.md), so only answers that say the request
+// was not served are retried: 503 (busy, with Retry-After;
+// https://cityweft.gitbook.io/docs/getting-started/api-reference.md) and a connect error before the
+// request left (status 0). A 429 means the key reached its usage limit, which holds until the limit
+// resets, and the docs say not to retry it. 500, 502 and 504 may come after the work was billed.
+// 400, 401 and 402 need a person. Up to MAX_ATTEMPTS tries; a wait never exceeds MAX_WAIT_MS.
 export const MAX_ATTEMPTS = 5;
-const RETRYABLE = new Set([0, 500, 502, 503, 504]);
+export const MAX_WAIT_MS = 120_000;
 const BASE_WAIT_MS = 2000;
-const MAX_WAIT_MS = 120_000;
+
+// Retry-After as milliseconds from `now`: delay-seconds or an HTTP date. Null when unreadable.
+function retryAfterMs(retryAfter: string | null, now: number): number | null {
+  const v = retryAfter?.trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  const at = Date.parse(v);
+  return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
 
 // How long to wait before the next try after `attempt` (1-based) answered `status`, or null when
-// there is no next try. A Retry-After in seconds wins; else the wait doubles each try, plus up to
-// half again of random jitter.
-export function retryDelayMs(status: number, attempt: number, retryAfter: string | null, random: () => number = Math.random): number | null {
-  if (attempt >= MAX_ATTEMPTS) return null;
-  const seconds = Number(retryAfter);
-  const hasRetryAfter = retryAfter !== null && retryAfter.trim() !== '' && Number.isFinite(seconds) && seconds >= 0;
-  if (status === 429 && hasRetryAfter) return Math.min(MAX_WAIT_MS, seconds * 1000);
-  if (!RETRYABLE.has(status)) return null;
-  if (hasRetryAfter) return Math.min(MAX_WAIT_MS, seconds * 1000);
-  const base = BASE_WAIT_MS * 2 ** (attempt - 1);
-  return Math.min(MAX_WAIT_MS, Math.round(base * (1 + 0.5 * random())));
+// there is no next try. The server's Retry-After wins, and a longer one than MAX_WAIT_MS gives up
+// rather than calling back early; else the wait doubles each try, plus up to half again of jitter.
+export function retryDelayMs(
+  status: number, attempt: number, retryAfter: string | null, random: () => number = Math.random, now: number = Date.now(),
+): number | null {
+  if (attempt >= MAX_ATTEMPTS || (status !== 503 && status !== 0)) return null;
+  const asked = retryAfterMs(retryAfter, now);
+  if (asked !== null) return asked <= MAX_WAIT_MS ? asked : null;
+  return Math.min(MAX_WAIT_MS, Math.round(BASE_WAIT_MS * 2 ** (attempt - 1) * (1 + 0.5 * random())));
+}
+
+// True when fetch failed before the request reached the server, so a retry cannot double-bill.
+// A reset, a timeout or a bad header value (a key with a stray newline) is not one.
+const CONNECT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+export function isConnectError(err: unknown): boolean {
+  const code = (err as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof code === 'string' && CONNECT_CODES.has(code);
+}
+
+// One line for a 429 usage-limit answer, from its JSON body (message, resetsAt, remainingKm2).
+// Server text is flattened, cut short and has anything shaped like a key masked.
+const flat = (v: string, max: number): string =>
+  v.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/cw_[A-Za-z0-9_-]+/g, 'cw_***').slice(0, max).trim();
+export function describeLimit(body: unknown): string {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof b.message === 'string' && b.message.trim()) parts.push(flat(b.message, 300));
+  if (typeof b.resetsAt === 'string') parts.push(`Resets at ${flat(b.resetsAt, 40)}.`);
+  if (typeof b.remainingKm2 === 'number' && Number.isFinite(b.remainingKm2)) {
+    parts.push(`${b.remainingKm2} km2 left: a smaller CITYWEFT_SIZE_M may still fit.`);
+  }
+  return parts.length ? `429: ${parts.join(' ')}` : describeStatus(429);
 }

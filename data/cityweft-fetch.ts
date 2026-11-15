@@ -4,7 +4,8 @@
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  buildInstancesRequest, buildRequest, describeStatus, extractInstances, retryDelayMs, shiftCenter, toLocal, MAX_ATTEMPTS,
+  buildInstancesRequest, buildRequest, describeLimit, describeStatus, extractInstances, isConnectError, retryDelayMs, shiftCenter, toLocal,
+  MAX_ATTEMPTS,
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
@@ -16,6 +17,7 @@ const CENTRAL_PARK_CORNER = { lat: 40.76444, lon: -73.97333 }; // Grand Army Pla
 const OFFSET_METRES = { north: 162, east: -10 };
 const CENTER = shiftCenter(TARGET, OFFSET_METRES.north, OFFSET_METRES.east);
 const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 500; // a side; override in .env or the shell
+const FETCH_TIMEOUT_MS = 300_000; // exports take a while; a stalled request still ends
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
 
 const key = process.env.CITYWEFT_API_KEY;
@@ -26,7 +28,9 @@ if (!key) {
 
 const body = buildRequest(CENTER, SIZE_METRES);
 
-// One POST with bounded retries (retryDelayMs). Each try is logged with its status only, never the key.
+// One POST with bounded retries (retryDelayMs). Each try is logged by its status only. Never log
+// a fetch error or its message: undici puts header values in some of them, and the Authorization
+// header holds the key.
 async function post(payload: object): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     let res: Response | null = null;
@@ -35,27 +39,40 @@ async function post(payload: object): Promise<Response> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-    } catch {
-      res = null; // network error: retried like a busy answer
+    } catch (err) {
+      if (!isConnectError(err)) {
+        const kind = err instanceof Error ? err.name : 'error';
+        console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: the request failed (${kind}). Not retried: it may have reached Cityweft, or CITYWEFT_API_KEY in .env has a character a header cannot hold.`);
+        process.exit(1);
+      }
     }
     const status = res?.status ?? 0;
-    console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: ${status === 0 ? 'no answer' : status}.`);
-    const wait = res?.ok ? null : retryDelayMs(status, attempt, res?.headers.get('Retry-After') ?? null);
+    console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: ${status === 0 ? 'could not connect' : status}.`);
+    if (res?.ok) return res;
+    const wait = retryDelayMs(status, attempt, res?.headers.get('Retry-After') ?? null);
     if (wait === null) {
       if (res) return res;
       console.error(describeStatus(0));
       process.exit(1);
     }
+    await res?.body?.cancel(); // free the connection before the wait
     console.error(`${describeStatus(status)} Waiting ${(wait / 1000).toFixed(1)} s.`);
     await new Promise((resolve) => setTimeout(resolve, wait));
   }
 }
 
+// What went wrong, for a final non-ok answer. A 429 carries the usage-limit details in its body.
+async function explain(res: Response): Promise<string> {
+  if (res.status !== 429) return describeStatus(res.status);
+  return describeLimit(await res.json().catch(() => null));
+}
+
 console.log(`Requesting a ${SIZE_METRES} m block around 432 Park Avenue (offset ${JSON.stringify(OFFSET_METRES)} m) ...`);
 const res = await post(body);
 if (!res.ok) {
-  console.error(describeStatus(res.status));
+  console.error(await explain(res));
   process.exit(1);
 }
 
@@ -98,7 +115,7 @@ console.log(`Saved data/cityweft/block.glb (${(glb.length / 1e6).toFixed(1)} MB)
 // benches, bus stops, hydrants and picnic tables come as JSON points from a second request.
 const instancesRes = await post(buildInstancesRequest(CENTER, SIZE_METRES));
 if (!instancesRes.ok) {
-  console.error(`Instances: ${describeStatus(instancesRes.status)} The GLB is saved; run again for instances.`);
+  console.error(`Instances: ${await explain(instancesRes)} The GLB is saved; run again for instances.`);
   process.exit(1);
 }
 const instances = extractInstances(await instancesRes.json());
