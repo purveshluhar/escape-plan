@@ -165,13 +165,14 @@ export function pressIntent(p: { button: number; shiftKey: boolean; onToken: Id 
 export const CLICK_SLOP = 8; // a tap on a touch screen wobbles a few pixels
 export const movedPastSlop = (dx: number, dy: number): boolean => Math.hypot(dx, dy) > CLICK_SLOP;
 
-// The token nearest the pointer within `radius` pixels of its screen spot, or null.
-export function pickToken(spots: readonly { id: Id; x: number; y: number }[], px: number, py: number, radius: number): Id | null {
+// The token nearest the pointer within `radius` pixels of its screen spot (or within the spot's own
+// `r`, when that is larger: a big figure drawn big), or null.
+export function pickToken(spots: readonly { id: Id; x: number; y: number; r?: number }[], px: number, py: number, radius: number): Id | null {
   let best: Id | null = null;
-  let bestD = radius;
+  let bestD = Infinity;
   for (const s of spots) {
     const d = Math.hypot(s.x - px, s.y - py);
-    if (d <= bestD) {
+    if (d <= Math.max(radius, s.r ?? 0) && d < bestD) {
       best = s.id;
       bestD = d;
     }

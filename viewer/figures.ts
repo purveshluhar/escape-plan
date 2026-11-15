@@ -18,6 +18,7 @@ export interface Figure {
   kind: FigureKind;
   source: 'model' | 'built' | 'fallback'; // a Kenney model, code-built shapes, or the stand-in shapes
   size: number; // metres: the figure's largest side, for scaling it to the screen
+  height: number; // metres: how tall it stands, for finding its middle on screen
   minPixels: number; // the figure's largest side is never drawn smaller than this
   ring: THREE.MeshBasicMaterial; // the disc's rim; the viewer recolours it for the selected token
   color: string; // the discipline colour the rim goes back to
@@ -25,7 +26,7 @@ export interface Figure {
   setMotion(motion: Motion): void;
   tick(seconds: number): void;
   setHeading(radians: number): void; // turns the figure about y; the disc stays put
-  dispose(): void; // stops its animation; disposeTree frees its GPU memory
+  dispose(): void; // stops its animation and frees the GPU memory it owns (never the shared model data)
 }
 
 export const MIN_PIXELS = 64;
@@ -67,12 +68,19 @@ interface Fit { scale: number; offset: THREE.Vector3; span: THREE.Vector3 } // r
 const templates: Partial<Record<File, Template>> = {};
 const fits: Partial<Record<FigureKind, Fit>> = {};
 let loading: Promise<boolean> | null = null;
+let atlas: THREE.Texture | null = null; // one upload of the atlas for every character
 
-// Loads one model. Only its own file and the shared atlas resolve; any other address the file names
-// becomes an empty data URL, so a model can never make the page fetch anything else.
+// Where a model's own references may go: its own file, the shared atlas, and data or blob URLs
+// (bytes already in the page, no request). Any other address becomes an empty data URL, so a model
+// file can never make the page fetch anything else.
+export function modelURL(file: string, atlas: string, u: string): string {
+  if (u === file || u.startsWith('data:') || u.startsWith('blob:')) return u;
+  return u.endsWith('/Textures/colormap.png') ? atlas : 'data:,';
+}
+
 async function fetchModel(url: string): Promise<GLTF> {
   const manager = new THREE.LoadingManager();
-  manager.setURLModifier((u) => (u === url ? u : u.endsWith('Textures/colormap.png') ? ATLAS : 'data:,'));
+  manager.setURLModifier((u) => modelURL(url, ATLAS, u));
   return new GLTFLoader(manager).loadAsync(url);
 }
 
@@ -82,10 +90,10 @@ export function loadFigureModels(load: (url: string) => Promise<GLTF> = fetchMod
   if (load === fetchModel && loading) return loading;
   const run = (async () => {
     const names = Object.keys(FILES) as File[];
-    const got = await Promise.allSettled(names.map((n) => load(FILES[n])));
-    got.forEach((r, i) => {
-      if (r.status === 'fulfilled') templates[names[i]!] = prepare(names[i]!, r.value);
-    });
+    for (const n of names) delete templates[n];
+    for (const k of Object.keys(fits) as FigureKind[]) delete fits[k];
+    atlas = null;
+    const got = await Promise.allSettled(names.map(async (n) => (templates[n] = prepare(n, await load(FILES[n])))));
     fitModels();
     return got.every((r) => r.status === 'fulfilled');
   })().catch(() => false);
@@ -94,11 +102,15 @@ export function loadFigureModels(load: (url: string) => Promise<GLTF> = fetchMod
 }
 
 // Lambert, as the route scene lights figures with Lambert; tint; and mark everything shared.
+// Throws when the file names a texture that did not load (GLTFLoader leaves the map empty), so
+// that figure falls back to its stand-in instead of drawing plain white.
 function prepare(name: File, gltf: GLTF): Template {
+  const textured = (gltf.parser?.json?.images?.length ?? 0) > 0;
   const swapped = new Map<THREE.Material, THREE.MeshLambertMaterial>();
   gltf.scene.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const m = o.material as THREE.MeshStandardMaterial;
+    if (textured && !m.map) throw new Error(`${name}: texture did not load`);
     let l = swapped.get(m);
     if (!l) {
       l = new THREE.MeshLambertMaterial({
@@ -106,6 +118,11 @@ function prepare(name: File, gltf: GLTF): Template {
         side: m.side, alphaTest: m.alphaTest, vertexColors: m.vertexColors,
       });
       if (name === 'chair' && m.map) l.map = recolour(m.map, CHAIR_CELLS, DISCIPLINE_STYLE.accessibility.color);
+      else if (m.map) {
+        atlas ??= m.map; // the characters all use the same atlas file
+        if (m.map !== atlas) m.map.dispose();
+        l.map = atlas;
+      }
       if (name === 'sofa') l.color.set(m.name.startsWith('carpet') ? DISCIPLINE_STYLE.logistics.color : '#b07a4f');
       swapped.set(m, l);
       m.dispose();
@@ -177,16 +194,21 @@ function rawModel(kind: FigureKind): Raw | null {
     if (!T.chair || !T.rider) return null;
     const rider = character(T.rider, { idle: 'wheelchair-sit', moving: 'wheelchair-move-forward' }, 0);
     rider.scale.setScalar(0.9); // a little smaller, so more of the chair shows around the rider
-    root.add(T.chair.scene.clone(true), rider);
+    const turned = new THREE.Group();
+    turned.rotation.y = -0.5; // three-quarter side view in the default camera: both wheels show
+    turned.add(T.chair.scene.clone(true), rider);
+    root.add(turned);
   } else if (kind === 'people') {
     if (!T.person1 || !T.person2 || !T.person3) return null;
-    // Side by side across the default view (camera right is (1, 0, -1) / sqrt 2), so all three show.
+    // Side by side across the default view (camera right is (1, 0, -1) / sqrt 2), so all three show,
+    // each turned to face the default camera.
     const spots: [Template, number, number, number, number][] = [
-      [T.person1, -0.3, 0.3, 1, 0.1], [T.person2, 0.04, -0.02, 0.9, 0.45], [T.person3, 0.36, -0.3, 1, 0.8],
+      [T.person1, -0.24, 0.24, 1, 0.1], [T.person2, 0.03, -0.02, 0.9, 0.45], [T.person3, 0.28, -0.24, 1, 0.8],
     ];
     for (const [tpl, x, z, s, t] of spots) {
       const p = character(tpl, { idle: 'idle', moving: 'walk' }, t);
       p.position.set(x, 0, z);
+      p.rotation.y = Math.PI / 4;
       p.scale.setScalar(s);
       root.add(p);
     }
@@ -206,6 +228,7 @@ function play(m: Mover, motion: Motion, fade: number): void {
   const next = m.mixer.clipAction(clip);
   if (m.action === next) return;
   next.reset().play();
+  next.time = m.t % Math.max(clip.duration, 1e-6); // so a group does not move in step
   if (m.action && fade > 0) next.crossFadeFrom(m.action, fade, false);
   else m.action?.stop();
   m.action = next;
@@ -214,7 +237,7 @@ function play(m: Mover, motion: Motion, fade: number): void {
 function pose(raw: Raw): void {
   for (const m of raw.movers) {
     play(m, 'idle', 0);
-    m.mixer.setTime(m.t);
+    m.mixer.update(0);
   }
   raw.root.updateMatrixWorld(true);
 }
@@ -226,9 +249,16 @@ function fitModels(): void {
   for (const [kind, by, metres] of targets) {
     const raw = rawModel(kind);
     if (!raw) continue;
-    pose(raw);
-    raw.root.traverse((o) => { if (o instanceof THREE.SkinnedMesh) o.computeBoundingBox(); });
-    fits[kind] = fitOf(new THREE.Box3().setFromObject(raw.root), by, metres);
+    const complete = raw.movers.every((m) => m.clips.idle && m.clips.moving);
+    if (complete) {
+      pose(raw);
+      raw.root.traverse((o) => { if (o instanceof THREE.SkinnedMesh) o.computeBoundingBox(); });
+      const fit = fitOf(new THREE.Box3().setFromObject(raw.root), by, metres);
+      // The seated rider's feet hang below the chair: stand the chair's wheels on the disc instead.
+      const chair = kind === 'wheelchair' ? raw.root.children[0]?.children[0] : undefined;
+      if (chair) fit.offset.y = -new THREE.Box3().setFromObject(chair).min.y * fit.scale;
+      fits[kind] = fit; // a figure with a clip missing keeps its stand-in
+    }
     for (const m of raw.movers) m.mixer.uncacheRoot(m.mixer.getRoot());
     disposeTree(raw.root, new Set());
   }
@@ -392,7 +422,8 @@ function glassShape(): THREE.Object3D[] {
   return parts;
 }
 
-// Real sizes, in metres: the token sizes in data/building.json where it has them.
+// Real sizes, in metres, on each figure's longest side or its height: the chiller's length and the
+// glass panel's length from data/building.json; the load and smoke have no size there.
 const BUILT: Partial<Record<FigureKind, [() => THREE.Object3D[], 'height' | 'size', number]>> = {
   chiller: [chillerShape, 'size', 2.4], glass: [glassShape, 'size', 4], load: [loadShape, 'height', 1.2], smoke: [smokeShape, 'size', 1.6],
 };
@@ -448,6 +479,7 @@ export function makeFigure(token: Id, discipline: Discipline): Figure {
   return {
     object, kind, source, ring, color,
     size: Math.max(span.x, span.y, span.z),
+    height: span.y,
     minPixels: kind === 'wheelchair' ? WHEELCHAIR_MIN_PIXELS : MIN_PIXELS,
     setMotion(next) {
       if (next === motion) return;
@@ -465,6 +497,7 @@ export function makeFigure(token: Id, discipline: Discipline): Figure {
         m.mixer.stopAllAction();
         m.mixer.uncacheRoot(m.mixer.getRoot());
       }
+      disposeTree(object, new Set());
     },
   };
 }

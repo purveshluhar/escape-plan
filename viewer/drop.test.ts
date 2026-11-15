@@ -101,6 +101,9 @@ test('a press within the slop is a click; the nearest token under the pointer is
   assert.equal(pickToken(spots, 115, 100, 24), 'b');
   assert.equal(pickToken(spots, 300, 300, 24), null);
   assert.equal(pickToken([], 0, 0, 24), null);
+  // A figure drawn bigger than the hit circle is picked anywhere within its own radius.
+  assert.equal(pickToken([{ id: 'big', x: 100, y: 100, r: 120 }], 200, 100, 24), 'big');
+  assert.equal(pickToken([{ id: 'big', x: 100, y: 100, r: 120 }, { id: 'near', x: 190, y: 100 }], 200, 100, 24), 'near');
 });
 
 test('figures grow to a readable size when zoomed out, and keep real size close up', () => {

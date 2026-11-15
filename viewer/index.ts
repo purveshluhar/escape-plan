@@ -437,14 +437,17 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     return el !== null && container.contains(el);
   };
 
-  // Screen spots of the drawn figures, at their middles, in container pixels.
+  // Screen spots of the drawn figures, at their middles, in container pixels. A figure drawn larger
+  // than the hit circle (zoomed in) can be picked anywhere within half its drawn size.
   function tokenAt(clientX: number, clientY: number): Id | null {
     const r = canvas.getBoundingClientRect();
+    const mpp = (camera.top - camera.bottom) / (canvas.clientHeight || 600);
     const spots = runs.filter((run) => run.token.visible).map((run) => {
+      const scale = run.figure.object.scale.y;
       const mid = run.token.position.clone();
-      mid.y += (run.figure.size * run.figure.object.scale.y) / 2;
+      mid.y += (run.figure.height * scale) / 2;
       const v = mid.project(camera);
-      return { id: run.id, x: ((v.x + 1) * r.width) / 2, y: ((1 - v.y) * r.height) / 2 };
+      return { id: run.id, x: ((v.x + 1) * r.width) / 2, y: ((1 - v.y) * r.height) / 2, r: (run.figure.size * scale) / mpp / 2 };
     });
     return pickToken(spots, clientX - r.left, clientY - r.top, HIT_PIXELS);
   }
@@ -614,12 +617,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function swapIn(old: Figure, id: Id, discipline: Discipline): Figure {
     if (old.source !== 'fallback') return old;
     const next = makeFigure(id, discipline);
-    if (next.source === 'fallback') return old;
+    if (next.source === 'fallback') {
+      next.dispose();
+      return old;
+    }
     next.object.position.copy(old.object.position);
     old.object.parent?.add(next.object);
     old.object.removeFromParent();
     old.dispose();
-    disposeTree(old.object, shared);
     return next;
   }
   void loadFigureModels().then(() => {
