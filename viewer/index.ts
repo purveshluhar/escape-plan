@@ -30,7 +30,7 @@ import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
-  focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, FLOOR_TAG_GAP,
+  focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, facadeOpen, routesShown, FLOOR_TAG_GAP,
   glideStep, panForFocus,
   type Fade, type ScreenRect,
 } from './layout.ts';
@@ -629,9 +629,15 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     });
   }
 
+  // Open or close the facade for the zoom and what is on the model (layout.ts facadeOpen).
+  function retargetFade(): void {
+    const open = facadeOpen(zoom, floorLevels.size > 0, routesShown(shown?.results ?? []));
+    fade = retarget(fade, open ? 1 : 0, performance.now(), reduced);
+  }
+
   function setZoom(z: number): void {
     zoom = z;
-    fade = retarget(fade, floorLevels.size > 0 && revealed(zoom) ? 1 : 0, performance.now(), reduced);
+    retargetFade();
     options.onZoom?.(zoom);
     fit();
     // A token carried while the wheel turns: what it would land on may have been cut away.
@@ -1127,6 +1133,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   function show(building: Building, results: SolverResult[]): number {
     shown = { building, results };
+    retargetFade();
     drawBuilding(building);
     buildRuns(building, results);
     drawSmoke();

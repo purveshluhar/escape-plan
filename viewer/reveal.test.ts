@@ -9,7 +9,7 @@ import { drawnLevels } from '../data/typical-floors.ts';
 import { dropTarget } from './drop.ts';
 import {
   focusHeight, belowCut, cutLevel, dropCeiling, FOCUS_GAIN_MAX, easeGlass, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent,
-  retarget, revealed, REVEAL_MS, REVEAL_ZOOM, viewDirection, zoomFactor, DEFAULT_VIEW,
+  retarget, revealed, REVEAL_MS, REVEAL_ZOOM, viewDirection, zoomFactor, DEFAULT_VIEW, facadeOpen, routesShown,
 } from './layout.ts';
 import type { Fade, Vec3 } from './layout.ts';
 
@@ -25,6 +25,20 @@ test('reveal: the framed view and a double-click reset keep the facade; three wh
   assert.equal(revealed(zoom), false);
   zoom = zoomFactor(zoom, -100); // the third
   assert.equal(revealed(zoom), true);
+});
+
+test('with answers on the model the framed view opens too, so routes run on the floors, not over the facade', () => {
+  const parked = { token: 'sofa', status: 'pass' as const, path: [], blocked_at: null, reason: null, needed: null, available: null };
+  const stuck = { ...parked, status: 'fail' as const, path: ['office'], blocked_at: 'office-door', reason: 'too_narrow' as const };
+  const out = { ...parked, path: ['lobby', 'street'] };
+  assert.equal(routesShown([parked]), false); // a question waiting for Show me: no route yet
+  assert.equal(routesShown([parked, stuck]), true); // stuck in its start room still draws a route to the door
+  assert.equal(routesShown([out]), true);
+  assert.equal(facadeOpen(1, true, false), false); // framed, nothing run: the tower stands closed
+  assert.equal(facadeOpen(1, true, true), true); // framed, answers shown: the cutaway
+  assert.equal(facadeOpen(0.5, true, false), true); // zoomed in opens as before
+  assert.equal(facadeOpen(1.2, true, true), false); // zoomed out to the city: closed
+  assert.equal(facadeOpen(0.5, false, true), false); // no real floors loaded: nothing to open to
 });
 
 // Reference cubic-bezier: bisect the x curve, then read y. Slow and plain, so it checks the fast one.

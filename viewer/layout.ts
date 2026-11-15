@@ -271,6 +271,17 @@ export const REVEAL_MS = 2 * MOTION.quickMs; // the facade fade, both ways
 
 export const revealed = (zoom: number): boolean => zoom < REVEAL_ZOOM;
 
+// Whether answers with a route are on the model. A question waiting for Show me is drawn parked: an
+// empty path and no block (app/shell.ts parkedResults).
+export const routesShown = (results: readonly SolverResult[]): boolean =>
+  results.some((r) => r.path.length > 0 || r.blocked_at !== null);
+
+// The facade opens zoomed in past REVEAL_ZOOM, and also at the framed view (zoom 1 or closer) while
+// answers are on the model, so their routes run on the floors inside, never across the solid facade.
+// Only with real floors loaded (`floors`): they are what it opens to.
+export const facadeOpen = (zoom: number, floors: boolean, routes: boolean): boolean =>
+  floors && (revealed(zoom) || (routes && zoom <= 1));
+
 // EASE_GLASS (a CSS cubic-bezier) as a function of time 0..1, for motion drawn in three.js.
 const [B1X, B1Y, B2X, B2Y] = EASE_GLASS.match(/-?[\d.]+/g)!.map(Number) as [number, number, number, number];
 const bez = (p1: number, p2: number, s: number): number => 3 * (1 - s) ** 2 * s * p1 + 3 * (1 - s) * s * s * p2 + s ** 3;
