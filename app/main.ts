@@ -104,7 +104,9 @@ const viewer = createViewer($('viewer'), {
     Object.assign(context3d, { amount, cut });
     applyReveal();
   },
-  avoid: () => [$('banner')],
+  // Floor labels and fail cards keep clear of the panels over the model: the banner, the review panel,
+  // the strip, the Hint panel and the rail (its floor name pill sticks out left).
+  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint'), $('floors'), ...document.querySelectorAll('#floors .fl-name')],
   onFocus: (level) => rail.follow(level),
   onInset: (pixels) => rail.setInset(pixels), // the scroller keeps clear of the same panels as the model
   onDrop: (token, node) => moveTo(token, node),

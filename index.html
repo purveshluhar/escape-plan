@@ -343,6 +343,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 #credit{position:fixed;right:10px;bottom:2px;display:none;padding:1px 8px;border-radius:8px;background:rgba(255,255,255,.82);font:500 12px/1.4 var(--font);color:var(--muted);pointer-events:none}
 #credit.on{display:block}
 @media (max-width:700px){#credit{bottom:auto;top:2px;right:2px;font-size:11px}}
+/* With the fix sheet or the all-yes banner on the right, the summary centres in the space left of it, as the model does */
+@media (min-width:701px){body:has(#sheet.on):not(:has(#votes.on)) #summary,body:has(#banner.on):not(:has(#votes.on)) #summary{left:calc(50% - 202px)}}
 @keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}

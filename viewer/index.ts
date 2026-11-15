@@ -86,8 +86,8 @@ export interface ViewerOptions {
   onFocus?: (level: Id | null) => void;
   // The right inset changed (setInsetRight), for something beside the model that keeps clear of the same panels.
   onInset?: (pixels: number) => void;
-  // Elements of the app drawn over the model that take no pointer events (a banner, for example):
-  // floor labels keep clear of them as they do of every panel.
+  // Elements of the app drawn over the model (a banner, the floor rail): floor labels and fail cards
+  // keep clear of them as they do of every panel.
   avoid?: () => Element[];
   // A token was dropped on a room or core: the app makes that node its start.
   onDrop?: (token: Id, node: Id) => void;
@@ -517,7 +517,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const face = captionObj?.visible && captionObj.element.isConnected ? captionObj.element.firstElementChild : null;
     const at0 = renderer.domElement.getBoundingClientRect();
     const cap = face?.getBoundingClientRect();
-    const avoid = cap && cap.width > 0 ? [{ l: cap.left - at0.left, r: cap.right - at0.left, t: cap.top - at0.top, b: cap.bottom - at0.top }] : [];
+    const avoid = [...(cap && cap.width > 0 ? [cap] : []), ...(options.avoid?.() ?? []).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0)]
+      .map((r) => ({ l: r.left - at0.left, r: r.right - at0.left, t: r.top - at0.top, b: r.bottom - at0.top }));
     const sides = labelSides(xs.map(({ at, width, card }) => {
       const v = at.clone().project(camera);
       return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width: card?.w ?? width, height: card?.h };
