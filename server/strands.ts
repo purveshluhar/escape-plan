@@ -138,7 +138,7 @@ function choices(options: [string, string][]): { criteria: Record<string, string
 
 // One answer as { choice, confidence }, or null unless the choice is one of `allowed`. The "none
 // of these" option reads as the only real option at confidence 0.
-function readChoice(answers: unknown, key: string, allowed: readonly string[], none: string | null): { choice: string; confidence: number } | null {
+export function readChoice(answers: unknown, key: string, allowed: readonly string[], none: string | null): { choice: string; confidence: number } | null {
   if (typeof answers !== 'object' || answers === null || !Object.hasOwn(answers, key)) return null;
   const a = (answers as Record<string, unknown>)[key];
   if (typeof a !== 'object' || a === null) return null;
@@ -146,6 +146,37 @@ function readChoice(answers: unknown, key: string, allowed: readonly string[], n
   if (typeof choice !== 'string' || !isConfidence(confidence)) return null;
   if (none !== null && choice === none) return { choice: allowed[0]!, confidence: 0 };
   return allowed.includes(choice) ? { choice, confidence } : null;
+}
+
+// One /v1/systemone call, shared by /parse and /votes, because Strands answers one call at a time.
+// Its `answers`, or why there are none: busy with another call, slower than config.timeoutMs,
+// down, an HTTP error, too big, or not JSON. The caller answers at confidence 0 (parse) or lets the
+// rules vote (votes); neither ever waits in a queue.
+export async function askStrands(body: object, config: StrandsConfig): Promise<{ answers: unknown } | { why: string }> {
+  if (busy) return { why: 'a Strands call is still running' };
+  busy = true;
+  const call = postJson(`${config.url}/v1/systemone`, JSON.stringify(body), MAX_STRANDS_TIMEOUT_MS);
+  call.then(() => { busy = false; }, () => { busy = false; });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), config.timeoutMs); });
+  let text: string | null;
+  try {
+    const reply = await Promise.race([call, deadline]);
+    if (reply === 'timeout') return { why: `no answer in ${config.timeoutMs} ms` };
+    if (reply.status !== 200) return { why: `Strands answered HTTP ${reply.status}` };
+    text = reply.text;
+  } catch (e) {
+    if (e instanceof Timeout) return { why: `no answer in ${MAX_STRANDS_TIMEOUT_MS} ms` };
+    return { why: `no answer from ${config.url} (${e instanceof Error ? e.message : String(e)})` };
+  } finally {
+    clearTimeout(timer);
+  }
+  if (text === null) return { why: `answer over ${MAX_ANSWER_BYTES} bytes` };
+  try {
+    return { answers: (JSON.parse(text) as { answers?: unknown } | null)?.answers };
+  } catch {
+    return { why: 'answer is not JSON' };
+  }
 }
 
 export async function strandsParse(request: JevParseRequest, config: StrandsConfig): Promise<JevParse> {
@@ -165,31 +196,9 @@ export async function strandsParse(request: JevParseRequest, config: StrandsConf
       target: { type: 'choice', instructions: 'Which object on screen does the player mean?', criteria: targetQ.criteria },
     },
   };
-  if (busy) return unsure(request, 'a Strands call is still running');
-  busy = true;
-  const call = postJson(`${config.url}/v1/systemone`, JSON.stringify(body), MAX_STRANDS_TIMEOUT_MS);
-  call.then(() => { busy = false; }, () => { busy = false; });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), config.timeoutMs); });
-  let text: string | null;
-  try {
-    const reply = await Promise.race([call, deadline]);
-    if (reply === 'timeout') return unsure(request, `no answer in ${config.timeoutMs} ms`);
-    if (reply.status !== 200) return unsure(request, `Strands answered HTTP ${reply.status}`);
-    text = reply.text;
-  } catch (e) {
-    if (e instanceof Timeout) return unsure(request, `no answer in ${MAX_STRANDS_TIMEOUT_MS} ms`);
-    return unsure(request, `no answer from ${config.url} (${e instanceof Error ? e.message : String(e)})`);
-  } finally {
-    clearTimeout(timer);
-  }
-  if (text === null) return unsure(request, `answer over ${MAX_ANSWER_BYTES} bytes`);
-  let answers: unknown;
-  try {
-    answers = (JSON.parse(text) as { answers?: unknown } | null)?.answers;
-  } catch {
-    return unsure(request, 'answer is not JSON');
-  }
+  const reply = await askStrands(body, config);
+  if ('why' in reply) return unsure(request, reply.why);
+  const { answers } = reply;
   const op = readChoice(answers, 'op', ops, opQ.none);
   const read = readChoice(answers, 'target', ids, targetQ.none);
   if (op === null || read === null) return unsure(request, 'answer has no usable op or target');

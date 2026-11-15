@@ -234,3 +234,32 @@ test('demo sentence, real server with DECIDER=strands (a fake Strands model): th
     await new Promise<void>((done) => model.close(() => done()));
   }
 });
+
+test('POST /votes goes through the same guard: a page call reaches the server, another page or path does not', async () => {
+  const shaft = { op: 'widen', target: 'plant-shaft', value: 2, source: 'button' };
+  const res = (token: string, status: string) => ({ token, status, path: [], blocked_at: null, reason: null, needed: null, available: null });
+  const votes = JSON.stringify([{ discipline: 'mep', edit: shaft, before: res('chiller', 'fail'), after: res('chiller', 'pass') }]);
+  const at = (path: string, headers: Record<string, string>) => new Promise<Reply>((resolve, reject) => {
+    const q = request({ host: '127.0.0.1', port: vitePort, method: 'POST', path, headers: { ...json, ...headers } }, (r) => {
+      let text = '';
+      r.setEncoding('utf8');
+      r.on('data', (c: string) => { text += c; });
+      r.on('end', () => resolve({ status: r.statusCode ?? 0, headers: r.headers, body: text }));
+    });
+    q.on('error', reject);
+    q.end(votes);
+  });
+  const ok = await at('/votes', { origin: 'https://demo.example-tunnel.test', 'sec-fetch-site': 'same-origin' });
+  assert.equal(ok.status, 200, ok.body);
+  assert.equal(ok.headers['x-voter'], 'rules');
+  assert.deepEqual(JSON.parse(ok.body), [{ token: 'chiller', discipline: 'mep', vote: 'accept', confidence: 1 }]);
+  const cross = await at('/votes', { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' });
+  assert.equal(cross.status, 403);
+  assert.equal(cross.headers['x-voter'], undefined);
+  assert.equal((await at('/votes', {})).status, 403, 'no browser headers (curl)');
+  for (const path of ['/votesx', '/votes/x']) {
+    const r = await at(path, { 'sec-fetch-site': 'same-origin' });
+    assert.notEqual(r.status, 200, path);
+    assert.doesNotMatch(r.body, /"error":"not found"/, `${path} must not reach the server`);
+  }
+});

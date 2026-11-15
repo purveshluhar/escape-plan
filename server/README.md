@@ -19,7 +19,8 @@ imports this folder: P3's screens in `app/` call the server over HTTP or WebSock
 
 Tier 2: `POST /parse` works with plan C (the keyword parser, the default) and with
 `DECIDER=strands` (a local Strands Decider, see below). Jev and plan B are not built yet; they go
-behind the same `parse()`. Jev votes and the phone relay are tier 3.
+behind the same `parse()`. `POST /votes` gives one vote per discipline after an edit, from the
+Strands Decider or, with no model, from the rules (below). The phone relay is tier 3.
 
 ## Run it
 
@@ -55,11 +56,37 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
   -d '{"text":"widen the plant shaft to 2 m","ops":["widen","reset"],"targets":[{"id":"plant-shaft","name":"Plant shaft"}],"value_range":{"min":0,"max":5}}'
 ```
 
+## Route: `POST /votes`
+
+The review panel: one vote per discipline after an edit. A vote is a bubble only. It never
+changes an answer; the solver decides (ADR 0002).
+
+- Body: a list of 1 to 8 `JevVoteRequest`, one per discipline, all about the same edit, each with
+  `before` and `after` for the same token. The same size, content type, Host, Origin and
+  inherited-key checks as `/parse` apply. Anything else is a `400`.
+- Answer: `200` with one `JevVote` per request, in the same order. `x-decider` says which
+  DECIDER the server runs; `x-voter` says who voted: `strands` (the model) or `rules`.
+- `DECIDER=strands`: one Strands call asks one question per discipline (accept, object or
+  review), with what the rules found before and after the edit. The model's choice and
+  confidence go into the vote as they are, so a vote can disagree with the rules. The app shows
+  that disagreement; the rules' answer still stands.
+- The model gets at most 2 s (`VOTE_TIMEOUT_MS`), inside the app's 2.5 s budget. When Strands is
+  down, slower, busy with a `/parse` call, or answers a vote that is not offered, the rules vote
+  instead (`x-voter: rules`). A vote changes nothing, so this fallback is safe, unlike a parse.
+  `/parse` and `/votes` share the one-call-at-a-time lock, because Strands answers one call at a time.
+- The rules vote (plan C, `ruleVote`): Yes after the edit is `accept`; Yes before and No after is
+  `object`; No before and after is `review`. Confidence 1.
+
+```bash
+curl -s http://127.0.0.1:8787/votes -H 'content-type: application/json' -d '[{"discipline":"structure","edit":{"op":"widen","target":"plant-shaft","value":2,"source":"button"},"before":{"token":"load","status":"pass","path":["beam-b2","c1","f1"],"blocked_at":null,"reason":null,"needed":null,"available":null},"after":{"token":"load","status":"fail","path":["beam-b2"],"blocked_at":"beam-b2","reason":"no_support","needed":1.5,"available":2}}]'
+```
+
 ## Called from the page (Vite proxy)
 
-The page posts to `/parse` on its own origin, so it works on localhost and through a tunnel. The
-root `vite.config.ts` forwards it to `http://127.0.0.1:<SERVER_PORT>` (`npm run dev` and
-`npm run preview`), exactly `/parse` and nothing under it. It sets Host to the server's own, so
+The page posts to `/parse` and `/votes` on its own origin, so it works on localhost and through a
+tunnel. The root `vite.config.ts` forwards them to `http://127.0.0.1:<SERVER_PORT>` (`npm run dev`
+and `npm run preview`), exactly `/parse` and `/votes` and nothing under them. Both paths go through
+the same guard below, and share its 4 places. It sets Host to the server's own, so
 the Host check above holds. A tunnel origin is not on the Origin list, so `proxy-guard.ts` does
 that job in front of the proxy: a call passes only when the browser marks it
 `Sec-Fetch-Site: same-origin`, and then goes on without Origin. Every other call, including one

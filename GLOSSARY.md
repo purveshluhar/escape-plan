@@ -85,6 +85,7 @@ Units are metres and kN.
 - **Jev parse**: three typed answers about one sentence: which op, which target, what value, each with a confidence.
 - **Confidence threshold**: 0.8. Below it, the app shows "Did you mean" and the buttons.
 - **Vote**: `accept`, `object` or `review`, with a confidence. Shown as a bubble only.
+- **Review panel**: the vote bubbles after an edit, one per discipline in the data (`POST /votes`). Voted by Strands Decider, or by the rules when no model answers. A vote that says the opposite of the rules is shown as "Rules disagree"; the rules' answer stands.
 - **Plan B**: a general LLM forced to return the same typed answers as Jev.
 - **Plan C**: a keyword parser and the buttons.
 - **Strands Decider**: the open-source (Apache-2.0) typed-decision model that fills Jev's parse slot today, with `DECIDER=strands` (server/README.md). It reads the op and the target only; on screen it is named "Strands Decider". ADRs keep the name Jev for history.

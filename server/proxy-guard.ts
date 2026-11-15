@@ -1,6 +1,6 @@
-// The Vite proxy in front of POST /parse (root vite.config.ts). Node only. Owner: P1.
+// The Vite proxy in front of POST /parse and POST /votes (root vite.config.ts). Node only. Owner: P1.
 //
-// The page calls /parse on its own origin, so it works on localhost and through a tunnel, where
+// The page calls /parse and /votes on its own origin, so it works on localhost and through a tunnel, where
 // the browser cannot reach 127.0.0.1:8787. Vite forwards the call with Host set to the server's own
 // (changeOrigin), so the server's Host check (DNS rebinding) holds unchanged.
 // The server's Origin list stops other web pages. A tunnel origin is not on it, so the proxy does
@@ -16,7 +16,8 @@ import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { HOST, readConfig } from './http.ts';
 
-// The page sends one sentence at a time; a few at once allows a second tab. More get 429.
+// The page sends one sentence, then one vote list, at a time; a few at once allows a second tab.
+// The 4 places are shared by both paths. More get 429.
 export const PROXY_MAX_IN_FLIGHT = 4;
 let inFlight = 0;
 
@@ -28,7 +29,7 @@ export function proxyEnv(dir: string, shell: Record<string, string | undefined>)
   return { SERVER_HOST: shell.SERVER_HOST ?? fromFile.SERVER_HOST, SERVER_PORT: shell.SERVER_PORT ?? fromFile.SERVER_PORT };
 }
 
-// Where the proxy sends /parse: always 127.0.0.1, at SERVER_PORT (default 8787). The same rules
+// Where the proxy sends /parse and /votes: always 127.0.0.1, at SERVER_PORT (default 8787). The same rules
 // as the server: a SERVER_HOST other than 127.0.0.1 or a bad port stops Vite at start.
 export function parseProxyTarget(env: Record<string, string | undefined>): string {
   const { port } = readConfig({ SERVER_HOST: env.SERVER_HOST, SERVER_PORT: env.SERVER_PORT });
@@ -47,8 +48,8 @@ function refuse(res: ServerResponse, status: number, error: string, detail: stri
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 export function guardParseProxy(req: IncomingMessage, res: ServerResponse, next: () => void): void {
-  if (!LOOPBACK.has(req.socket?.remoteAddress ?? '')) return refuse(res, 403, 'not this machine', 'only this machine may call /parse');
-  if (req.headers['sec-fetch-site'] !== 'same-origin') return refuse(res, 403, 'origin not allowed', 'only this page may call /parse');
+  if (!LOOPBACK.has(req.socket?.remoteAddress ?? '')) return refuse(res, 403, 'not this machine', 'only this machine may call the local server');
+  if (req.headers['sec-fetch-site'] !== 'same-origin') return refuse(res, 403, 'origin not allowed', 'only this page may call the local server');
   if (inFlight >= PROXY_MAX_IN_FLIGHT) return refuse(res, 429, 'too many calls', `at most ${PROXY_MAX_IN_FLIGHT} at once`);
   inFlight++;
   res.once('close', () => { inFlight--; });

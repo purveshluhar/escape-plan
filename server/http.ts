@@ -1,5 +1,5 @@
-// The local server (ADR 0008): one route, POST /parse, JevParseRequest in, JevParse out.
-// Listens on 127.0.0.1 only. Owner: P1. Node only; browser code never imports this file.
+// The local server (ADR 0008): POST /parse (JevParseRequest in, JevParse out) and POST /votes
+// (a list of JevVoteRequest in, one JevVote each out). Listens on 127.0.0.1 only. Owner: P1. Node only; browser code never imports this file.
 //
 // Who may call: the game page on this machine. Loopback is the boundary, so there is no login.
 // The Host check stops DNS rebinding, and the Origin list stops other web pages from posting.
@@ -7,12 +7,13 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { JevParseRequest } from '../contract/types.ts';
+import type { JevParseRequest, JevVoteRequest } from '../contract/types.ts';
 import { validate } from '../contract/validate.ts';
 import { deciderFromEnv, parse } from './parse.ts';
 import type { DeciderConfig, DeciderName } from './parse.ts';
 import { strandsConfigFromEnv } from './strands.ts';
 import type { StrandsConfig } from './strands.ts';
+import { MAX_VOTE_REQUESTS, vote } from './votes.ts';
 
 export const HOST = '127.0.0.1';
 export const DEFAULT_PORT = 8787;
@@ -73,6 +74,20 @@ function requestProblems(r: JevParseRequest): string[] {
   return out;
 }
 
+// Checks for POST /votes that the item schema cannot express: one vote per discipline, about one
+// token each, all after the same edit.
+const sameEdit = (a: JevVoteRequest, b: JevVoteRequest): boolean =>
+  a.edit.op === b.edit.op && a.edit.target === b.edit.target && a.edit.value === b.edit.value && a.edit.source === b.edit.source;
+function voteProblems(list: JevVoteRequest[]): string[] {
+  const out: string[] = [];
+  if (new Set(list.map((r) => r.discipline)).size !== list.length) out.push('$: one request per discipline');
+  list.forEach((r, i) => {
+    if (r.before.token !== r.after.token) out.push(`$[${i}]: before and after must be about the same token`);
+    if (!sameEdit(r, list[0]!)) out.push(`$[${i}].edit: every request must be about the same edit`);
+  });
+  return out;
+}
+
 // The body as text, or null when it passed MAX_BODY_BYTES.
 function readBody(req: IncomingMessage): Promise<string | null> {
   return new Promise((resolve, reject) => {
@@ -107,7 +122,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
     if (!ALLOWED_ORIGINS.has(origin)) return fail(res, 403, 'origin not allowed');
     res.setHeader('access-control-allow-origin', origin);
   }
-  if ((req.url ?? '').split('?')[0] !== '/parse') return fail(res, 404, 'not found');
+  const path = (req.url ?? '').split('?')[0];
+  if (path !== '/parse' && path !== '/votes') return fail(res, 404, 'not found');
+  const shape = path === '/parse' ? 'a JevParseRequest' : 'a list of JevVoteRequest';
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'access-control-allow-methods': 'POST',
@@ -145,8 +162,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
     return fail(res, 400, 'body is not JSON');
   }
   if (inherited.length > 0) {
-    return fail(res, 400, 'body is not a JevParseRequest', inherited.map((k) => `field ${JSON.stringify(k)} is not allowed`));
+    return fail(res, 400, `body is not ${shape}`, inherited.map((k) => `field ${JSON.stringify(k)} is not allowed`));
   }
+  if (path === '/votes') return answerVotes(res, data, decider);
   const schemaErrors = validate('jev.schema.json#/$defs/parse_request', data);
   if (schemaErrors.length > 0) return fail(res, 400, 'body is not a JevParseRequest', schemaErrors);
   const request = data as JevParseRequest;
@@ -161,6 +179,29 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
   }
   res.setHeader('x-decider', decider.decider); // so a timing log shows which parser answered
   send(res, 200, answer);
+}
+
+async function answerVotes(res: ServerResponse, data: unknown, decider: DeciderConfig): Promise<void> {
+  if (!Array.isArray(data) || data.length === 0 || data.length > MAX_VOTE_REQUESTS) {
+    return fail(res, 400, 'body is not a list of JevVoteRequest', [`$: a list of 1 to ${MAX_VOTE_REQUESTS} requests`]);
+  }
+  const schemaErrors = data.flatMap((item, i) =>
+    validate('jev.schema.json#/$defs/vote_request', item).map((e) => e.replace(/^\$/, `$[${i}]`)));
+  if (schemaErrors.length > 0) return fail(res, 400, 'body is not a list of JevVoteRequest', schemaErrors);
+  const list = data as JevVoteRequest[];
+  const problems = voteProblems(list);
+  if (problems.length > 0) return fail(res, 400, 'body is not a usable list of JevVoteRequest', problems);
+  const { votes, voter } = await vote(list, decider);
+  // Fail closed: one schema-valid JevVote per request, about the token and discipline asked.
+  const broken = votes.length !== list.length || votes.some((v, i) => validate('jev.schema.json#/$defs/vote', v).length > 0
+    || v.token !== list[i]!.after.token || v.discipline !== list[i]!.discipline);
+  if (broken) {
+    console.error('vote() broke the JevVote schema or order');
+    return fail(res, 500, 'internal error');
+  }
+  res.setHeader('x-decider', decider.decider);
+  res.setHeader('x-voter', voter); // who voted: the model, or the rules when no model answered
+  send(res, 200, votes);
 }
 
 export function createParseServer(decider: DeciderConfig): Server {
