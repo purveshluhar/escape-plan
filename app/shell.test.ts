@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
-import { demoButtons } from './state.ts';
+import { countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { mvpBuilding } from './mvp.ts';
+import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
 const building = read('../data/building.json') as Building;
@@ -76,4 +77,39 @@ test('the page has no Later group and no sample label', () => {
   assert.doesNotMatch(page, /laterGroup|id="sample"|#sample/);
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(main, /laterGroup|\$\('sample'\)|self-made sample building/);
+});
+
+test('a drop places the object without taking it off, and keeps building order', () => {
+  const [a, b] = building.tokens.map((t) => t.id);
+  assert.deepEqual(dropPlaced(building, [], b!), [b]);
+  assert.deepEqual(dropPlaced(building, [b!], a!), [a, b]);
+  assert.deepEqual(dropPlaced(building, [a!, b!], a!), [a, b], 'a second drop moves it; it never takes it off');
+});
+
+test('a dropped start replaces the start room; the base building is not changed', () => {
+  const mvp = mvpBuilding(building);
+  const moved = withStarts(mvp, new Map([['wheelchair', 'lobby'], ['sofa', 'no-such-node']]));
+  assert.equal(moved.tokens.find((t) => t.id === 'wheelchair')?.start, 'lobby');
+  assert.equal(moved.tokens.find((t) => t.id === 'sofa')?.start, 'lobby', 'an unknown node is ignored');
+  assert.equal(mvp.tokens.find((t) => t.id === 'wheelchair')?.start, 'terrace');
+  assert.equal(withStarts(mvp, new Map()), mvp);
+});
+
+test('the solver answers from the dropped start: the wheelchair off the terrace misses the step', () => {
+  const mvp = mvpBuilding(building);
+  const at = (b: Building, id: string): SolverResult => run(b, initialState()).results.find((r) => r.token === id)!;
+  assert.equal(at(mvp, 'wheelchair').reason, 'step');
+  const fromLobby = at(withStarts(mvp, new Map([['wheelchair', 'lobby']])), 'wheelchair');
+  assert.equal(fromLobby.status, 'pass');
+  assert.equal(fromLobby.path[0], 'lobby');
+  const fromTower = at(withStarts(mvp, new Map([['wheelchair', 'T10-u1']])), 'wheelchair');
+  assert.equal(fromTower.path[0], 'T10-u1');
+});
+
+test('a selected object says where it is and how it did', () => {
+  const mvp = mvpBuilding(building);
+  assert.equal(tokenCaption(mvp, 'wheelchair', null), 'Wheelchair - Terrace - Ready');
+  const fail: SolverResult = { ...res('wheelchair', 'fail'), reason: 'step', blocked_at: 'terrace-door' };
+  assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - FAIL: step in the way');
+  assert.equal(tokenCaption(mvp, 'wheelchair', res('wheelchair', 'pass')), 'Wheelchair - Terrace - PASS');
 });

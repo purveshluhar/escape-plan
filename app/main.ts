@@ -1,5 +1,6 @@
-// App entry, design B (daylight model, spatial glass): place objects from the dock, press
-// Escape!, read PASS or FAIL in the summary pill, and apply a fix from the sheet or the edit box.
+// App entry, design B (daylight model, spatial glass): place objects from the dock (click a chip,
+// or drag it onto any floor), move them by dragging on the model, press Escape!, read PASS or FAIL
+// in the summary pill, and apply a fix from the sheet or the edit box.
 // Every fix re-solves the placed objects. Owner: P3. The logic lives in shell.ts, state.ts,
 // answers.ts, flow.ts and scoreboard.ts (tested in Node); this file only draws and wires it.
 import * as THREE from 'three';
@@ -10,6 +11,7 @@ import { loadTypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
 import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
+import { movedPastSlop, stepLevel } from '../viewer/drop.ts';
 import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
@@ -18,7 +20,9 @@ import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
-import { PHASE_WORD, countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
+import {
+  PHASE_WORD, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts,
+} from './shell.ts';
 import type { ParseOutcome, Phase, PickItem } from './shell.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
@@ -33,6 +37,8 @@ const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 interface State {
   phase: Phase;
   placed: Id[]; // in building order
+  starts: Map<Id, Id>; // token -> the node it was dropped on; a token not here starts in its own room
+  selected: Id | null; // the placed object clicked or dropped last
   game: GameState; // applied edits
   results: Answer[] | null; // last Escape! run, placed objects only
   note: string; // live-region line: "Re-solved after ..."
@@ -42,13 +48,24 @@ interface State {
 }
 
 const S: State = {
-  phase: 'empty', placed: [], game: initialState(), results: null, note: '', editOpen: false, jev: null, scoreOpen: false,
+  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, jev: null, scoreOpen: false,
 };
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
-const viewer = createViewer($('viewer'), { onZoom: (zoom) => setCutHeight(cutHeight(zoom)) });
+const viewer = createViewer($('viewer'), {
+  onZoom: (zoom) => setCutHeight(cutHeight(zoom)),
+  onDrop: (token, node) => moveTo(token, node),
+  onRefuse: (token) => {
+    S.note = `${itemOf(token).label} not placed: drop it on a floor of the tower`;
+    render();
+  },
+  onSelect: (token) => {
+    S.selected = token;
+    render();
+  },
+});
 // Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
 // so framing them shows an empty 424 m view until (or unless) the real floors load.
 viewer.setCovered(coveredNodes(building));
@@ -88,13 +105,19 @@ const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}
 
 // ---------- Solving ----------
 
+// The building as played: each dropped object starts in the node it was dropped on.
+function played(): Building {
+  return withStarts(building, S.starts);
+}
+
 function edited(): Building {
-  return run(building, S.game).building;
+  return run(played(), S.game).building;
 }
 
 function solvePlaced(): { edited: Building; results: Answer[] } {
-  const { building: b, results } = run(building, S.game);
-  const all = answers(building, b, S.game.edits, results, expected, IMPLEMENTED_RULES);
+  const start = played();
+  const { building: b, results } = run(start, S.game);
+  const all = answers(start, b, S.game.edits, results, expected, IMPLEMENTED_RULES);
   return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
 }
 
@@ -131,9 +154,28 @@ function escape(): void {
 function place(id: Id): void {
   if (S.phase === 'running') return;
   S.placed = togglePlaced(building, S.placed, id);
+  if (S.placed.includes(id)) S.selected = id;
+  else {
+    S.starts.delete(id); // placed again with a click, it starts in its own room
+    if (S.selected === id) S.selected = null;
+  }
   S.results = null;
   S.note = '';
   S.phase = S.placed.length ? 'placed' : 'empty';
+  idle();
+  render();
+}
+
+// A drop on the model (or an arrow key): the object starts in `node` and waits there for Escape!,
+// like a placement from the dock. The last run's results no longer hold, so they are cleared.
+function moveTo(id: Id, node: Id): void {
+  if (S.phase === 'running') return;
+  S.starts.set(id, node);
+  S.placed = dropPlaced(building, S.placed, id);
+  S.selected = id;
+  S.results = null;
+  S.note = `${itemOf(id).label} placed in ${placeName(building, node)}`;
+  S.phase = 'placed';
   idle();
   render();
 }
@@ -166,6 +208,8 @@ function reset(): void {
 function clear(): void {
   if (S.phase === 'running') return;
   S.placed = [];
+  S.starts.clear();
+  S.selected = null;
   S.results = null;
   S.note = '';
   S.phase = 'empty';
@@ -209,6 +253,7 @@ function render(): void {
     b.setAttribute('aria-pressed', String(S.placed.includes(b.dataset.token!)));
     b.disabled = running;
   }
+  viewer.setDragEnabled(!running);
 
   // Dock tools
   const esc = $('btnEscape') as HTMLButtonElement;
@@ -252,7 +297,7 @@ function render(): void {
   document.body.classList.toggle('scoring', S.scoreOpen);
   sp.replaceChildren(...S.placed.map((id) => {
     const r = resOf(id);
-    const token = building.tokens.find((t) => t.id === id)!;
+    const token = b.tokens.find((t) => t.id === id)!;
     const det = !r ? `Starts in ${placeName(b, token.start)}`
       : r.status === 'pass' ? `Out via ${r.path.map((p) => placeName(b, p)).join(', ')}`
       : failLine(r, b);
@@ -266,6 +311,8 @@ function render(): void {
 
   renderSheet(b);
   renderEdit();
+  const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
+  viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel)));
 }
 
 function failLine(r: Answer, b: Building): string {
@@ -294,7 +341,8 @@ function renderSheet(b: Building): void {
 function fixCard(r: Answer, b: Building): HTMLElement {
   const it = itemOf(r.token);
   // The buttons for where it is stuck now, and for anything expected.json says it gets stuck at.
-  const targets = relevantTargets(building, expected, r.token);
+  // expected.json knows only the start rooms, so a dropped object gets the buttons for where it is stuck now.
+  const targets = S.starts.has(r.token) ? new Set<Id>() : relevantTargets(building, expected, r.token);
   if (r.blocked_at) targets.add(r.blocked_at);
   const fixes = fixesFor(buttons, targets, S.game.edits);
   const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
@@ -344,12 +392,37 @@ function renderEdit(): void {
 
 // ---------- Build the dock once ----------
 
+// A click on a chip places the object in its own start room (a second click takes it off); a drag
+// from a chip carries it onto the model, where the viewer drops it on the floor under the pointer.
+let chipPress: { id: Id; pointerId: number; x: number; y: number } | null = null;
+let dragged = false; // the click that ends a chip drag is not a placement
 for (const it of items) {
   const id = it.token;
-  const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => place(id),
-    { 'data-token': id, 'aria-pressed': 'false', ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}) });
+  const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => {
+    if (dragged) dragged = false;
+    else place(id);
+  }, {
+    'data-token': id, 'aria-pressed': 'false', title: `Click to place, or drag onto a floor`,
+    ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}),
+  });
+  b.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || b.disabled) return;
+    chipPress = { id, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+    dragged = false;
+  });
   $('picker').append(b);
 }
+window.addEventListener('pointermove', (e) => {
+  if (!chipPress || e.pointerId !== chipPress.pointerId || !movedPastSlop(e.clientX - chipPress.x, e.clientY - chipPress.y)) return;
+  viewer.startDrag(chipPress.id, e);
+  dragged = true;
+  chipPress = null;
+});
+window.addEventListener('pointerup', () => {
+  chipPress = null;
+  // A drag let go off its chip fires no click there, so nothing is left to swallow.
+  window.setTimeout(() => (dragged = false), 0);
+});
 
 // ---------- Controls ----------
 
@@ -375,6 +448,9 @@ document.addEventListener('keydown', (ev) => {
     else if (S.scoreOpen) {
       S.scoreOpen = false;
       render();
+    } else if (S.selected !== null) {
+      S.selected = null;
+      render();
     }
     return;
   }
@@ -389,6 +465,14 @@ document.addEventListener('keydown', (ev) => {
     return escape();
   }
   if (ev.key === 'r' || ev.key === 'R') return reset();
+  // The keyboard way to drag: arrow up or down moves the selected object one floor.
+  if ((ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && S.selected !== null && S.placed.includes(S.selected)) {
+    ev.preventDefault();
+    const from = played().tokens.find((t) => t.id === S.selected)?.start;
+    const to = from === undefined ? null : stepLevel(building, from, ev.key === 'ArrowUp' ? 1 : -1);
+    if (to !== null) moveTo(S.selected, to);
+    return;
+  }
   if (ev.key === '/') {
     ev.preventDefault();
     openEdit();

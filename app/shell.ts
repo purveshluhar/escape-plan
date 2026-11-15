@@ -4,6 +4,7 @@ import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, To
 import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
 import { tokenName } from '../viewer/labels.ts';
+import { REASON_TEXT, placeName } from './scoreboard.ts';
 import type { DemoButton } from './state.ts';
 
 // ---------- Dock picker ----------
@@ -37,6 +38,36 @@ export function togglePlaced(building: Building, placed: readonly Id[], token: I
   const on = placed.includes(token) ? placed.filter((id) => id !== token) : [...placed, token];
   const order = building.tokens.map((t) => t.id);
   return order.filter((id) => on.includes(id));
+}
+
+// A drop (from the dock or of a token already on the model) always places the object; it never
+// takes it off, as a second click on its chip does.
+export function dropPlaced(building: Building, placed: readonly Id[], token: Id): Id[] {
+  return placed.includes(token) ? [...placed] : togglePlaced(building, placed, token);
+}
+
+// The building with each dropped object starting in the node it was dropped on. An unknown node is
+// ignored. With no drops this is `building` itself; otherwise a copy, and `building` is not changed.
+export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Building {
+  if (starts.size === 0) return building;
+  const nodes = new Set(building.nodes.map((n) => n.id));
+  return {
+    ...building,
+    tokens: building.tokens.map((t) => {
+      const at = starts.get(t.id);
+      return at !== undefined && nodes.has(at) ? { ...t, start: at } : t;
+    }),
+  };
+}
+
+// The line shown over a selected object: its name, where it starts, and how it did.
+export function tokenCaption(building: Building, token: Id, result: SolverResult | null): string {
+  const t = building.tokens.find((x) => x.id === token);
+  const where = t ? placeName(building, t.start) : '';
+  const state = !result ? 'Ready'
+    : result.status === 'pass' ? 'PASS'
+    : `FAIL: ${REASON_TEXT[result.reason ?? 'no_route']}`;
+  return [tokenName(token), where, state].filter(Boolean).join(' - ');
 }
 
 // What the viewer is shown before a run: each placed object parked in its start room. The viewer

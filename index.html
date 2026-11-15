@@ -66,7 +66,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .scrollwrap{position:relative;min-width:0;display:flex;flex:1}
 .scroller{display:flex;align-items:center;gap:var(--s2);min-width:0;overflow-x:auto;scrollbar-width:none}
 .scroller::-webkit-scrollbar{display:none}
-.chip{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 9px;border-radius:999px;
+.chip{touch-action:none;user-select:none;-webkit-user-select:none;display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 9px;border-radius:999px;
   background:rgba(255,255,255,.5);border:1px solid rgba(20,22,28,.10);font:600 16px/1 var(--font);white-space:nowrap;
   transition:background .3s var(--soft),transform .4s var(--spring)}
 .chip:hover:not(:disabled){background:rgba(255,255,255,.9)}
