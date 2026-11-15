@@ -30,7 +30,7 @@ test('applied: three parts with their confidences, and the edit was made', () =>
 test('keywords server: the strip says in plain words that this page read the sentence, and why', () => {
   const m = stripModel(local(DEMO, 'keywords', 'keywords'), building);
   assert.equal(m.reader, 'this page');
-  assert.equal(m.source, 'The server reads by keywords.');
+  assert.equal(m.source, 'No model is connected, so this page read it.');
   assert.equal(m.sure, true);
 });
 

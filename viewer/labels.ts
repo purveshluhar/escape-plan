@@ -64,7 +64,10 @@ export function failText(b: Building, r: SolverResult): FailText | null {
   else if (r.needed !== null && r.available !== null) {
     // Metres show one decimal; people and smoke count steps, as app/scoreboard.ts amount().
     const show = (v: number): string => (METRES.has(reason) ? `${num(v)} m` : reason === 'smoke_first' ? `${v} step${v === 1 ? '' : 's'}` : String(v));
-    numbers = `needs ${show(r.needed)}, has ${show(r.available)}`;
+    // The same words as app/scoreboard.ts numbersText for a corner turn and the smoke.
+    numbers = reason === 'cannot_turn' ? `${show(r.needed)} long, longest that turns ${show(r.available)}`
+      : reason === 'smoke_first' ? `people at step ${r.needed}, smoke at step ${r.available}`
+      : `needs ${show(r.needed)}, has ${show(r.available)}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');
   return { title: `${label}: ${REASON_WORDS[reason]}`, detail };

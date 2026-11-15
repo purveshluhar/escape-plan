@@ -473,7 +473,7 @@ function renderSheet(b: Building): void {
   const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
   sheet.replaceChildren(
     ...(S.conflict ? [h('div', { class: 'conflict' }, h('b', {}, S.conflict.title), ...S.conflict.lines.map((l) => h('div', { class: 'cl' }, l)))] : []),
-    h('div', { class: 'lbl' }, 'Suggested fixes'),
+    h('div', { class: 'lbl' }, cards.length > 1 ? `Suggested fixes (${cards.length})` : 'Suggested fixes'), // the count says more cards may sit below
     ...cards,
     h('div', { class: 'foot' },
       btn('Type an edit', 'fixbtn ghost', openEdit),

@@ -25,12 +25,12 @@ test('a step says how high it is; a lost support says why', () => {
 
 test('metres on the model show at least one decimal', () => {
   const sofa = failText(b, fail({ token: 'sofa', blocked_at: 'lobby-door', reason: 'cannot_turn', needed: 2.2, available: 1.9967350242673378 }));
-  assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: needs 2.2 m, has 2.0 m' });
+  assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: 2.2 m long, longest that turns 2.0 m' });
 });
 
 test('people and smoke count steps on the model too, not decimals', () => {
   const smoke = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 4, available: 3 }));
-  assert.equal(smoke?.detail, 'Office door: needs 4 steps, has 3 steps');
+  assert.equal(smoke?.detail, 'Office door: people at step 4, smoke at step 3');
 });
 
 test('a pass has no fail label', () => {
@@ -108,7 +108,7 @@ test('a load stays on its beam; a token that starts in a room has no such line',
 
 test('one step is "1 step", on the model as on the sheet', () => {
   const tie = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 1, available: 1 }));
-  assert.equal(tie?.detail, 'Office door: needs 1 step, has 1 step');
+  assert.equal(tie?.detail, 'Office door: people at step 1, smoke at step 1');
 });
 
 test('a card that would cover another card, another red X or the caption is left out, not drawn over it', () => {

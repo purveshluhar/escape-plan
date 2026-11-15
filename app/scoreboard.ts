@@ -58,6 +58,10 @@ export function numbersText(r: SolverResult): string {
   if (r.reason === 'no_support') return 'no path down to a foundation';
   if (r.reason === 'step' && r.available !== null) return `${metres(r.available)} high, needs level`;
   if (r.needed === null || r.available === null) return '';
+  // A corner turn is about length, not door width; the smoke answer counts both arrivals. Plain
+  // "needs, has" there read as a contradiction (a 1.6 m door fix after "has 2.0 m"; No at "needs 1, has 1").
+  if (r.reason === 'cannot_turn') return `${metres(r.needed)} long, longest that turns ${metres(r.available)}`;
+  if (r.reason === 'smoke_first') return `people at step ${r.needed}, smoke at step ${r.available}`;
   return `needs ${amount(r, r.needed)}, has ${amount(r, r.available)}`;
 }
 

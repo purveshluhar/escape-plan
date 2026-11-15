@@ -17,7 +17,7 @@ export const QUESTIONS: Readonly<Record<Id, Question>> = {
   wheelchair: { person: 'Family', ask: "Can my parent's wheelchair get out?", yes: 'The wheelchair gets out, no steps', plural: false },
   sofa: { person: 'Home buyer', ask: 'Can my sofa get in?', yes: 'The sofa gets in', plural: false, getsIn: true },
   people: { person: 'Building manager', ask: 'Can everyone get out?', yes: 'Everyone gets out', plural: true },
-  chiller: { person: 'Building owner', ask: 'Can I widen this shaft for a new chiller?', yes: 'The chiller fits through the shaft', plural: false },
+  chiller: { person: 'Building owner', ask: 'Does a new chiller fit through the shaft?', yes: 'The chiller fits through the shaft', plural: false },
   load: { person: 'Building owner', ask: 'Does the structure still hold?', yes: 'The structure still holds', plural: false },
   smoke: { person: 'Building manager', ask: 'Do people get out before the smoke?', yes: 'Everyone gets out before the smoke', plural: true, subject: 'People' },
   glass: { person: 'Building owner', ask: 'Can a 4 m glass panel get into the lobby?', yes: 'The glass panel gets into the lobby', plural: false },

@@ -164,7 +164,7 @@ function sourceText(r: PanelReading): string {
     case 'strands': return `Votes by: the model, on this computer, ${seconds(r.ms)}`;
     case 'rules': {
       const n = r.requests.filter(changed).length;
-      return r.decider !== 'strands' ? 'Votes by: the rules. The server reads by keywords.'
+      return r.decider !== 'strands' ? 'Votes by: the rules. No model is connected.'
         : n === 0 ? 'Votes by: the rules. This edit changed no answer.'
         : n > MAX_MODEL_QUESTIONS ? `Votes by: the rules. This edit changed ${n} answers, more than the model can vote on in time.`
         : 'Votes by: the rules. The model gave no usable vote (off, busy, slow or unclear).';

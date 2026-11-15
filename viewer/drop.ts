@@ -195,3 +195,10 @@ export function figureScale(metresPerPixel: number, height: number, minPixels: n
   const pixels = height / metresPerPixel;
   return pixels >= minPixels ? 1 : (minPixels * metresPerPixel) / height;
 }
+
+// Where a pop-up centred on the pointer goes so it stays whole on screen: on the pointer, or slid
+// in from the edge it would cross. Pixels; `width` is the pop-up's, `screen` the canvas width.
+export function centreOnScreen(x: number, width: number, screen: number, margin = 8): number {
+  const half = width / 2;
+  return Math.min(Math.max(x, margin + half), Math.max(margin + half, screen - margin - half));
+}

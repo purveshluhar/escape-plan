@@ -5,7 +5,7 @@ import type { Building } from '../contract/types.ts';
 import { DEFAULT_VIEW, PATH_LIFT, viewDirection, type Vec3 } from './layout.ts';
 import type { Ray } from './drop.ts';
 import {
-  CLICK_SLOP, dropTarget, droppableNodes, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent, stepLevel,
+  centreOnScreen, CLICK_SLOP, dropTarget, droppableNodes, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent, stepLevel,
 } from './drop.ts';
 
 // Three levels of our own, so these tests do not move when data/building.json does.
@@ -116,4 +116,11 @@ test('a token whose start is a structural member (the load) cannot be dropped on
   assert.equal(isMemberStart(real, 'load'), true);
   for (const id of ['sofa', 'wheelchair', 'people', 'chiller', 'glass']) assert.equal(isMemberStart(real, id), false, id);
   assert.equal(isMemberStart(real, 'no-such-token'), false);
+});
+
+test('a toast centred on the pointer stays whole on screen: it slides in from an edge', () => {
+  // 300 px wide toast on a 1920 px canvas, 8 px margin.
+  assert.equal(centreOnScreen(20, 300, 1920), 158, 'near the left edge it slides right');
+  assert.equal(centreOnScreen(1900, 300, 1920), 1762, 'near the right edge it slides left');
+  assert.equal(centreOnScreen(900, 300, 1920), 900, 'in the middle it stays on the pointer');
 });

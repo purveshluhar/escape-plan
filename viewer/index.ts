@@ -12,7 +12,7 @@ import {
   ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FAIL_TINT, FONT_BODY, FONT_DATA, FONT_STYLESHEET,
   EASE_GLASS, GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED, WALL,
 } from '../design/tokens.ts';
-import { dropTarget, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent } from './drop.ts';
+import { centreOnScreen, dropTarget, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent } from './drop.ts';
 import type { DropTarget, Ray } from './drop.ts';
 import { disposeTree, figureLights, loadFigureModels, makeFigure } from './figures.ts';
 import type { Figure, FigureKind } from './figures.ts';
@@ -1050,8 +1050,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function refuse(clientX: number, clientY: number, id: Id): void {
     const r = container.getBoundingClientRect();
     toast.textContent = (shown ? stayText(shown.building, id) : null) ?? REFUSED;
-    toast.style.transform = `translate(${clientX - r.left}px, ${clientY - r.top}px) translate(-50%, -140%)`;
-    toastAt = { x: clientX - r.left, y: clientY - r.top, until: performance.now() + 2200 + 400, w: 0, h: 0 }; // shown, then a 0.4 s fade
+    const x = centreOnScreen(clientX - r.left, toast.offsetWidth, r.width); // never cut by the screen edge
+    toast.style.transform = `translate(${x}px, ${clientY - r.top}px) translate(-50%, -140%)`;
+    toastAt = { x, y: clientY - r.top, until: performance.now() + 2200 + 400, w: 0, h: 0 }; // shown, then a 0.4 s fade
     toast.classList.remove('on');
     void toast.offsetWidth;
     toast.classList.add('on');

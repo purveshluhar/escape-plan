@@ -98,7 +98,7 @@ test('model votes: a vote that disagrees with the rules is shown as a disagreeme
   assert.equal(m.source, 'Votes by: the model, on this computer, 1.2\u00a0s');
   assert.deepEqual(m.bubbles.map((b) => [b.discipline, b.who, b.vote, b.confidence, b.reason, b.rules]), [
     ['MEP', 'Model', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
-    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Glass is stuck at Lobby door: cannot turn the corner, needs 4.0 m, has 3.71 m', ''],
+    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Glass is stuck at Lobby door: cannot turn the corner, 4.0 m long, longest that turns 3.71 m', ''],
     ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Wheelchair is stuck at Terrace door: step in the way, 0.15 m high, needs level', ''],
     ['Structure', 'Model', 'Accept', '0.72', 'Rules: was Yes, now No. Load is stuck at beam B2: nothing holds it up, no path down to a foundation', 'This vote disagrees with the rules'],
     ['Life safety', 'Rules, no change', 'Review', '1.00', 'Rules: still No. People are stuck at Office door: too narrow, needs 0.6 m, has 0.5 m', ''],
@@ -127,7 +127,7 @@ test('a disagreement is about what the edit did: accepting a Yes-to-No edit, or 
 test('the rules vote when no model answers: the panel says so, and every vote matches the rules', async () => {
   const keywords = panelModel(await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(RULES, 'rules', 'keywords')) }), building);
   assert.equal(keywords.title, 'Review panel: rules only');
-  assert.equal(keywords.source, 'Votes by: the rules. The server reads by keywords.');
+  assert.equal(keywords.source, 'Votes by: the rules. No model is connected.');
   assert.equal(keywords.bubbles[3]!.vote, 'Object');
   assert.equal(keywords.bubbles[3]!.rules, 'This vote agrees with the rules');
   assert.ok(keywords.bubbles.every((b) => !b.clash));
@@ -224,5 +224,5 @@ test('the smoke question votes on its answer, the people on the same clock, not 
   const m = panelModel({ requests: lost, votes: lost.map((r) => v(r.after.token, r.discipline, 'accept', 0.9)), why: 'strands', voter: 'strands', decider: 'strands', ms: 900 }, smoky);
   const fb = m.bubbles.find((x) => x.discipline === 'Fire')!;
   assert.equal(worse.after.token, 'smoke');
-  assert.deepEqual([fb.reason, fb.rules, fb.clash], ['Rules: was Yes, now No. People are stuck at North service corridor: smoke gets there first, needs 1 step, has 1 step', 'This vote disagrees with the rules', true]);
+  assert.deepEqual([fb.reason, fb.rules, fb.clash], ['Rules: was Yes, now No. People are stuck at North service corridor: smoke gets there first, people at step 1, smoke at step 1', 'This vote disagrees with the rules', true]);
 });

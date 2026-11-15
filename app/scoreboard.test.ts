@@ -32,7 +32,7 @@ test('a lost support at a member says there is no path down', () => {
 });
 
 test('people and smoke count time steps, not metres', () => {
-  assert.equal(numbersText(exampleResultPeople), 'needs 4 steps, has 3 steps');
+  assert.equal(numbersText(exampleResultPeople), 'people at step 4, smoke at step 3');
 });
 
 test('every reason code has words', () => {

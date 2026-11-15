@@ -53,3 +53,12 @@ test('a tint on a floor the zoom view hides is not drawn (SmokeTint.floor agains
   assert.equal(tintOnShownFloor(at('core-l10').floor, false, 3.5), true);
   assert.equal(tintOnShownFloor(at('core-l10').floor, true, Infinity), true);
 });
+
+test('no tint outside the building: the street exit and the truck past it get none', () => {
+  const out = {
+    ...b,
+    nodes: [...b.nodes, { ...node('street', 'L1'), type: 'street', is_exit: true }, { ...node('truck', 'L1'), type: 'truck' }],
+  } as unknown as Building;
+  const tints = smokeTints(out, new Set(), new Map([...steps, ['street', 3], ['truck', 4]]));
+  assert.deepEqual(tints.map((t) => t.id), ['lobby', 'core-T04', 'core-l10', 'corridor', 'office']);
+});

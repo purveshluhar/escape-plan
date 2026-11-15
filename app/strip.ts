@@ -47,7 +47,7 @@ const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 function sourceText(r: Reading): string {
   switch (r.why) {
     case 'strands': return `On this computer, ${seconds(r.ms)}.`;
-    case 'keywords': return 'The server reads by keywords.';
+    case 'keywords': return 'No model is connected, so this page read it.';
     case 'down': return 'The server is not reachable.';
     case 'slow': return `The server took over ${seconds(PARSE_TIMEOUT_MS)}.`;
     case 'refused': return 'The server answer could not be used.';

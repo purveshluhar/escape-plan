@@ -1,4 +1,4 @@
-// The smoke tint: for each node of the slice the smoke has reached, one translucent block on the
+// The smoke tint: for each node of the slice the smoke has reached inside the building, one haze layer on the
 // node's plan box, darker near the source and lighter further on. A node shows from the time its
 // smoke step comes. Pure, so Node tests can check it. The tower floors the backdrop stands in for
 // (`covered`) get none: smoke reaches every level (step 83), and only the slice is on screen.
@@ -20,11 +20,16 @@ const DENSEST = 0.28;
 const THINNEST = 0.1;
 const FADE_STEPS = 6; // steps over which the haze thins from densest to thinnest
 
+// Outside the building smoke drifts off, so the street exit and the truck past it get no tint (a
+// tint there read as a shadow spilling off the model).
+const OUTSIDE: ReadonlySet<string> = new Set(['street', 'truck']);
+
 export function smokeTints(b: Building, covered: ReadonlySet<Id>, steps: ReadonlyMap<Id, number>): SmokeTint[] {
   const level = new Map(b.nodes.map((n) => [n.id, n.level]));
   const elevation = new Map(b.levels.map((l) => [l.id, l.elevation]));
+  const outside = new Set(b.nodes.filter((n) => n.is_exit || OUTSIDE.has(n.type)).map((n) => n.id));
   return uncovered(nodeBoxes(b), covered)
-    .filter((box) => steps.has(box.id))
+    .filter((box) => steps.has(box.id) && !outside.has(box.id))
     .map((box): SmokeTint => {
       const step = steps.get(box.id)!;
       const floor = elevation.get(level.get(box.id) ?? '') ?? 0;
