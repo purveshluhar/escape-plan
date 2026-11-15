@@ -4,14 +4,14 @@
 // outline blink on win.
 import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import type { Building, SolverResult } from '../contract/types.ts';
+import type { Building, Id, SolverResult } from '../contract/types.ts';
 import {
   ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
   GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, type Vec3,
+  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, type Vec3,
 } from './layout.ts';
 
 export interface Viewer {
@@ -21,6 +21,9 @@ export interface Viewer {
   setBackdrop(object: THREE.Object3D | null): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
+  // Node ids whose boxes are not drawn, because something else (a real floor plan in the backdrop)
+  // stands in for them. Routes still run through them. Redraws at once.
+  setCovered(ids: Iterable<Id>): void;
 }
 
 export interface ViewerOptions {
@@ -91,6 +94,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   sun.position.set(-60, 120, 40);
   backdrop.add(sun);
   let backdropObject: THREE.Object3D | null = null;
+  let covered: ReadonlySet<Id> = new Set();
+  let shown: { building: Building; results: SolverResult[] } | null = null;
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
   const fillMat = new THREE.MeshBasicMaterial({ color: WALL_INNER, transparent: true, opacity: FILL_OPACITY, depthWrite: false });
@@ -118,7 +123,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     roomTags = [];
     const starts = new Set(b.tokens.map((t) => t.start));
     const nodes = new Map(b.nodes.map((n) => [n.id, n]));
-    for (const box of nodeBoxes(b)) {
+    for (const box of uncovered(nodeBoxes(b), covered)) {
       const flat = FLAT_HEIGHT[nodes.get(box.id)?.type ?? ''];
       const [w, , d] = box.size;
       const h = flat ?? STOREY_HEIGHT;
@@ -328,6 +333,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   renderer.setAnimationLoop(frame);
 
   function show(building: Building, results: SolverResult[]): void {
+    shown = { building, results };
     drawBuilding(building);
     buildRuns(building, results);
     win = results.length > 0 && results.every((r) => r.status === 'pass');
@@ -353,7 +359,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     fit();
   }
 
-  return { show, setBackdrop, setInsetRight };
+  function setCovered(ids: Iterable<Id>): void {
+    covered = new Set(ids);
+    if (shown) show(shown.building, shown.results);
+  }
+
+  return { show, setBackdrop, setInsetRight, setCovered };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements

@@ -2,8 +2,11 @@
 // Escape!, read PASS or FAIL in the summary pill, and apply a fix from the sheet or the edit box.
 // Every fix re-solves the placed objects. Owner: P3. The logic lives in shell.ts, state.ts,
 // answers.ts, flow.ts and scoreboard.ts (tested in Node); this file only draws and wires it.
+import * as THREE from 'three';
 import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
+import { coveredNodes } from '../data/typical-floors.ts';
+import { loadTypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
 import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
@@ -405,7 +408,19 @@ document.addEventListener('keydown', (ev) => {
 idle();
 render();
 
-// The Cityweft block, when this machine has fetched it (data/README.md). Plain ground otherwise.
-loadBackdrop()
-  .then((block) => block && viewer.setBackdrop(block))
-  .catch((err: unknown) => console.warn('Cityweft backdrop not loaded:', err));
+// The Cityweft block and the real 432 Park typical floor, each only when this machine has the files
+// (data/README.md). Plain ground and plain boxes otherwise.
+Promise.all([
+  loadBackdrop().catch((err: unknown) => (console.warn('Cityweft backdrop not loaded:', err), null)),
+  loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
+]).then(([block, floor]) => {
+  if (!block && !floor) return;
+  const context = new THREE.Group();
+  if (block) context.add(block);
+  if (floor) {
+    floor.place(building);
+    context.add(floor.object);
+    viewer.setCovered(coveredNodes(building)); // the real floors replace the tower's boxes
+  }
+  viewer.setBackdrop(context);
+});

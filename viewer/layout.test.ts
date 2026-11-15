@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
-  routeLength, STOREY_HEIGHT, tokenRoute,
+  routeLength, STOREY_HEIGHT, tokenRoute, uncovered,
 } from './layout.ts';
+import type { BoxSpec } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
 
 test('one box per node, sitting on its level', () => {
@@ -121,4 +122,14 @@ test('the view centres the model in the screen left of a side panel, scaled to f
   assert.deepEqual(inset, { left: -10, right: 30, top: 10, bottom: -10 });
   const centrePx = ((0 - inset.left) / (inset.right - inset.left)) * 1000;
   assert.equal(centrePx, 250);
+});
+
+test('covered nodes are left out of the drawn boxes, the rest keep their order', () => {
+  const boxes = [
+    { id: 'a', center: [0, 0, 0], size: [1, 1, 1] },
+    { id: 'b', center: [1, 0, 0], size: [1, 1, 1] },
+    { id: 'c', center: [2, 0, 0], size: [1, 1, 1] },
+  ] as BoxSpec[];
+  assert.deepEqual(uncovered(boxes, new Set(['b'])).map((x) => x.id), ['a', 'c']);
+  assert.deepEqual(uncovered(boxes, new Set()).map((x) => x.id), ['a', 'b', 'c']);
 });

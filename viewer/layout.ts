@@ -29,6 +29,11 @@ export function nodeBoxes(b: Building): BoxSpec[] {
   });
 }
 
+// Boxes minus the nodes something else already draws (a real floor plan stands in for them).
+export function uncovered(boxes: BoxSpec[], covered: ReadonlySet<Id>): BoxSpec[] {
+  return boxes.filter((b) => !covered.has(b.id));
+}
+
 // Where two plan boxes meet: per axis, the middle of their overlap, or of the gap between them.
 // For boxes that share a wall this is the middle of that wall, which is where the door is drawn.
 export function doorPoint(a: Box, b: Box): [number, number] {
