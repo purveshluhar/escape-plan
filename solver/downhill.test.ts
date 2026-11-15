@@ -98,6 +98,11 @@ test('a transfer_beam blocks like a beam; a column, a foundation or an unknown m
   assert.equal(downhill(plumbing(undefined, edges(['c1', 'f1', 'nope']), members), water).status, 'pass');
 });
 
+test('add_transfer_beam on the crossed beam: the water still fails crosses_beam', () => {
+  const r = solve(plumbing(), [{ op: 'add_transfer_beam', target: 'b1', value: null, source: 'button' }])[0]!;
+  assert.deepEqual(record(r), ['fail', ['sink', 'trap'], 'drain-2', 'crosses_beam', null, null]);
+});
+
 test('sleeved: true on the edge in the data passes the beam too', () => {
   const r = downhill(plumbing(undefined, [drain('drain-1', 'sink', 'trap'), drain('drain-2', 'trap', 'sewer', { crosses: ['b1'], sleeved: true })]), water);
   assert.deepEqual(record(r), PASS);
@@ -124,6 +129,33 @@ test('the water uses only drain_route edges', () => {
 test('a drain edge with an end that has no invert is left out', () => {
   const r = downhill(plumbing([sink(), node('trap', 4, 0, undefined), sewer()], [drain('drain-1', 'sink', 'trap'), drain('drain-2', 'trap', 'sewer')]), water);
   assert.deepEqual(record(r), ['fail', ['sink'], null, 'no_route', null, null]);
+});
+
+test('an invert that is not a finite number leaves the edge out', () => {
+  for (const bad of [NaN, null, Infinity, '0.2']) {
+    const odd = { ...trap(), invert: bad as unknown as number };
+    const r = downhill(plumbing([sink(), odd, sewer()], [drain('drain-1', 'sink', 'trap'), drain('drain-2', 'trap', 'sewer')]), water);
+    assert.deepEqual(record(r), ['fail', ['sink'], null, 'no_route', null, null], `invert ${String(bad)}`);
+  }
+});
+
+test('available is rounded to 1e-9, so float noise does not show', () => {
+  const r = downhill(plumbing([sink(), trap(0.28), sewer()], [drain('drain-1', 'sink', 'trap'), drain('drain-2', 'trap', 'sewer')]), water);
+  assert.equal(r.available, 0.005);
+});
+
+test('centres under 1 micrometre apart count as a vertical drop', () => {
+  const near = (invert: number) => node('near', 1e-8, 0, invert, { level: 'L0', type: 'shaft', is_exit: true });
+  assert.equal(downhill(plumbing([sink(), near(0.29)], [drain('riser', 'sink', 'near')]), water).status, 'pass');
+  assert.deepEqual(record(downhill(plumbing([sink(), near(0.31)], [drain('riser', 'sink', 'near')]), water)), ['fail', ['sink'], 'riser', 'uphill', 0.01, 0]);
+});
+
+test('many parallel drains between two nodes still solve inside 100 ms', () => {
+  const edges = [drain('drain-1', 'sink', 'trap'), ...Array.from({ length: 20000 }, (_, i) => drain(`p${String(i).padStart(5, '0')}`, 'trap', 'sewer', { crosses: ['b1'] }))];
+  const b = plumbing(undefined, edges);
+  const t0 = performance.now();
+  assert.equal(downhill(b, water).blocked_at, 'p00000');
+  assert.ok(performance.now() - t0 < 100, `took ${performance.now() - t0} ms`);
 });
 
 test('fewest edges wins; a failing short route gives way to a longer one that passes', () => {

@@ -1,11 +1,11 @@
 // Rule `downhill` (water, T2). The water uses only `drain_route` edges, from `from` to `to`.
 // Checks at each edge, in this order:
 // - slope: (invert at from - invert at to) / plan distance between the two box centres must be
-//   at least 1 %. Fail `uphill`: needed 0.01, available the slope. A vertical drop (distance 0)
-//   passes when it falls; else available is 0.
+//   at least 1 %. Fail `uphill`: needed 0.01, available the slope, rounded to 1e-9. A vertical
+//   drop (centres under 1 micrometre apart) passes when it falls; else available is 0.
 // - beam: an edge that crosses a `beam` or a `transfer_beam` fails `crosses_beam` unless
 //   `sleeved`. needed and available are null.
-// A drain edge with an end that is not a node, or has no `invert`, is left out.
+// A drain edge with an end that is not a node, or has no finite `invert`, is left out.
 // Search and fail record as for the walking rules: breadth-first, fewest edges, neighbours in
 // node id order; on a fail, the first block on the shortest path with the checks off.
 // Own search, not search.ts: that core builds two-way graphs of walking kinds only.
@@ -15,6 +15,7 @@ export const SLOPE_NEEDED = 0.01;
 // Inverts are typed by hand in metres: 0.30 - 0.26 is 0.03999... in floating point, which
 // would fail an exact 1 % fall. One nanometre per metre is far below any real slope.
 const SLOPE_TOLERANCE = 1e-9;
+const VERTICAL_RUN = 1e-6; // metres: centres closer than this count as one above the other
 const BLOCKING: ReadonlySet<MemberKind> = new Set(['beam', 'transfer_beam']);
 
 interface Block {
@@ -32,14 +33,14 @@ interface Hop {
 const byId = (a: Id, b: Id): number => (a < b ? -1 : a > b ? 1 : 0);
 const centre = (n: BuildingNode): [number, number] => [n.box.x + n.box.width / 2, n.box.y + n.box.depth / 2];
 
-// Both nodes must have an invert (buildGraph keeps only such edges).
-export function slopeOf(from: BuildingNode, to: BuildingNode): number {
+// Both nodes must have a finite invert (buildGraph keeps only such edges).
+function slopeOf(from: BuildingNode, to: BuildingNode): number {
   const fall = from.invert! - to.invert!;
   const [fx, fy] = centre(from);
   const [tx, ty] = centre(to);
   const run = Math.hypot(tx - fx, ty - fy);
-  if (run === 0) return fall > 0 ? Infinity : 0;
-  return fall / run;
+  if (run < VERTICAL_RUN) return fall > 0 ? Infinity : 0;
+  return Math.round((fall / run) * 1e9) / 1e9;
 }
 
 function edgeBlock(edge: Edge, nodes: ReadonlyMap<Id, BuildingNode>, kinds: ReadonlyMap<Id, MemberKind>): Block | null {
@@ -58,10 +59,12 @@ function buildGraph(building: Building, nodes: ReadonlyMap<Id, BuildingNode>): M
   const out = new Map<Id, Map<Id, Edge[]>>();
   for (const edge of building.edges) {
     if (edge.kind !== 'drain_route') continue;
-    if (nodes.get(edge.from)?.invert === undefined || nodes.get(edge.to)?.invert === undefined) continue;
+    if (!Number.isFinite(nodes.get(edge.from)?.invert) || !Number.isFinite(nodes.get(edge.to)?.invert)) continue;
     const hops = out.get(edge.from) ?? new Map<Id, Edge[]>();
     out.set(edge.from, hops);
-    hops.set(edge.to, [...(hops.get(edge.to) ?? []), edge]);
+    const list = hops.get(edge.to);
+    if (list) list.push(edge);
+    else hops.set(edge.to, [edge]);
   }
   const graph = new Map<Id, Hop[]>();
   for (const [from, hops] of out) {
