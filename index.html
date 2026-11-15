@@ -277,7 +277,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 
 /* ---------- Short screens (768 px): the fix sheet keeps its foot buttons in view ---------- */
 @media (max-height:820px){
-  #sheet{bottom:var(--dockb);max-height:calc(100vh - 124px);padding:8px 8px 6px}
+  #sheet{bottom:var(--dockb);max-height:calc(100vh - var(--dockb) - 20px);padding:8px 8px 6px}
   #sheet .lbl{padding:2px 8px 4px}
   .fcard{padding:6px 8px}
   .fcard .who{margin-bottom:4px}
@@ -297,6 +297,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   /* the floor rail would sit over the model left of a panel, so it waits while one is open */
   body:has(#sheet.on) #floors,body:has(#banner.on) #floors,body.editing #floors{display:none}
   body:has(#sheet.on) #hint:not(.open){max-width:calc(100vw - 452px)} /* wraps clear of the fix sheet */
+  /* the taller dock leaves less height; the sheet's top stays on screen and below the summary pill */
+  #sheet{max-height:calc(100vh - var(--dockb) - 84px)}
 }
 
 /* ---------- Compact (phone) ---------- */
@@ -344,7 +346,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 #credit.on{display:block}
 @media (max-width:700px){#credit{bottom:auto;top:2px;right:2px;font-size:11px}}
 /* With the fix sheet or the all-yes banner on the right, the summary centres in the space left of it, as the model does */
-@media (min-width:701px){body:has(#sheet.on):not(:has(#votes.on)) #summary,body:has(#banner.on):not(:has(#votes.on)) #summary{left:calc(50% - 202px)}}
+/* ...but never past the left edge: on a narrow screen it moves right until its left edge is 16 px in */
+@media (min-width:701px){body:has(#sheet.on):not(:has(#votes.on)) #summary,body:has(#banner.on):not(:has(#votes.on)) #summary{left:calc(50% - 202px);transform:translateX(max(-50%, calc(218px - 50vw)))}}
 @keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}
