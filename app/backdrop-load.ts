@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CUT_HEIGHT, backdropMatrix, buildingColors, coversPoint, metaToBlock, roofOrFacade, surfaceColor } from './backdrop.ts';
+import { fadeMaterials } from '../viewer/fade.ts';
 
 const BASE = '/data/cityweft/';
 const CUT = [new THREE.Plane(new THREE.Vector3(0, -1, 0), CUT_HEIGHT)]; // keeps y <= CUT_HEIGHT
@@ -95,4 +96,11 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   placed.add(block);
   placed.userData = { removedTower: found?.mesh.name ?? null, anchor, groundY };
   return placed;
+}
+
+// Zoomed in, the city steps back so the open floors read first: `amount` from the viewer's
+// onReveal (0 = full strength, 1 = dimmed to CITY_DIMMED of its opacity).
+export const CITY_DIMMED = 0.4;
+export function dimBlock(block: THREE.Object3D, amount: number): void {
+  fadeMaterials(block, 1 - amount * (1 - CITY_DIMMED));
 }

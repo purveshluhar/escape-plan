@@ -6,8 +6,8 @@
 import * as THREE from 'three';
 import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
-import { coveredNodes } from '../data/typical-floors.ts';
-import { loadTypicalFloor } from '../data/typical-floors-load.ts';
+import { coveredNodes, drawnLevels } from '../data/typical-floors.ts';
+import { loadTypicalFloor, type TypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
 import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
@@ -16,7 +16,7 @@ import { createViewer } from '../viewer/index.ts';
 import { stayText } from '../viewer/labels.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
-import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
+import { dimBlock, loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { conflictOf } from './conflict.ts';
@@ -71,8 +71,21 @@ const S: State = {
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
+// The loaded city and real floors (null until they load) and the viewer's last reveal, so floors
+// that load after a zoom in still get it.
+const context3d = { block: null as THREE.Object3D | null, floor: null as TypicalFloor | null, amount: 0, cut: Infinity, dimmed: 0 };
+const applyReveal = (): void => {
+  context3d.floor?.reveal(context3d.amount, context3d.cut);
+  if (context3d.block && context3d.amount !== context3d.dimmed) dimBlock(context3d.block, context3d.amount);
+  context3d.dimmed = context3d.amount;
+};
 const viewer = createViewer($('viewer'), {
   onZoom: (zoom) => setCutHeight(cutHeight(zoom)),
+  onReveal: (amount, cut) => {
+    Object.assign(context3d, { amount, cut });
+    applyReveal();
+  },
+  avoid: () => [$('banner')],
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
     const what = S.placed.includes(token) ? 'not moved' : 'not placed';
@@ -591,6 +604,7 @@ Promise.all([
   loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
 ]).then(([block, floor]) => {
   if (!block && !floor) return;
+  Object.assign(context3d, { block, floor, dimmed: 0 });
   const context = new THREE.Group();
   if (block) context.add(block);
   if (floor) {
@@ -598,4 +612,6 @@ Promise.all([
     context.add(floor.object);
   }
   viewer.setBackdrop(context);
+  applyReveal();
+  viewer.setFloors(floor ? drawnLevels(building) : []); // only real floors can be opened
 });

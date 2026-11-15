@@ -19,6 +19,8 @@ import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
+  focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, FLOOR_TAG_GAP,
+  type Fade, type ScreenRect,
 } from './layout.ts';
 
 export interface Viewer {
@@ -26,6 +28,9 @@ export interface Viewer {
   // Optional context drawn under everything (for example the Cityweft block), already placed in
   // viewer metres. It never changes the framing, and the building always draws over it. null clears it.
   setBackdrop(object: THREE.Object3D | null): void;
+  // The levels drawn as real floors in the backdrop. Zooming in opens the facade only when there are
+  // some, and only these levels are cut to and labelled. Default none.
+  setFloors(levels: Iterable<Id>): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
   // Node ids left out of the frame, because something else (the real tower in the
@@ -50,6 +55,14 @@ export interface ViewerOptions {
   insetRight?: number;
   // Called with the zoom factor (1 = framed on the model) each time the mouse wheel changes it.
   onZoom?: (zoom: number) => void;
+  // Zoomed in past REVEAL_ZOOM (layout.ts) the outside of the building opens: called each frame the
+  // amount changes, from 0 (facade solid, city at full strength) to 1 (facade gone, city dimmed),
+  // easing both ways. `cut` is the elevation of the top floor to draw (Infinity at amount 0): the
+  // floors above it are cut away so its plan shows. The viewer labels each floor in view itself.
+  onReveal?: (amount: number, cut: number) => void;
+  // Elements of the app drawn over the model that take no pointer events (a banner, for example):
+  // floor labels keep clear of them as they do of every panel.
+  avoid?: () => Element[];
   // A token was dropped on a room or core: the app makes that node its start.
   onDrop?: (token: Id, node: Id) => void;
   // A token was dropped where no room takes it; the viewer has already said so on screen.
@@ -89,7 +102,7 @@ interface Run {
   discipline: Discipline;
   token: THREE.Group;
   figure: Figure;
-  x: { obj: CSS2DObject; at: THREE.Vector3; width: number; callout: boolean } | null;
+  x: { obj: CSS2DObject; at: THREE.Vector3; width: number; callout: boolean; card?: { w: number; h: number } } | null;
   reachedAt: number | null; // token-local seconds when it reached its stop
 }
 
@@ -139,6 +152,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   const pan = { x: 0, y: 0 }; // metres, set by right-drag
   let view = { ...DEFAULT_VIEW }; // orbit angles, set by left-drag
   let shown: { building: Building; results: SolverResult[] } | null = null;
+  let fade: Fade = { from: 0, to: 0, start: 0 }; // facade open amount over time (layout.ts)
+  let opened = 0; // its value this frame
+  let cut = Infinity; // elevation of the level nearest the middle of the view
+  let told = { amount: 0, cut: Infinity }; // last onReveal
+  let floorLevels: ReadonlySet<Id> = new Set(); // setFloors
+  let pointer: { x: number; y: number } | null = null; // last carry position, client pixels
+  let hintSize: { text: string; w: number; h: number } | null = null; // measured once per text
+  let toastAt: { x: number; y: number; until: number; w: number; h: number } | null = null; // until its fade ends
+  let pickCeiling = Infinity; // dropCeiling at the current cut
+  let chromeStale = false; // floor labels moved since the last panel check
 
   const dimMat = new THREE.MeshBasicMaterial({ color: TEXT_MUTED, transparent: true, opacity: 0.3 });
   const geo = {
@@ -152,8 +175,18 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
+  // Members drawn over the building, with their height: hidden with the floors when the facade opens.
+  let memberMarks: { objs: THREE.Object3D[]; y: number }[] = [];
   let beating: THREE.MeshLambertMaterial[] = []; // members drawn red: they blink after the run, then stay red
   let roomTags: { obj: CSS2DObject; text: string }[] = [];
+  // A label per level ("Level 10"), pinned left of its floor plate; shown only while the facade is open.
+  interface FloorTag { obj: CSS2DObject; text: string; elevation: number; rect: ScreenRect | null; free: boolean; w?: number }
+  let floorTags: FloorTag[] = []; // highest first: the open floor wins a clash
+  let exitRects: ScreenRect[] = []; // exit names on screen, kept by fit()
+  let failSides: ('left' | 'right' | 'above')[] = [];
+  let extent = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  let chromeCheckedAt = 0;
+  let avoidBoxes: ScreenRect[] = []; // options.avoid, measured with the panels
   let selected: { id: Id; caption: string | null } | null = null;
   let dragEnabled = true;
   let t0 = performance.now();
@@ -180,6 +213,28 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     if (marks.frame) bounds.set(new THREE.Vector3(...marks.frame.min), new THREE.Vector3(...marks.frame.max));
     else bounds.makeEmpty();
+
+    drawFloorTags(b);
+  }
+
+  // A label for each level drawn as a real floor (setFloors), all hidden until the facade opens.
+  function drawFloorTags(b: Building): void {
+    for (const tag of floorTags) {
+      tag.obj.element.remove();
+      tag.obj.removeFromParent();
+    }
+    floorTags = [];
+    extent = planExtent(b);
+    for (const level of [...b.levels].filter((l) => floorLevels.has(l.id)).sort((x, y) => y.elevation - x.elevation)) {
+      const el = document.createElement('div');
+      el.className = 'ep-floor';
+      el.append(document.createElement('span'));
+      el.firstElementChild!.textContent = floorName(level.id);
+      const obj = new CSS2DObject(el);
+      obj.visible = false;
+      rooms.add(obj);
+      floorTags.push({ obj, text: floorName(level.id), elevation: level.elevation, rect: null, free: false });
+    }
   }
 
   // The structure: footing, column and beam, in slate; a transfer beam in the structure violet; a
@@ -187,6 +242,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function drawMembers(b: Building, results: SolverResult[]): void {
     const red = new Set(flashingMembers(results));
     beating = [];
+    memberMarks = [];
     for (const m of memberBoxes(b)) {
       const color = red.has(m.id) ? FAIL : m.kind === 'transfer_beam' ? DISCIPLINE_STYLE.structure.color : WALL;
       const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: MEMBER_OPACITY });
@@ -199,7 +255,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         o.rotation.y = m.yaw;
         fx.add(o);
       }
+      memberMarks.push({ objs: [mesh, edges], y: m.center[1] });
     }
+  }
+
+  // A member on a hidden floor goes with it (tokens and their routes stay drawn, as always).
+  function cutMembers(): void {
+    for (const { objs, y } of memberMarks) for (const o of objs) o.visible = opened <= 0 || y < pickCeiling;
   }
 
   function buildRuns(b: Building, results: SolverResult[]): void {
@@ -207,6 +269,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     clear(fx, shared);
     fx.add(...figureLights());
     drawMembers(b, results);
+    cutMembers();
     runs = [];
     results.forEach((r, i) => {
       const token = b.tokens.find((t) => t.id === r.token);
@@ -308,6 +371,34 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
+    // The level in the middle of the free view stays the top one drawn.
+    const drawn = shown ? shown.building.levels.filter((l) => floorLevels.has(l.id)) : [];
+    cut = cutLevel(drawn, focusHeight(centre.y, view, pan));
+    pickCeiling = dropCeiling(drawn, cut);
+
+    // Each floor at or under the cut is labelled at the plate corner furthest left on screen.
+    for (const tag of floorTags) {
+      const was = tag.rect;
+      tag.rect = null;
+      if (tag.elevation > cut + 1e-6) continue;
+      let best: { at: THREE.Vector3; x: number; y: number } | null = null;
+      for (const cx of [extent.minX, extent.maxX]) for (const cz of [extent.minZ, extent.maxZ]) {
+        const at = new THREE.Vector3(cx, tag.elevation, cz);
+        const v = at.clone().project(camera);
+        const p = { at, x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 };
+        if (!best || p.x < best.x) best = p;
+      }
+      tag.obj.position.copy(best!.at);
+      const span = tag.obj.element.firstElementChild as HTMLElement;
+      if (tag.w === undefined && span.offsetWidth > 0) tag.w = span.offsetWidth;
+      const rect = floorTagRect(best!, tag.text, tag.w);
+      span.style.right = `${FLOOR_TAG_GAP - rect.shift}px`;
+      if (rect.top >= 0 && rect.bottom <= h && rect.right <= w - insetRight) tag.rect = rect;
+      // A label that moved waits for the next panel check (within 100 ms) before it shows again.
+      if (!was || was.left !== rect.left || was.top !== rect.top) tag.free = false;
+    }
+    chromeStale = true;
+
     // Exit labels that would overlap on screen: keep the first.
     const kept: { x: number; y: number; w: number }[] = [];
     for (const tag of roomTags) {
@@ -317,6 +408,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       tag.obj.visible = !clash;
       if (!clash) kept.push(at);
     }
+    exitRects = kept.map((k) => ({ left: k.x - k.w / 2, right: k.x + k.w / 2, top: k.y - ROOM_LABEL_HEIGHT / 2, bottom: k.y + ROOM_LABEL_HEIGHT / 2 }));
 
     const xs = runs.flatMap((r) => (r.x ? [r.x] : []));
     const sides = labelSides(xs.map(({ at, width }) => {
@@ -326,6 +418,115 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     xs.forEach(({ obj }, i) => {
       for (const side of ['left', 'right', 'above']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
     });
+    failSides = sides;
+  }
+
+  // A floor label is free when nothing outside the model (the dock, a panel, the status line) sits
+  // over any part of it. The label layer takes no pointer events, so the canvas answers where it is open.
+  // It runs from reveal() only while open: within 100 ms of a move, else every 250 ms, 5 hit tests a label.
+  function checkChrome(): void {
+    chromeCheckedAt = performance.now();
+    chromeStale = false;
+    if (opened <= 0 && fade.to === 0) return;
+    const r = canvas.getBoundingClientRect();
+    avoidBoxes = (options.avoid?.() ?? []).flatMap((el) => {
+      const b = el.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 ? [{ left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top }] : [];
+    });
+    for (const tag of floorTags) {
+      const box = tag.rect;
+      // Sampled 4 px outside the label, so it never sits flush against a panel edge.
+      const m = 4;
+      tag.free = box !== null && [[box.left - m, box.top - m], [box.right + m, box.top - m], [box.left - m, box.bottom + m],
+        [box.right + m, box.bottom + m], [(box.left + box.right) / 2, (box.top + box.bottom) / 2]]
+        .every(([x, y]) => document.elementFromPoint(r.left + x!, r.top + y!) === canvas);
+    }
+  }
+
+  // Everything else that writes on the model this frame, in container pixels: exit names, red X
+  // cards, the selected token's caption and the carry hint or refusal under the pointer.
+  function textOnModel(): ScreenRect[] {
+    const w = canvas.clientWidth || 800;
+    const h = canvas.clientHeight || 600;
+    const toScreen = (p: THREE.Vector3): { x: number; y: number } => {
+      const v = p.clone().project(camera);
+      return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 };
+    };
+    const out = [...exitRects];
+    // failSides lines up with the runs that have a red X (fit() places them in that order).
+    runs.filter((run) => run.x).forEach((run, i) => {
+      if (!run.x!.obj.visible) return;
+      const { x, y: y0 } = toScreen(run.x!.at);
+      const y = y0 + X_LIFT;
+      // The card's own size, read once it is laid out; the estimate stands in until then.
+      const el = run.x!.obj.element.querySelector<HTMLElement>('.ep-card');
+      if (!run.x!.card && el && el.offsetWidth > 0) run.x!.card = { w: el.offsetWidth, h: el.offsetHeight };
+      const wd = run.x!.card?.w ?? run.x!.width;
+      const ht = run.x!.card?.h ?? LABEL_HEIGHT + 8;
+      const side = failSides[i] ?? 'right';
+      const card = side === 'right' ? { left: x + LABEL_GAP, right: x + LABEL_GAP + wd, top: y - ht / 2, bottom: y + ht / 2 }
+        : side === 'left' ? { left: x - LABEL_GAP - wd, right: x - LABEL_GAP, top: y - ht / 2, bottom: y + ht / 2 }
+          : { left: x - wd / 2, right: x + wd / 2, top: y - 32 - ht, bottom: y - 32 };
+      out.push({ left: Math.min(card.left, x - 30), right: Math.max(card.right, x + 30), top: Math.min(card.top, y - 30), bottom: Math.max(card.bottom, y + 30) });
+    });
+    const run = runs.find((r) => r.id === selected?.id);
+    if (run && captionObj?.visible && selected?.caption) {
+      const { x, y } = toScreen(run.token.getWorldPosition(new THREE.Vector3()));
+      const span = captionObj.element.firstElementChild as HTMLElement;
+      if (!captionSize && span.offsetWidth > 0) captionSize = { w: span.offsetWidth, h: span.offsetHeight };
+      const half = (captionSize?.w ?? selected.caption.length * 9 + 26) / 2;
+      out.push({ left: x - half, right: x + half, top: y + 10, bottom: y + 14 + (captionSize?.h ?? 32) + 4 });
+    }
+    // The hint and the refusal: measured once per text, placed from the pointer (no layout read a frame).
+    const box = container.getBoundingClientRect();
+    if (pointer && hint.classList.contains('on')) {
+      if (hintSize?.text !== hint.textContent) hintSize = { text: hint.textContent ?? '', w: hint.offsetWidth, h: hint.offsetHeight };
+      const x = pointer.x - box.left + 18;
+      const y = pointer.y - box.top + 18;
+      out.push({ left: x, right: x + hintSize.w, top: y, bottom: y + hintSize.h });
+    }
+    if (toastAt && performance.now() < toastAt.until) {
+      if (toastAt.w === 0) Object.assign(toastAt, { w: toast.offsetWidth, h: toast.offsetHeight });
+      const { x, y, w: tw, h: th } = toastAt;
+      out.push({ left: x - tw / 2, right: x + tw / 2, top: y - 1.4 * th, bottom: y - 0.4 * th });
+    }
+    if (avoidBoxes.length) out.push(...avoidBoxes);
+    return out;
+  }
+
+  // The facade's open amount this frame: tell the app, and show the floor labels that fit.
+  function reveal(now: number): void {
+    opened = fadeAt(fade, now);
+    const cutNow = opened > 0 ? cut : Infinity;
+    if (opened !== told.amount || cutNow !== told.cut) {
+      told = { amount: opened, cut: cutNow };
+      options.onReveal?.(opened, cutNow);
+      cutMembers();
+    }
+    if (opened <= 0) {
+      for (const tag of floorTags) tag.obj.visible = false;
+      return;
+    }
+    if (now - chromeCheckedAt > (chromeStale ? 100 : 250)) checkChrome();
+    const keep = keepFloorTags(floorTags.map((t) => ({ rect: t.rect ?? { left: 0, right: 0, top: 0, bottom: 0 }, free: t.rect !== null && t.free })), textOnModel());
+    const opacity = String(opened);
+    floorTags.forEach((tag, i) => {
+      tag.obj.visible = keep[i]!;
+      if (keep[i] && tag.obj.element.style.opacity !== opacity) tag.obj.element.style.opacity = opacity;
+    });
+  }
+
+  function setZoom(z: number): void {
+    zoom = z;
+    fade = retarget(fade, floorLevels.size > 0 && revealed(zoom) ? 1 : 0, performance.now(), reduced);
+    options.onZoom?.(zoom);
+    fit();
+    // A token carried while the wheel turns: what it would land on may have been cut away.
+    if (carried?.moving && pointer) {
+      const at = pointer;
+      carried.target = { node: '', level: '' }; // no real node: carryTo redraws the floor mark
+      carryTo(at.x, at.y);
+    }
   }
 
   function update(run: Run, local: number): void {
@@ -394,6 +595,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
+    reveal(now);
     renderer.clear();
     if (backdropObject) {
       renderer.render(backdrop, camera);
@@ -426,15 +628,15 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
-    zoom = zoomFactor(zoom, e.deltaY);
-    options.onZoom?.(zoom);
-    fit();
+    setZoom(zoomFactor(zoom, e.deltaY));
   }, { passive: false });
 
   // ---------- Selection ----------
 
   let captionObj: CSS2DObject | null = null;
+  let captionSize: { w: number; h: number } | null = null; // measured once it is laid out
   function markSelected(): void {
+    captionSize = null;
     captionObj?.element.remove();
     captionObj?.removeFromParent();
     captionObj = null;
@@ -499,8 +701,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const mpp = (camera.top - camera.bottom) / (canvas.clientHeight || 600);
     // The load starts on a beam, not in a room: it is never dropped on a floor (stayText says why).
     const stay = isMemberStart(b, c.id) ? stayText(b, c.id) : null;
-    const target = over && stay === null ? dropTarget(b, rayAt(clientX, clientY), SNAP_PIXELS * mpp) : null;
+    // While the facade is open the floors above the cut are not drawn, so a drop cannot land on them.
+    const cutting = fade.to > 0 || opened > 0; // the floors above the cut are hidden, or about to be
+    const target = over && stay === null ? dropTarget(cutting ? belowCut(b, pickCeiling) : b, rayAt(clientX, clientY), SNAP_PIXELS * mpp) : null;
     const r = container.getBoundingClientRect();
+    pointer = { x: clientX, y: clientY };
     hint.style.transform = `translate(${clientX - r.left + 18}px, ${clientY - r.top + 18}px)`;
     hint.classList.add('on');
     // Red only over the model where nothing takes the token; over the dock a release just cancels.
@@ -563,6 +768,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const r = container.getBoundingClientRect();
     toast.textContent = (shown ? stayText(shown.building, id) : null) ?? REFUSED;
     toast.style.transform = `translate(${clientX - r.left}px, ${clientY - r.top}px) translate(-50%, -140%)`;
+    toastAt = { x: clientX - r.left, y: clientY - r.top, until: performance.now() + 2200 + 400, w: 0, h: 0 }; // shown, then a 0.4 s fade
     toast.classList.remove('on');
     void toast.offsetWidth;
     toast.classList.add('on');
@@ -642,12 +848,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('dblclick', () => {
-    zoom = 1;
     pan.x = 0;
     pan.y = 0;
     view = { ...DEFAULT_VIEW };
-    options.onZoom?.(zoom);
-    fit();
+    setZoom(1);
   });
   new ResizeObserver(fit).observe(container);
   renderer.setAnimationLoop(frame);
@@ -693,6 +897,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     renderer.localClippingEnabled = object !== null; // a backdrop may cut itself with clipping planes
   }
 
+  function setFloors(levels: Iterable<Id>): void {
+    floorLevels = new Set(levels);
+    if (shown) drawFloorTags(shown.building);
+    setZoom(zoom);
+  }
+
   function setInsetRight(pixels: number): void {
     if (pixels === insetRight) return;
     insetRight = pixels;
@@ -734,7 +944,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash };
+  return { show, setBackdrop, setFloors, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
@@ -762,6 +972,12 @@ function injectStyles(): void {
   style.textContent = `
 .ep-labels { position: absolute; inset: 0; pointer-events: none; }
 .ep-fail, .ep-tag { width: 0; height: 0; }
+.ep-floor { width: 0; height: 0; }
+/* Floor names while the facade is open: a calm pill left of the plate corner, under every other text. */
+.ep-floor { z-index: 0 !important; }
+.ep-floor span { position: absolute; right: ${FLOOR_TAG_GAP}px; transform: translateY(-50%); white-space: nowrap;
+  font: 600 13px/1 ${FONT_BODY}; color: ${TEXT}; background: ${GLASS_STRONG}; border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 999px; padding: 5px 10px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
 /* Exit names: quiet caps at street level, always under tokens and fail cards. */
 .ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;

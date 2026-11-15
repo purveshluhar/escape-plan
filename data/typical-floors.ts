@@ -78,3 +78,10 @@ export const FACADE_URL = '/data/432-park/432_Park_Avenue_Lightweight.glb';
 export function isInterior(name: string): boolean {
   return /^(Model_Level_|Residential_Interiors|Local_Ground_Plinth)/.test(name);
 }
+
+// The levels the loader draws a real floor on: the slice level floorPlacement puts the plan on, and
+// every tower level (a plan, or the slab and core stand-in). The viewer opens and labels only these.
+export function drawnLevels(b: Building): string[] {
+  const slice = floorPlacement(b).position[1];
+  return b.levels.filter((l) => /^T\d\d$/.test(l.id) || l.elevation === slice).map((l) => l.id);
+}
