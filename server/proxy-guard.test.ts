@@ -78,12 +78,30 @@ test('the proxy reads SERVER_* the way the server does: .env, then the shell (re
 
 test('only /parse itself goes through the proxy: /parsex and /parse/x do not (review S2)', async () => {
   for (const path of ['/parsex', '/parse/x']) {
-    const r = await new Promise<number>((resolve, reject) => {
-      const q = request({ host: '127.0.0.1', port: vitePort, method: 'POST', path, headers: { ...json, 'sec-fetch-site': 'same-origin' } }, (res) => { res.resume(); resolve(res.statusCode ?? 0); });
+    const r = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const q = request({ host: '127.0.0.1', port: vitePort, method: 'POST', path, headers: { ...json, 'sec-fetch-site': 'same-origin' } }, (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (c: string) => { body += c; });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+      });
       q.on('error', reject);
       q.end(body);
     });
-    assert.notEqual(r, 200, path);
+    assert.notEqual(r.status, 200, path);
+    assert.doesNotMatch(r.body, /"error":"not found"/, `${path} must not reach the server`);
+  }
+});
+
+test('a call from another machine is refused, even with browser headers (review round 2, vite --host)', () => {
+  for (const remoteAddress of ['192.168.1.20', '10.0.0.5', '::ffff:192.168.1.20', undefined]) {
+    const req = { headers: { 'sec-fetch-site': 'same-origin' }, socket: { remoteAddress } } as unknown as IncomingMessage;
+    let status = 0;
+    let passed = false;
+    const fake = { statusCode: 0, setHeader() {}, end() { status = fake.statusCode; }, once(_e: string, f: () => void) { f(); } };
+    guardParseProxy(req, fake as unknown as ServerResponse, () => { passed = true; });
+    assert.equal(passed, false, String(remoteAddress));
+    assert.equal(status, 403, String(remoteAddress));
   }
 });
 
@@ -91,7 +109,7 @@ test('more than a few calls at once through the proxy get 429 (cse: unthrottled)
   const holds: (() => void)[] = [];
   let refused = 0;
   for (let i = 0; i < PROXY_MAX_IN_FLIGHT + 2; i++) {
-    const req = { headers: { 'sec-fetch-site': 'same-origin' } } as unknown as IncomingMessage;
+    const req = { headers: { 'sec-fetch-site': 'same-origin' }, socket: { remoteAddress: '127.0.0.1' } } as unknown as IncomingMessage;
     let done: () => void = () => {};
     const fake = { statusCode: 0, setHeader() {}, end() { if (fake.statusCode === 429) refused++; }, once(_e: string, f: () => void) { done = f; } };
     guardParseProxy(req, fake as unknown as ServerResponse, () => {});
@@ -99,7 +117,7 @@ test('more than a few calls at once through the proxy get 429 (cse: unthrottled)
   }
   assert.equal(refused, 2);
   for (const h of holds) h();
-  const req = { headers: { 'sec-fetch-site': 'same-origin' } } as unknown as IncomingMessage;
+  const req = { headers: { 'sec-fetch-site': 'same-origin' }, socket: { remoteAddress: '127.0.0.1' } } as unknown as IncomingMessage;
   let passed = false;
   guardParseProxy(req, { statusCode: 0, setHeader() {}, end() {}, once() {} } as unknown as ServerResponse, () => { passed = true; });
   assert.ok(passed, 'a finished call frees its place');
@@ -165,7 +183,7 @@ test('demo sentence through Vite and the real keywords server: the app applies w
 
 test('the guard on its own: only a same-origin browser call passes, and Origin is dropped (review S1, cse)', () => {
   const run = (headers: Record<string, string>) => {
-    const req = { headers: { ...headers } } as unknown as IncomingMessage;
+    const req = { headers: { ...headers }, socket: { remoteAddress: '::1' } } as unknown as IncomingMessage;
     let status = 0;
     let passed = false;
     // `once('close')` fires at once here, so this test holds no place in the in-flight count.

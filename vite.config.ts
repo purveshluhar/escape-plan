@@ -10,7 +10,8 @@ export default defineConfig(() => {
   // reaches the browser (no VITE_ prefix).
   const env = proxyEnv(process.cwd(), process.env);
   // Exactly /parse (with or without a query), so the guard and the proxy cover the same paths.
-  const proxy: Record<string, ProxyOptions> = { '^/parse(\\?.*)?$': { target: parseProxyTarget(env), changeOrigin: true } };
+  // A slow call is cut after 10 s, so it cannot hold one of the 4 places for long.
+  const proxy: Record<string, ProxyOptions> = { '^/parse(\\?.*)?$': { target: parseProxyTarget(env), changeOrigin: true, timeout: 10_000, proxyTimeout: 10_000 } };
   const guard = guardParseProxy as Connect.NextHandleFunction;
   return {
     plugins: [{

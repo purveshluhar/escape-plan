@@ -216,6 +216,7 @@ function applyFix(edit: Edit, label: string): void {
 function reset(): void {
   if (S.phase === 'running' || S.reading !== null || S.game.edits.length === 0) return;
   S.game = initialState();
+  S.read = null; // the strip described an edit that is now undone
   S.note = 'Checked again with the original building';
   if (S.results && S.placed.length) escape();
   else {

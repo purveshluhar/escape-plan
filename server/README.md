@@ -68,9 +68,10 @@ own Host check and CORS run first. The server itself is unchanged: called direct
 refuses foreign Hosts and Origins. The proxy reads `SERVER_PORT` and `SERVER_HOST` the way the
 server does: from `.env`, and the shell wins.
 
-This is not a login. Any program that can reach Vite can send those headers. So who can reach
-Vite is the gate: 127.0.0.1 by default, or a tunnel with its own sign-in. Do not run
-`npm run dev -- --host` while this server runs: that puts `/parse` on the network.
+The proxy also refuses any call that does not come from this machine (loopback), so
+`npm run dev -- --host` does not put `/parse` on the network. A tunnel client runs on this machine,
+so its calls pass. This is not a login: a program on this machine can send those headers. Who
+can reach Vite through a tunnel is the tunnel's own sign-in.
 
 The app uses this server's answer only when it sends `x-decider: strands`. With `keywords` it
 reads the sentence itself (`app/parse-client.ts`), so keywords can stay the default here until

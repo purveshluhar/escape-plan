@@ -97,6 +97,14 @@ test('parse: negations, questions and words of other fixes never apply (review C
   ]) assert.equal(parseEdit(s, buttons).edit, null, s);
 });
 
+test('parse: hedges, other units, signs and two numbers never apply (review round 2)', () => {
+  for (const s of [
+    "won't ramp terrace", 'stop ramp terrace', 'ramp terrace isnt needed', 'should I ramp terrace', 'maybe ramp terrace',
+    'step', 'the stairs need a step', 'widen the shaft by 2 cm', 'widen shaft -2', 'widen shaft 2.0 metres or maybe 3',
+    'widen lobby door 1,5', 'widen the lobby door from 1.2 to 1.5', 'widen the lobby door to 1.5 feet',
+  ]) assert.equal(parseEdit(s, buttons).edit, null, s);
+});
+
 test('typed edits are read against every demo fix, so the shaft and the beam are known', () => {
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   assert.match(main, /const typedFixes = demoButtons\(building, expected\)/);

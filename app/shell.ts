@@ -145,8 +145,8 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   const t = text.toLowerCase();
   const opHit = OP_WORDS.find(([, re]) => re.test(t));
   const op: EditOp = opHit?.[0] ?? 'widen';
-  // Never sure of the op when the sentence says no, asks a question, or names two ops ("widen beam 2").
-  const negated = /\b(not|don'?t|no|never|cancel|undo|remove|without)\b|\?/.test(t);
+  // Never sure of the op when the sentence says no, hedges, asks a question, or names two ops ("widen beam 2").
+  const negated = /\b(not|no|never|cancel|undo|remove|without|stop|instead|should|could|might|maybe|whether|if)\b|\b(don|won|isn|aren|can|wouldn|shouldn|couldn)'?t\b|\?/.test(t);
   const twoOps = new Set(OP_WORDS.filter(([, re]) => re.test(t)).map(([o]) => o)).size > 1;
   const opConf = !opHit ? 0.3 : negated || twoOps ? 0.4 : 0.95;
 
@@ -170,18 +170,21 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   const num = t.match(/(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?)?/);
   const raw = num ? Number(num[1]) : null;
   const inRange = raw !== null && raw >= range.min && raw <= range.max;
+  // A width in doubt: two numbers, a minus sign, a decimal comma, or a unit that is not metres.
+  const doubtful = (t.match(/(?<![a-z])\d+(?:[.,]\d+)?/g) ?? []).length > 1 || /-\s*\d|\d,\d/.test(t)
+    || /\d\s*(cm|mm|ft|feet|foot|in|inch|inches|")(?![a-z])/.test(t);
   // Audit gap 8, for short phrases only when nothing else is in doubt: a firm op word, a number (if
   // any) in range, and only one fix named at all.
   const named = scored.filter((x) => x.match > 0).length;
-  if (firm && (raw === null || inRange)) {
+  if (firm && (raw === null || (inRange && !doubtful))) {
     // "ramp terrace", "widen shaft 2.0": a word only this fix has.
     if (best?.own && named === 1) targetConf = Math.max(targetConf, 0.9);
     // "transfer beam", "add a ramp": no part named, the op said in full, and only one fix does it.
-    const fullOp = op === 'add_transfer_beam' ? /\btransfer\s+beam\b/.test(t) : op === 'add_ramp';
+    const fullOp = op === 'add_transfer_beam' ? /\btransfer\s+beam\b/.test(t) : op === 'add_ramp' && /\bramps?\b/.test(t);
     if (named === 0 && fullOp && buttons.filter((b) => b.edit.op === op).length === 1) targetConf = Math.max(targetConf, 0.85);
   }
   const value = op === 'widen'
-    ? { score: inRange ? raw! : best?.b.edit.value ?? range.min, confidence: inRange ? 0.95 : best?.b.edit.value != null ? 0.85 : 0.2 }
+    ? { score: inRange ? raw! : best?.b.edit.value ?? range.min, confidence: doubtful ? 0.4 : inRange ? 0.95 : best?.b.edit.value != null ? 0.85 : 0.2 }
     : null;
 
   const parse: JevParse = {

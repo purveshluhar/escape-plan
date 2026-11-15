@@ -42,7 +42,12 @@ function refuse(res: ServerResponse, status: number, error: string, detail: stri
   res.end(JSON.stringify({ error, details: [detail] }));
 }
 
+// This machine only. With `vite --host`, Vite takes calls from the network; they never reach the
+// server. A tunnel client runs on this machine, so it connects from loopback.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
 export function guardParseProxy(req: IncomingMessage, res: ServerResponse, next: () => void): void {
+  if (!LOOPBACK.has(req.socket?.remoteAddress ?? '')) return refuse(res, 403, 'not this machine', 'only this machine may call /parse');
   if (req.headers['sec-fetch-site'] !== 'same-origin') return refuse(res, 403, 'origin not allowed', 'only this page may call /parse');
   if (inFlight >= PROXY_MAX_IN_FLIGHT) return refuse(res, 429, 'too many calls', `at most ${PROXY_MAX_IN_FLIGHT} at once`);
   inFlight++;
