@@ -296,6 +296,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #picker{flex-basis:100%;justify-content:center}
   /* the floor rail would sit over the model left of a panel, so it waits while one is open */
   body:has(#sheet.on) #floors,body:has(#banner.on) #floors,body.editing #floors{display:none}
+  body:has(#sheet.on) #hint:not(.open){max-width:calc(100vw - 452px)} /* wraps clear of the fix sheet */
 }
 
 /* ---------- Compact (phone) ---------- */
@@ -304,7 +305,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #floors{display:none} /* no room beside the model on a phone; drag and pinch still move the view */
   #picker{flex-wrap:wrap;row-gap:6px}
   #summary{max-width:calc(100vw - 16px)}
-  #summary .schips{flex-wrap:wrap;justify-content:center;row-gap:6px}
+  #summary .schips{display:none} /* six chips do not fit; the count says it and the sheet lists each */
+  .tool{padding:0 9px;font-size:14px}
   #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;width:auto;border-radius:30px}
   .dock-full{flex-wrap:wrap;row-gap:6px;width:100%}
   #picker{flex-basis:100%}
@@ -329,6 +331,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #strip,body.editing #strip{top:96px;bottom:auto;left:8px;right:8px;width:auto;max-height:50vh;overflow:auto}
   #strip .boxes{grid-template-columns:1fr} #strip .arrow,#strip .caps{display:none}
   #hint:not(.open){right:auto;width:max-content}
+  body:has(#sheet.on) #hint:not(.open){max-width:calc(100vw - 16px)}
   #hint,body.editing #hint{top:calc(114px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
   #banner{left:8px;right:8px;width:auto;bottom:var(--dockb)}
   #votes{top:auto;bottom:var(--dockb);left:8px;right:8px;width:auto;max-height:35vh}

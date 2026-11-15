@@ -837,10 +837,21 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const tags = roomTags.filter((tag) => tag.obj.visible);
     const rects = tags.map((tag) => box(tag.obj.element));
     // The fail cards and red Xs on screen cover an exit name the same way the caption does.
-    const marks = runs.flatMap((r) => (r.x && r.x.obj.visible && r.x.obj.element.isConnected ? [...r.x.obj.element.querySelectorAll('.ep-x, .ep-card')] : []))
-      .filter((el) => (el as HTMLElement).offsetWidth > 0).map(box);
+    // The X is a zero-size anchor that draws two 50 px bars around its point.
+    const xBox = (el: Element): Rect => {
+      const b = el.getBoundingClientRect();
+      return { l: b.left - 26, r: b.left + 26, t: b.top - 26, b: b.top + 26 };
+    };
+    const marks = runs.flatMap((r) => (r.x && r.x.obj.visible && r.x.obj.element.isConnected ? [...r.x.obj.element.querySelectorAll<HTMLElement>('.ep-x, .ep-card')] : []))
+      .filter((el) => el.classList.contains('ep-x') || el.offsetWidth > 0).map((el) => (el.classList.contains('ep-x') ? xBox(el) : box(el)));
     const hidden = [shown, ...marks].reduce((acc, over) => coveredBy(over, rects).map((c, i) => c || acc[i]!), rects.map(() => false));
     tags.forEach((tag, i) => (tag.obj.element.style.visibility = hidden[i] ? 'hidden' : ''));
+    // The corner's "Longest that fits" line hides under another thing's red X or card the same way.
+    for (const fits of container.querySelectorAll<HTMLElement>('.ep-fits')) {
+      const face = fits.firstElementChild;
+      if (!face) continue;
+      fits.style.visibility = marks.some((m) => coveredBy(m, [box(face)], 2)[0]) ? 'hidden' : '';
+    }
   }
 
   renderer.domElement.addEventListener('wheel', (e) => {
@@ -1229,9 +1240,9 @@ function injectStyles(): void {
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;
   transition: opacity 0.3s; }
 /* CSS2DRenderer stacks labels by distance; a red X and its label must never hide behind a token. */
-.ep-fail { z-index: 100000 !important; }
+.ep-fail { z-index: 99999 !important; }
 /* The selected token's line sits under its figure: fail labels never go below a token. */
-.ep-tag { z-index: 99999 !important; }
+.ep-tag { z-index: 100000 !important; } /* over a red X; cards keep clear of it (labels.ts avoid) */
 .ep-tag span { position: absolute; transform: translate(-50%, 14px); white-space: nowrap; font: 700 14px/1 ${FONT_BODY};
   color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px solid ${ACCENT}; border-radius: 999px; padding: 7px 11px;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14); }

@@ -73,6 +73,9 @@ export function mountScroller(host: HTMLElement, onPick: (level: Id) => void): S
     track.setAttribute('aria-valuenow', String(a.now));
     track.setAttribute('aria-valuetext', a.text);
     name.textContent = a.text;
+    // The thumb names its floor; an end label with the same name would say it twice.
+    bottomEnd.style.visibility = scroller.count() > 0 && scroller.index() === 0 ? 'hidden' : '';
+    topEnd.style.visibility = scroller.count() > 0 && scroller.index() === scroller.count() - 1 ? 'hidden' : '';
     // A share of the track less the thumb, so a resize needs no redraw.
     thumb.style.bottom = `calc(${thumbFraction(scroller.index(), scroller.count())} * (100% - ${THUMB}px))`;
   };
