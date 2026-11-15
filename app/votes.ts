@@ -6,6 +6,7 @@ import type { Building, Discipline, Edit, JevVote, JevVoteRequest, SolverResult,
 import { JEV_ACCEPT_CONFIDENCE, VOTES } from '../contract/types.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { questionOf } from './questions.ts';
+import { RACE } from './smoke.ts';
 import { stuckLine } from './scoreboard.ts';
 
 export const VOTES_URL = '/votes'; // same origin; vite.config.ts proxies it to 127.0.0.1
@@ -18,11 +19,20 @@ const MAX_MODEL_QUESTIONS = 2; // server/votes.ts: more changed answers than thi
 // (glass and sofa are both logistics), the one this edit broke (Yes to No) speaks for it, else the
 // one it fixed (No to Yes), else the first one; the first wins a tie.
 const weight = (b: SolverResult, a: SolverResult): number => (b.status === a.status ? 0 : a.status === 'fail' ? 2 : 1);
+const PEOPLE = 'people';
+// The smoke question's answer is the people's answer on the same clock (smoke.ts raceAnswer), so the
+// fire discipline votes on that, under the smoke's name. The smoke's own result (its spread) always
+// passes and says nothing about the question.
+function resultOf(results: readonly SolverResult[], token: string): SolverResult | undefined {
+  if (token !== RACE) return results.find((r) => r.token === token);
+  const people = results.find((r) => r.token === PEOPLE);
+  return people && { ...people, token: RACE };
+}
 export function voteRequests(building: Building, edit: Edit, before: readonly SolverResult[], after: readonly SolverResult[]): JevVoteRequest[] {
   const out = new Map<Discipline, JevVoteRequest>();
   for (const t of building.tokens) {
-    const b = before.find((r) => r.token === t.id);
-    const a = after.find((r) => r.token === t.id);
+    const b = resultOf(before, t.id);
+    const a = resultOf(after, t.id);
     if (!b || !a) continue;
     const held = out.get(t.discipline);
     if (!held || weight(b, a) > weight(held.before, held.after)) out.set(t.discipline, { discipline: t.discipline, edit, before: b, after: a });
@@ -123,10 +133,15 @@ const yesNo = (r: SolverResult): 'Yes' | 'No' => (r.status === 'pass' ? 'Yes' : 
 // one stuck line every screen uses (design/copy.md section 3, scoreboard.ts stuckLine).
 function reasonLine(building: Building, r: JevVoteRequest): string {
   const same = r.before.status === r.after.status;
-  if (r.after.status === 'fail') return `Rules: ${same ? 'still No' : 'was Yes, now No'}. ${stuckLine(building, r.after)}`;
-  const name = tokenName(r.after.token);
-  const plural = questionOf(r.after.token)?.plural ?? false;
-  return same ? `Rules: ${name} ${plural ? 'are' : 'is'} still Yes` : `Rules: ${name} ${plural ? 'were' : 'was'} No, now Yes`;
+  // The smoke question is about the people racing it, so its line names them.
+  const race = r.after.token === RACE;
+  const who = race ? PEOPLE : r.after.token;
+  const named: SolverResult = { ...r.after, token: who };
+  if (r.after.status === 'fail') return `Rules: ${same ? 'still No' : 'was Yes, now No'}. ${stuckLine(building, named)}`;
+  const name = tokenName(who);
+  const plural = questionOf(who)?.plural ?? false;
+  const line = same ? `Rules: ${name} ${plural ? 'are' : 'is'} still Yes` : `Rules: ${name} ${plural ? 'were' : 'was'} No, now Yes`;
+  return race ? `${line}, before the smoke` : line;
 }
 
 // The server asks the model only about these (server/votes.ts `changed`); the rules vote the rest.

@@ -180,3 +180,25 @@ test('a pending panel says it is asking', () => {
   assert.equal(m.source, 'Asking each discipline...');
   assert.deepEqual(m.bubbles, []);
 });
+
+test('the smoke question votes on its answer, the people on the same clock, not on the smoke spread', async () => {
+  const { withSmoke } = await import('../data/smoke.ts');
+  const smoky = withSmoke(building);
+  const OFFICE: Edit = { op: 'widen', target: 'office-door', value: 0.9, source: 'button' };
+  const CLOSE: Edit = { op: 'close_door', target: 'lobby-door', value: null, source: 'button' };
+  const reqs = voteRequests(smoky, CLOSE, solve(smoky, [OFFICE]), solve(smoky, [OFFICE, CLOSE]));
+  const fire = reqs.find((r) => r.discipline === 'fire')!;
+  assert.deepEqual([fire.after.token, fire.before.status, fire.before.reason, fire.after.status], ['smoke', 'fail', 'smoke_first', 'pass']);
+  assert.deepEqual(fire.after.path, ['office', 'corridor', 'street'], 'the people route, not the 250-node spread');
+  const ruled: PanelReading = { requests: reqs, votes: reqs.map((r) => v(r.after.token, r.discipline, r.after.status === 'pass' ? 'accept' : 'review', 1)), why: 'rules', voter: 'rules', decider: 'keywords', ms: 3 };
+  const b = panelModel(ruled, smoky).bubbles.find((x) => x.discipline === 'Fire')!;
+  assert.deepEqual([b.vote, b.reason, b.rules], ['Accept', 'Rules: People were No, now Yes, before the smoke', 'This vote agrees with the rules']);
+  // An edit that lets the smoke win: accepting it disagrees with the rules.
+  const res = (status: 'pass' | 'fail', reason: 'smoke_first' | null) => ({ token: 'people', status, path: ['office'], blocked_at: reason ? 'corridor' : null, reason, needed: reason ? 1 : null, available: reason ? 1 : null, time: null });
+  const lost = voteRequests(smoky, OFFICE, [res('pass', null)], [res('fail', 'smoke_first')]);
+  const worse = lost.find((r) => r.discipline === 'fire')!;
+  const m = panelModel({ requests: lost, votes: lost.map((r) => v(r.after.token, r.discipline, 'accept', 0.9)), why: 'strands', voter: 'strands', decider: 'strands', ms: 900 }, smoky);
+  const fb = m.bubbles.find((x) => x.discipline === 'Fire')!;
+  assert.equal(worse.after.token, 'smoke');
+  assert.deepEqual([fb.reason, fb.rules, fb.clash], ['Rules: was Yes, now No. People are stuck at North service corridor: smoke gets there first, needs 1 step, has 1 step', 'This vote disagrees with the rules', true]);
+});
