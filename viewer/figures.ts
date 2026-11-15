@@ -365,13 +365,14 @@ function chillerShape(): THREE.Object3D[] {
 }
 
 function loadShape(): THREE.Object3D[] {
-  const body = lambert(DISCIPLINE_STYLE.structure.color), deep = lambert('#5a3fd0'), arrow = lambert('#b7a6ff');
+  // The arrow is round and dark so it reads as "down" from the iso camera; a four-sided pale head read as a plate.
+  const body = lambert(DISCIPLINE_STYLE.structure.color), deep = lambert('#5a3fd0'), arrow = lambert('#2e2276');
   return [
     mesh(new THREE.CylinderGeometry(0.62, 0.98, 0.75, 4, 1).rotateY(Math.PI / 4), body, 0, 0.475, 0), // the weight
     mesh(new RoundedBoxGeometry(1.42, 0.1, 1.42, 2, 0.04), deep, 0, 0.05, 0),
     mesh(new THREE.TorusGeometry(0.26, 0.08, 8, 18, Math.PI), deep, 0, 0.85, 0), // handle
-    mesh(new THREE.BoxGeometry(0.28, 0.55, 0.28), arrow, 0, 1.86, 0), // a big down arrow: shaft
-    mesh(new THREE.ConeGeometry(0.5, 0.5, 4).rotateY(Math.PI / 4).rotateX(Math.PI), arrow, 0, 1.33, 0), // and head
+    mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.6, 16), arrow, 0, 1.835, 0), // a big down arrow: shaft
+    mesh(new THREE.ConeGeometry(0.42, 0.62, 20).rotateX(Math.PI), arrow, 0, 1.31, 0), // and head
   ];
 }
 

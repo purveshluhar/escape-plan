@@ -53,6 +53,8 @@ export interface Viewer {
   setInsetRight(pixels: number): void;
   // The same for a panel on the left (the typed-edit strip): the model centres between the two.
   setInsetLeft(pixels: number): void;
+  // The model fits above a panel this many pixels tall along the bottom (0 when there is none).
+  setInsetBottom(pixels: number): void;
   // Node ids left out of the frame, because something else (the real tower in the
   // backdrop) stands in for them. No node is drawn as a box; routes still run through every node.
   // Redraws at once.
@@ -115,6 +117,28 @@ const UP = new THREE.Vector3(0, 1, 0);
 const HIT_PIXELS = 36; // a press this close to a figure's middle picks it up
 const SNAP_PIXELS = 56; // a drop this close to a room's token spot lands on that room
 const SMOKE_COLOR = '#6b7686'; // the smoke figure's grey (figures.ts), a little deeper so it reads on the daylight model
+// One haze layer has a single face where the old box had several, so it carries more of the tint.
+const HAZE_BOOST = 2;
+// White in the middle, fading to clear at the edges, so a room's haze has no hard outline. Made once.
+let hazeMap: THREE.CanvasTexture | null = null;
+function hazeTexture(): THREE.CanvasTexture {
+  if (hazeMap) return hazeMap;
+  const n = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = n;
+  const g = canvas.getContext('2d')!;
+  const img = g.createImageData(n, n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const e = Math.min(x, y, n - 1 - x, n - 1 - y) / (n * 0.22); // 0 at the edge, 1 a fifth of the way in
+    const a = Math.min(1, e);
+    const i = (y * n + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+    img.data[i + 3] = Math.round(255 * a * a * (3 - 2 * a));
+  }
+  g.putImageData(img, 0, 0);
+  hazeMap = new THREE.CanvasTexture(canvas);
+  return hazeMap;
+}
 const REFUSED = 'Not placed: drop it on a floor of the tower';
 // The yaw at which each figure's front (or long axis) points along +x when its heading is 0
 // (figures.ts): Kenney characters face +z, the wheelchair group turns -0.5 and each person pi / 4 for
@@ -153,6 +177,7 @@ interface Run {
 export function createViewer(container: HTMLElement, options: ViewerOptions = {}): Viewer {
   let insetRight = options.insetRight ?? 0;
   let insetLeft = 0;
+  let insetBottom = 0;
   injectStyles();
   if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
 
@@ -427,8 +452,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     plan = planRun(runs.map((run) => run.item));
   }
 
-  // The smoke tint (smoke.ts): one translucent block per reached node of the slice, drawn with the
-  // routes. Rebuilt whenever the building, the covered set or the spread changes.
+  // The smoke tint (smoke.ts): one soft-edged haze layer per reached node of the slice, at the middle
+  // of its haze height, drawn with the routes. A flat layer with faded edges reads as haze; a
+  // translucent box read as a grey block. Rebuilt whenever the building, the covered set or the spread changes.
   function drawSmoke(): void {
     if (haze) {
       disposeTree(haze.group, shared);
@@ -438,8 +464,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!smokeSpread || !shown) return;
     const group = new THREE.Group();
     const blocks = smokeTints(shown.building, covered, smokeSpread.steps).map((t) => {
-      const material = new THREE.MeshBasicMaterial({ color: SMOKE_COLOR, transparent: true, opacity: t.opacity, depthWrite: false });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...t.size), material);
+      const material = new THREE.MeshBasicMaterial({ color: SMOKE_COLOR, map: hazeTexture(), transparent: true, opacity: Math.min(1, t.opacity * HAZE_BOOST), depthWrite: false, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.size[0], t.size[2]), material);
+      mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(...t.center);
       mesh.renderOrder = 1;
       group.add(mesh);
@@ -472,7 +499,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
-    Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, insetLeft, margin: VIEW_MARGIN * zoom }), pan));
+    Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, insetLeft, insetBottom, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
     // The level in the middle of the free view stays the top one drawn.
@@ -1207,6 +1234,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     fit();
   }
 
+  function setInsetBottom(pixels: number): void {
+    if (pixels === insetBottom) return;
+    insetBottom = pixels;
+    fit();
+  }
+
   function setCovered(ids: Iterable<Id>): void {
     covered = new Set(ids);
     if (shown) show(shown.building, shown.results);
@@ -1243,7 +1276,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setInsetLeft, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
+  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setInsetLeft, setInsetBottom, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements

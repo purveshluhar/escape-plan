@@ -92,7 +92,7 @@ export interface LabelLayout {
 export interface Rect { l: number; r: number; t: number; b: number }
 const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
-// 'none': every side covers another card, another red X or a box to avoid, so the card is left out
+// 'none': every side covers another card, another red X or a box to avoid, or runs past the screen edge, so the card is left out
 // and only its X shows (the fix sheet still says it). Text is never drawn over text.
 export type LabelSide = 'right' | 'left' | 'above' | 'none';
 const SIDES: LabelSide[] = ['right', 'left', 'above'];
@@ -126,8 +126,8 @@ export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[]
       const n = clashes(rect);
       if (!best || n < best.n) best = { side, rect, n };
     }
-    // Off the edge alone is a lesser harm than covering text, so only a clash with something else leaves a card out.
-    if (best!.n - offEdge(best!.rect, minX, maxX) > 0) {
+    // A card is drawn whole or not at all: one that would cover text or run past the screen edge is left out.
+    if (best!.n > 0) {
       sides[i] = 'none';
       continue;
     }

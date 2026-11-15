@@ -136,6 +136,19 @@ test('a panel on the left too: the model centres in the free space between the t
     frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, margin: 1 }));
 });
 
+test('a panel along the bottom: the model fits and centres in the free space above it', () => {
+  // 1000 x 500 px canvas, a 250 px strip along the bottom: 1000 x 250 px free, from the top to 250 px.
+  const lifted = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 0, insetBottom: 250, margin: 1 });
+  const centreY = ((lifted.top - 0) / (lifted.top - lifted.bottom)) * 500; // pixels from the top
+  assert.equal(centreY, 125);
+  // The 10 m tall model fills the 250 px free height, so 1 m is 25 px across and down.
+  assert.equal(500 / (lifted.top - lifted.bottom), 25);
+  assert.equal(1000 / (lifted.right - lifted.left), 25);
+  // With no bottom panel it is the plain case.
+  assert.deepEqual(frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, insetBottom: 0, margin: 1 }),
+    frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, margin: 1 }));
+});
+
 test('covered nodes are left out of the drawn boxes, the rest keep their order', () => {
   const boxes = [
     { id: 'a', center: [0, 0, 0], size: [1, 1, 1] },

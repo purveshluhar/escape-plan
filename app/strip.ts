@@ -88,3 +88,21 @@ export function answerLines(results: readonly SolverResult[], building: Building
     return { name: nameOf(r.token), answer: 'No', detail: keepUnits(`Stuck${where}: ${REASON_TEXT[r.reason ?? 'no_route']}${nums ? `, ${nums}` : ''}`) };
   });
 }
+
+// Where the model goes while the strip is open, so the strip never covers the answer it explains.
+// On a wide screen it moves right of the strip; on a laptop, where the room beside it is too narrow,
+// it lifts above the strip; when neither leaves enough room, it stays where it is. Pixels.
+export const STRIP_GAP = 16; // kept between the strip and the model
+const WIDE = 1500; // screens this wide and wider move the model beside the strip
+const MIN_MODEL_WIDTH = 480; // the least free width the model is framed in beside the strip
+const MIN_MODEL_HEIGHT = 300; // the least free height the model is framed in above the strip
+export function stripInsets(s: {
+  width: number; height: number; rightPanel: number;
+  strip: { left: number; right: number; top: number } | null;
+}): { left: number; bottom: number } {
+  if (!s.strip) return { left: 0, bottom: 0 };
+  const left = s.strip.right + STRIP_GAP;
+  if (s.width >= WIDE && s.width - left - s.rightPanel >= MIN_MODEL_WIDTH) return { left, bottom: 0 };
+  const above = s.strip.top - STRIP_GAP;
+  return { left: 0, bottom: above >= MIN_MODEL_HEIGHT ? s.height - above : 0 };
+}

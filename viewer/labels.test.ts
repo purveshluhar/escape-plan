@@ -62,6 +62,15 @@ test('a label never runs off the edge of the free screen when the other side is 
   assert.deepEqual(labelSides([{ x: 60, y: 300, width: 250 }], layout), ['right']);
 });
 
+test('a card that fits only past the screen edge is left out, its X stays (1100 px, six questions)', () => {
+  // People at 1100 px: its right side and above cover the chiller X and card just up and right of it, and the
+  // left side runs past the left edge. A card is drawn whole or not at all.
+  const spots = [{ x: 160, y: 300, width: 260 }, { x: 236, y: 260, width: 260 }];
+  const sides = labelSides(spots, { ...layout, minX: 8, maxX: 700 });
+  assert.equal(sides[1], 'right');
+  assert.equal(sides[0], 'none');
+});
+
 test('room labels use the building names and mark the exit', () => {
   const street = b.nodes.find((n) => n.is_exit)!;
   assert.equal(roomLabel(street.name, street.is_exit), `${street.name} - exit`);

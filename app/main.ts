@@ -37,7 +37,7 @@ import type { Reading } from './parse-client.ts';
 import { findHint, hintModel } from './hint.ts';
 import type { HintResult } from './hint.ts';
 import { renderHint, stackAbove } from './hint-view.ts';
-import { answerLines } from './strip.ts';
+import { answerLines, stripInsets } from './strip.ts';
 import { renderStrip } from './strip-view.ts';
 import { RACE, answerRows, helpfulCloseButtons, drawnResults, raceSpread, raceText, racePlaced } from './smoke.ts';
 import { readVotes, voteRequests } from './votes.ts';
@@ -82,9 +82,6 @@ const S: State = {
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
-const STRIP_GAP = 16; // pixels kept between the strip and the model
-const WIDE = 1500; // screens this wide and wider move the model clear of the strip
-const MIN_MODEL_WIDTH = 480; // the least free width the model is framed in beside the strip
 // The loaded city and real floors (null until they load) and the viewer's last reveal, so floors
 // that load after a zoom in still get it.
 const context3d = { block: null as THREE.Object3D | null, floor: null as TypicalFloor | null, amount: 0, cut: Infinity, dimmed: 0 };
@@ -543,14 +540,19 @@ function renderEdit(): void {
   clearOfStrip();
 }
 
-// On a wide screen the model moves right of the open strip, so the strip never covers the answer
-// it explains. Narrower screens keep the model where it is: the space left would be too small.
-// Run on each render and on a window resize (the strip's width and the free space change with it).
+// The model moves clear of the open strip (stripInsets: beside it on a wide screen, above it on a
+// laptop), so the strip never covers the answer it explains. Run on each render and on a window
+// resize (the strip's size and the free space change with it).
 function clearOfStrip(): void {
   const strip = $('strip');
-  const stripRight = strip.classList.contains('on') ? strip.offsetLeft + strip.offsetWidth + STRIP_GAP : 0;
-  const roomLeft = innerWidth - stripRight - (S.results && S.results.length > 0 ? insetFor(S.results) : 0);
-  viewer.setInsetLeft(stripRight > 0 && innerWidth >= WIDE && roomLeft >= MIN_MODEL_WIDTH ? stripRight : 0);
+  const on = strip.classList.contains('on');
+  const inset = stripInsets({
+    width: innerWidth, height: innerHeight,
+    rightPanel: S.results && S.results.length > 0 ? insetFor(S.results) : 0,
+    strip: on ? { left: strip.offsetLeft, right: strip.offsetLeft + strip.offsetWidth, top: strip.offsetTop } : null,
+  });
+  viewer.setInsetLeft(inset.left);
+  viewer.setInsetBottom(inset.bottom);
   if (S.results) viewer.setInsetRight(insetFor(S.results)); // the sheet's slot moves below the model under 701 px
 }
 window.addEventListener('resize', clearOfStrip);

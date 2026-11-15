@@ -301,6 +301,10 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   /* the taller dock leaves less height; the sheet's top stays on screen and below the summary pill */
   #sheet{max-height:calc(100vh - var(--dockb) - 84px)}
 }
+/* 701 to 1367 px (where a centred panel reaches the sheet): the Answers panel opens in the free column left of the fix sheet or the all-yes banner, never over them */
+@media (max-width:1367px) and (min-width:701px){
+  body:has(#sheet.on) #scorePanel,body:has(#banner.on) #scorePanel{left:16px;transform:none;width:min(560px,calc(100vw - 436px));animation:sheetIn .4s var(--soft)}
+}
 
 /* ---------- Compact (phone) ---------- */
 @media (max-width:700px){

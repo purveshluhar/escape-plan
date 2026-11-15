@@ -6,7 +6,7 @@ import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts'
 import type { Reading } from './parse-client.ts';
 import { parseEdit } from './shell.ts';
 import { demoButtons } from './state.ts';
-import { answerLines, stripModel } from './strip.ts';
+import { answerLines, stripInsets, stripModel } from './strip.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
 const building = read('../data/building.json') as Building;
@@ -91,4 +91,16 @@ test('strip text has no game words', () => {
   const strings = [...src.matchAll(/'([^'\n]*)'|`([^`\n]*)`/g)].map((m) => m[1] ?? m[2] ?? '')
     .filter((s) => s !== 'pass' && s !== 'fail').join('\n');
   assert.doesNotMatch(strings, /\b(level complete|score|win|player|tokens?|PASS|FAIL|escaping)\b/i);
+});
+
+test('the model moves clear of the open strip: right of it on a wide screen, above it on a laptop', () => {
+  const screen = { width: 1920, height: 1080, rightPanel: 404 };
+  // 1920 px: the strip is 24 to 824 px wide; 1080 px stay free beside it, so the model moves right.
+  assert.deepEqual(stripInsets({ ...screen, strip: { left: 24, right: 824, top: 640 } }), { left: 840, bottom: 0 });
+  // 1366 x 768: 138 px beside the strip is too narrow, so the model lifts above it (strip top 383 px).
+  assert.deepEqual(stripInsets({ width: 1366, height: 768, rightPanel: 404, strip: { left: 24, right: 824, top: 383 } }), { left: 0, bottom: 401 });
+  // A tall strip (Did you mean) leaves too little height above it: the model stays where it is.
+  assert.deepEqual(stripInsets({ width: 1366, height: 768, rightPanel: 404, strip: { left: 24, right: 798, top: 242 } }), { left: 0, bottom: 0 });
+  // No strip: no inset.
+  assert.deepEqual(stripInsets({ ...screen, strip: null }), { left: 0, bottom: 0 });
 });
