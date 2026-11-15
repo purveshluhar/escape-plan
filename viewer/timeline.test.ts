@@ -105,6 +105,23 @@ test('never more than 3 decisive moments; a run with every token stays within 15
   }
 });
 
+test('the answers are all on screen at plan.answered: the last red X is up, before a stop hold plays out', () => {
+  const settled = (plan: ReturnType<typeof planRun>, list: RunItem[], wall: number): boolean =>
+    list.every((it, k) => ['stopped', 'done'].includes(localState(it, tokenClock(plan, k, wall) - plan.starts[k]!).phase));
+  for (const [id, tokens] of [['sofa-and-people-base', ['sofa', 'people']], ['base', ['people']], ['full-demo', ['sofa', 'people', 'wheelchair']]] as const) {
+    const list = items(id, [...tokens]);
+    const plan = planRun(list);
+    assert.ok(settled(plan, list, plan.answered + 1e-6), `${id}: every answer shows at ${plan.answered} s`);
+    assert.ok(!settled(plan, list, plan.answered - 0.05), `${id}: not before ${plan.answered} s`);
+    assert.ok(plan.answered <= plan.end, id);
+  }
+  // A calm stop last: its hold still plays after the answer is up, so the app need not wait for it.
+  const people = items('base', ['people']);
+  const plan = planRun(people);
+  near(plan.end - plan.answered, TIMING.stopHoldSeconds, 1e-9, 'the stop hold after the X');
+  assert.equal(planRun([]).answered, 0);
+});
+
 test('a run with nothing to move ends at once', () => {
   assert.equal(planRun([]).end, 0);
 });

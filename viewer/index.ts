@@ -36,7 +36,8 @@ import {
 } from './layout.ts';
 
 export interface Viewer {
-  // Draws the results and plays their run; returns the run's length in seconds (0 with no route to play).
+  // Draws the results and plays their run; returns the seconds until every answer is on screen (each
+  // red X up, each walk ended; 0 with no route to play). A calm stop's hold may play on after it.
   show(building: Building, results: SolverResult[]): number;
   // Optional context drawn under everything (for example the Cityweft block), already placed in
   // viewer metres. It never changes the framing, and the building always draws over it. null clears it.
@@ -235,7 +236,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let selected: { id: Id; caption: string | null } | null = null;
   let dragEnabled = true;
   let t0 = performance.now();
-  let plan: Plan = { starts: [], beats: [], end: 0 };
+  let plan: Plan = { starts: [], beats: [], end: 0, answered: 0 };
   // Two objects at one corner (glass and sofa at the lobby door) each have a diagram with their own
   // numbers, but only one shows: the object that last reached the turn owns the edge.
   const cornerOwner = new Map<Id, Run>();
@@ -874,8 +875,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!run || !selected?.caption) return;
     const el = document.createElement('div');
     el.className = 'ep-tag';
-    el.append(document.createElement('span'));
-    el.firstElementChild!.textContent = selected.caption;
+    // A dot in the figure's own colour leads the line, so a caption next to another figure (the load
+    // under the chiller in the close view) still reads as its own figure's.
+    const dot = document.createElement('i');
+    dot.className = 'ep-tag-dot';
+    dot.style.background = DISCIPLINE_STYLE[run.discipline].color;
+    const span = document.createElement('span');
+    span.append(dot, selected.caption);
+    el.append(span);
     captionObj = new CSS2DObject(el);
     run.token.add(captionObj);
   }
@@ -1085,6 +1092,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     setZoom(1);
   });
   new ResizeObserver(fit).observe(container);
+  // A panel over the model (`avoid`) that opens, closes or grows after a run started (the review panel
+  // once the answers are up, the strip once a sentence is read): the cards lay out again, clear of it.
+  const panels = new ResizeObserver(() => fit());
+  for (const el of options.avoid?.() ?? []) panels.observe(el);
   renderer.setAnimationLoop(frame);
 
   // The figure models load once, in the background. Until then (or if a file fails) each figure
@@ -1120,7 +1131,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     banner.classList.remove('on', 'small');
     fit();
     t0 = performance.now();
-    return plan.end;
+    return plan.answered;
   }
 
   function setBackdrop(object: THREE.Object3D | null): void {
@@ -1247,6 +1258,8 @@ function injectStyles(): void {
 .ep-tag span { position: absolute; transform: translate(-50%, 14px); white-space: nowrap; font: 700 14px/1 ${FONT_BODY};
   color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px solid ${ACCENT}; border-radius: 999px; padding: 7px 11px;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14); }
+.ep-tag-dot { display: inline-block; width: 10px; height: 10px; margin: 0 7px 1px 0; border-radius: 50%;
+  vertical-align: middle; box-shadow: 0 0 0 1.5px ${TEXT}; }
 .ep-hint, .ep-toast { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; z-index: 100002;
   font: 700 14px/1 ${FONT_BODY}; color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px solid ${ACCENT};
   border-radius: 999px; padding: 8px 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14); opacity: 0; }

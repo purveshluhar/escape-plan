@@ -164,6 +164,9 @@ export interface Plan {
   starts: number[]; // each token's start offset, seconds
   beats: Beat[]; // in time order, never overlapping
   end: number; // seconds until every token has finished
+  // Seconds until every answer is on screen: each No token stopped (its red X up), each Yes token
+  // arrived. A calm stop's hold can still play after it, with nothing moving.
+  answered: number;
 }
 
 // A token's own clock: wall time minus the time it spent holding still for other tokens' beats.
@@ -209,14 +212,15 @@ export function planRun(items: readonly RunItem[]): Plan {
     const [p] = pending.splice(best, 1);
     beats.push({ owner: p!.k, wall: bestWall, seconds: p!.seconds });
   }
-  let end = 0;
+  let answered = 0;
   items.forEach((it, k) => {
     if (it.distance < 1e-6) return;
     const local = travelSeconds(it.distance) + turnSeconds(it);
-    end = Math.max(end, wallFor(beats, k, starts[k]! + local));
+    answered = Math.max(answered, wallFor(beats, k, starts[k]! + local));
   });
+  let end = answered;
   for (const b of beats) end = Math.max(end, b.wall + b.seconds);
-  return { starts, beats, end };
+  return { starts, beats, end, answered };
 }
 
 // Token k's walk at `wall` seconds, in units of `unit` seconds for its whole trip: 0 as it sets off,
