@@ -20,7 +20,7 @@ import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
-import { allYesText, questionOf, yesLine } from './questions.ts';
+import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
   countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
@@ -303,7 +303,7 @@ function render(): void {
   sm.disabled = S.phase === 'empty';
   sm.setAttribute('aria-expanded', String(S.scoreOpen));
   const each = S.placed.map((id) => `${itemOf(id).label} ${resOf(id) ? (resOf(id)!.status === 'pass' ? 'yes' : 'no') : running ? 'checking' : 'ready'}`);
-  sm.setAttribute('aria-label', `${[phase, counted, ...each].join(', ')}. Opens the answers.`);
+  sm.setAttribute('aria-label', `Answers: ${[phase, counted, ...each].join(', ')}`);
 
   // Answers rows, and the footer line that keeps the claim honest (ADR 0010)
   const b = edited();
@@ -314,7 +314,7 @@ function render(): void {
     const r = resOf(id);
     const token = b.tokens.find((t) => t.id === id)!;
     const det = !r ? `Starts in ${placeName(b, token.start)}`
-      : r.status === 'pass' ? `${yesLine(id)}. Route: ${r.path.map((p) => placeName(b, p)).join(', ')}`
+      : r.status === 'pass' ? `${yesLine(id)}. Route: ${routeShown(id, r.path).map((p) => placeName(b, p)).join(', ')}`
       : stuckLine(b, r);
     return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, askOf(id)), word(r), h('span', { class: 'det num' }, det));
   }), h('div', { class: 'snote' }, 'A quick check of sizes and routes, not a code review.'));
@@ -322,9 +322,10 @@ function render(): void {
   // Live note and the all-yes banner
   $('note').textContent = S.note;
   $('banner').classList.toggle('on', S.phase === 'complete');
+  // Written only when the words change, so the status region is not read out again on every render.
   const yes = allYesText(S.placed, n);
-  $('bannerBig').textContent = yes.title;
-  $('bannerSub').textContent = yes.lines;
+  if ($('bannerBig').textContent !== yes.title) $('bannerBig').textContent = yes.title;
+  if ($('bannerSub').textContent !== yes.lines) $('bannerSub').textContent = yes.lines;
 
   renderSheet(b);
   renderEdit();

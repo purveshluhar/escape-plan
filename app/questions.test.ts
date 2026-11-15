@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { Building } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
 import { MVP_TOKENS } from './mvp.ts';
-import { QUESTIONS, allYesText, questionOf, yesLine } from './questions.ts';
+import { QUESTIONS, allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import { metres, stuckLine } from './scoreboard.ts';
 
 const building = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -34,6 +34,7 @@ test('a token with no question gets none, not a crash', () => {
 
 test('metres always show at least one decimal', () => {
   assert.deepEqual([2, 0.5, 1.17, 3.7102104972170333, 1.9967350242673378, 0.15].map(metres), ['2.0 m', '0.5 m', '1.17 m', '3.71 m', '2.0 m', '0.15 m']);
+  assert.equal(metres(-0.001), '0.0 m', 'no minus zero');
 });
 
 test('the no line says who is stuck, where, why and the numbers, with the verb agreeing', () => {
@@ -55,4 +56,12 @@ test('all yes: a calm headline, the yes lines and the edit count', () => {
     lines: 'The wheelchair gets out, no steps. The sofa gets in. Everyone gets out. With 3 edits.',
   });
   assert.equal(allYesText(['people'], 1).lines, 'Everyone gets out. With 1 edit.');
+});
+
+test('a get-in question lists its route from the street in; a get-out question lists it as walked', () => {
+  const walked = ['lobby', 'corridor', 'street'];
+  assert.deepEqual(routeShown('sofa', walked), ['street', 'corridor', 'lobby']);
+  assert.deepEqual(routeShown('people', walked), walked);
+  assert.deepEqual(routeShown('glass', ['street', 'lobby']), ['street', 'lobby'], 'glass already walks in');
+  assert.deepEqual(walked, ['lobby', 'corridor', 'street'], 'the walked route is not changed');
 });

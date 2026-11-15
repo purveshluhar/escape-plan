@@ -45,8 +45,9 @@ test('phase and summary words', () => {
   assert.equal(countText('result', 2, [res('chiller', 'pass'), res('glass', 'fail')]), '1 yes, 1 no');
   assert.equal(countText('result', 1, [res('glass', 'fail')]), 'No');
   assert.equal(countText('complete', 3, [res('a', 'pass'), res('b', 'pass'), res('c', 'pass')]), '3 of 3 yes');
+  assert.equal(countText('complete', 1, [res('a', 'pass')]), 'Yes', 'one question answered yes reads Answer | Yes');
   assert.deepEqual((['empty', 'placed', 'running'] as const).map((p) => phaseWord(p, 2)), ['Your building', 'Ready', 'Checking']);
-  assert.deepEqual([phaseWord('result', 1), phaseWord('result', 2), phaseWord('complete', 1), phaseWord('complete', 3)], ['Answer', 'Answers', 'Yes', 'Yes to all']);
+  assert.deepEqual([phaseWord('result', 1), phaseWord('result', 2), phaseWord('complete', 1), phaseWord('complete', 3)], ['Answer', 'Answers', 'Answer', 'Yes to all']);
   assert.equal(runSeconds(0, 2, 0.25), 0);
   assert.equal(runSeconds(4, 2, 0.25), 2.75);
 });
@@ -123,6 +124,8 @@ test('the all-yes banner shows with the Answers panel open, in the empty fix she
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(page, /body\.scoring #banner\.on\{display:none\}/);
   assert.match(page, /#banner\{position:fixed;right:24px;bottom:104px;/, 'the banner sits where the fix sheet sits (empty when all is yes)');
+  const laptop = page.slice(page.indexOf('@media (max-width:1500px)'));
+  assert.doesNotMatch(laptop.slice(0, laptop.indexOf('}\n}')), /#btnEscape kbd/, 'Show me keeps its Space hint on a laptop');
 });
 
 test('the page puts no game words in front of people', () => {

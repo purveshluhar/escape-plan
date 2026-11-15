@@ -20,7 +20,7 @@ const METRES: ReadonlySet<Reason> = new Set(['too_narrow', 'too_low', 'cannot_tu
 
 // At least one decimal, so a measurement reads as one: 2 -> "2.0", 1.17 -> "1.17".
 const num = (n: number): string => {
-  const s = n.toFixed(2);
+  const s = (Math.abs(n) < 0.005 ? 0 : n).toFixed(2); // no "-0.0"
   return s.endsWith('0') ? s.slice(0, -1) : s;
 };
 
@@ -48,8 +48,9 @@ export function failText(b: Building, r: SolverResult): FailText | null {
   if (reason === 'step' && r.available !== null) numbers = `${num(r.available)} m high, needs level`;
   else if (reason === 'no_support') numbers = 'no path down to a foundation';
   else if (r.needed !== null && r.available !== null) {
-    const unit = METRES.has(reason) ? ' m' : '';
-    numbers = `needs ${num(r.needed)}${unit}, has ${num(r.available)}${unit}`;
+    // Metres show one decimal; people and smoke count steps, as app/scoreboard.ts amount().
+    const show = (v: number): string => (METRES.has(reason) ? `${num(v)} m` : reason === 'smoke_first' ? `${v} steps` : String(v));
+    numbers = `needs ${show(r.needed)}, has ${show(r.available)}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');
   return { title: `${label}: ${REASON_WORDS[reason]}`, detail };
@@ -72,7 +73,7 @@ export interface LabelLayout {
   xSize?: number; // half the size of a red X
 }
 
-interface Rect { l: number; r: number; t: number; b: number }
+export interface Rect { l: number; r: number; t: number; b: number }
 const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
 export type LabelSide = 'right' | 'left' | 'above';
@@ -108,6 +109,15 @@ export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[]
     placed.push(best!.rect);
   }
   return sides;
+}
+
+// Which room labels the selection caption covers (screen boxes, pixels). A label within `margin`
+// of the caption counts too, so the two never touch. The viewer hides those labels: no text sits
+// over text.
+export function coveredBy(caption: Rect | null, rooms: readonly Rect[], margin = 4): boolean[] {
+  if (!caption) return rooms.map(() => false);
+  const grown = { l: caption.l - margin, r: caption.r + margin, t: caption.t - margin, b: caption.b + margin };
+  return rooms.map((room) => overlaps(grown, room));
 }
 
 // About how wide a fail label is in pixels, from its text (14 px title, 15 px detail).

@@ -112,13 +112,13 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .caret::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateY(-2px) rotate(45deg);transition:transform .4s var(--spring)}
 #summary[aria-expanded="true"] .caret::after{transform:translateY(2px) rotate(225deg)}
 #scorePanel{position:fixed;top:78px;left:50%;transform:translateX(-50%);border-radius:28px;padding:10px 16px;
-  width:min(560px,calc(100vw - 24px));display:none}
+  width:min(560px,calc(100vw - 24px));display:none;max-height:calc(100vh - 380px);overflow-y:auto}
 #scorePanel.open{display:block;animation:fadeup .4s var(--soft)}
 .srow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:10px 4px;border-bottom:1px solid rgba(20,22,28,.08)}
 .srow:last-child{border-bottom:0}
 .srow .nm{font:600 17px/1.2 var(--font)} .srow .word{font-size:20px}
 .srow .det{grid-column:2 / 4;font:400 16px/1.35 var(--font);color:var(--muted)}
-.snote{padding:10px 4px 4px;font:400 14px/1.3 var(--font);color:var(--muted)}
+.snote{padding:10px 4px 4px;font:400 15px/1.3 var(--font);color:var(--muted)}
 @keyframes fadeup{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 
 #note{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -129,7 +129,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 #banner.on{display:block;animation:sheetIn .5s var(--soft)}
 body.editing #banner.on{display:none}
 #banner .big{font:800 34px/1.1 var(--font);color:var(--pass)}
-#banner .sub{margin-top:8px;font:500 18px/1.4 var(--font);color:var(--ink)}
+#banner .sub{margin-top:8px;font:500 18px/1.4 var(--font);color:var(--ink);text-wrap:pretty}
 
 /* ---------- Buttons in panels ---------- */
 .fixbtn{height:46px;padding:0 18px;border-radius:999px;font:600 16px/1 var(--font);text-align:left;white-space:nowrap;
@@ -146,9 +146,9 @@ body.editing #banner.on{display:none}
 #sheet.on{display:block;animation:sheetIn .5s var(--spring)}
 #sheet .lbl{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px}
 .fcard{padding:10px 8px;border-bottom:1px solid rgba(20,22,28,.08)}
-.fcard .who{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px 2px}
+.fcard .who{font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px 2px}
 .fcard .top{display:flex;align-items:center;gap:10px}
-.fcard .nm{font:600 17px/1.2 var(--font);min-width:0}
+.fcard .nm{font:600 17px/1.2 var(--font);min-width:0;text-wrap:balance}
 .fcard .word{font-size:20px;margin-left:auto}
 .fcard .rs{margin:8px 0 2px 2px;font:600 16px/1.25 var(--font)}
 .fcard .rs span{font-weight:400}
@@ -186,20 +186,26 @@ body.editing #banner.on{display:none}
 /* ---------- Laptop (1366 px): three questions, the tools and Show me fit in one dock ---------- */
 @media (max-width:1500px){
   .chip{font-size:15px;padding:0 12px 0 8px;gap:8px}
-  .chip kbd,.tool kbd,#btnEscape kbd{display:none}
+  .chip kbd,.tool kbd{display:none}
   .tool{padding:0 12px}
-  #btnEscape{padding:0 24px}
+  #btnEscape{padding:0 20px 0 24px}
 }
 
 /* ---------- Short screens (768 px): the fix sheet keeps its foot buttons in view ---------- */
 @media (max-height:820px){
-  #sheet{bottom:96px;max-height:calc(100vh - 116px);padding:8px 8px 6px}
+  #sheet{bottom:104px;max-height:calc(100vh - 124px);padding:8px 8px 6px}
   #sheet .lbl{padding:2px 8px 4px}
   .fcard{padding:6px 8px}
   .fcard .who{margin-bottom:4px}
   .fcard .rs{margin-top:4px}
   .fcard .fx{margin-top:6px}
   .fcard .fx .fixbtn{height:38px}
+}
+
+/* ---------- Narrow (701 to 1100 px): the chips show the short name so the dock fits ---------- */
+@media (max-width:1100px){
+  .chip .ask{display:none}
+  .chip .short{display:inline}
 }
 
 /* ---------- Compact (phone) ---------- */
@@ -222,7 +228,7 @@ body.editing #banner.on{display:none}
   .chip .short{display:inline}
   #summary .sline{flex-basis:100%;justify-content:center;gap:8px}
   .schip .word{font-size:16px}
-  #scorePanel{top:120px}
+  #scorePanel{top:120px;max-height:calc(100vh - 440px)}
   #sheet{left:8px;right:8px;width:auto;bottom:136px;max-height:45vh}
   #editPanel{bottom:136px;left:8px;right:8px;width:auto}
   #banner{left:8px;right:8px;width:auto;bottom:136px}

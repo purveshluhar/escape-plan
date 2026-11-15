@@ -61,6 +61,8 @@ Each question opens the scenario. Numbers are LIVE from the solver on `data/buil
 Where the question shows:
 
 1. **Dock chip** (the picker): dot, question, key number. The muted lead word `Place` becomes `Ask`.
+   Under 1500 px wide (a 1366 px laptop) the chip and tool key hints hide so the dock fits;
+   the keys still work, and `Show me` keeps its `Space` hint.
 2. **Fix card header**: the person in small muted caps ("HOME BUYER"), then the question, then `No`.
 3. **Answers panel row**: question, `Yes` or `No`, then the yes line or the stuck line.
 4. **Caption on the model** keeps the short name ("Sofa - Lobby - No"). The question is already on the chip.
@@ -125,7 +127,7 @@ letter at the start of a line):
 | S19 | app/main.ts:105 | `...` / `Ready` | keep | Neutral |
 | S20 | index.html:233, app/main.ts:299 | aria `Scoreboard`, `Scoreboard: ...` | `Answers`, `Answers: ...` | Score is a game term |
 | S21 | app/main.ts:309 | `Starts in Lobby` | keep | Plain |
-| S22 | app/main.ts:310 | `Out via A, B, C` | `Route: A, B, C` | Works for in and out |
+| S22 | app/main.ts:310 | `Out via A, B, C` | `Route: A, B, C`, listed from the street in for a get-in question (sofa) | Works for in and out |
 | S23 | app/main.ts:327-330 | `Cannot turn at Lobby door - needs ...` | `{Name} is (are) stuck at {Place}: {reason}, {numbers}` | One stuck line everywhere (section 3) |
 | S24 | new, foot of `#scorePanel` | none | `A quick check of sizes and routes, not a code review.` | Keeps ADR 0007's no-compliance rule |
 | S25 | index.html:235, app/main.ts:318 | `LEVEL COMPLETE` / `Every object got out of the building` / `3 of 3 out with 2 edits` | `Yes` or `Yes to all {n}` / yes lines joined, then `With {k} edits.`; a glass card in the fix sheet slot (right, above the dock), shown with the Answers panel open | Section 3; never over the Answers panel |

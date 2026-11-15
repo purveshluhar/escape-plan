@@ -97,7 +97,7 @@ export function phaseWord(phase: Phase, placed: number): string {
     case 'placed': return 'Ready';
     case 'running': return 'Checking';
     case 'result': return placed === 1 ? 'Answer' : 'Answers';
-    case 'complete': return placed === 1 ? 'Yes' : 'Yes to all';
+    case 'complete': return placed === 1 ? 'Answer' : 'Yes to all';
   }
 }
 
@@ -107,8 +107,8 @@ export function countText(phase: Phase, placed: number, results: readonly Solver
   if (phase === 'running') return count(placed, 'route');
   if ((phase === 'result' || phase === 'complete') && results) {
     const yes = results.filter((r) => r.status === 'pass').length;
-    if (phase === 'complete') return `${yes} of ${results.length} yes`;
     if (results.length === 1) return yes === 1 ? 'Yes' : 'No';
+    if (phase === 'complete') return `${yes} of ${results.length} yes`;
     return `${yes} yes, ${results.length - yes} no`;
   }
   return count(placed, 'question');

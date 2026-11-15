@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { failText, labelSides, roomLabel } from './labels.ts';
+import { coveredBy, failText, labelSides, roomLabel } from './labels.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
 
 const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -26,6 +26,11 @@ test('a step says how high it is; a lost support says why', () => {
 test('metres on the model show at least one decimal', () => {
   const sofa = failText(b, fail({ token: 'sofa', blocked_at: 'lobby-door', reason: 'cannot_turn', needed: 2.2, available: 1.9967350242673378 }));
   assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: needs 2.2 m, has 2.0 m' });
+});
+
+test('people and smoke count steps on the model too, not decimals', () => {
+  const smoke = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 4, available: 3 }));
+  assert.equal(smoke?.detail, 'Office door: needs 4 steps, has 3 steps');
 });
 
 test('a pass has no fail label', () => {
@@ -61,4 +66,14 @@ test('room labels use the building names and mark the exit', () => {
   const street = b.nodes.find((n) => n.is_exit)!;
   assert.equal(roomLabel(street.name, street.is_exit), `${street.name} - exit`);
   assert.equal(roomLabel('Lobby', false), 'Lobby');
+});
+
+test('a room label under the selection caption hides, so no text sits over text', () => {
+  const caption = { l: 552, r: 711, t: 765, b: 795 }; // "People - Office - Yes" at 1920 px
+  const street = { l: 585, r: 677, t: 763, b: 777 }; // "STREET - EXIT" under it
+  const touching = { l: 345, r: 437, t: 541, b: 554 }; // 1366 px: label 1 px above the caption top
+  const clear = { l: 100, r: 200, t: 100, b: 114 };
+  assert.deepEqual(coveredBy(caption, [street, clear]), [true, false]);
+  assert.deepEqual(coveredBy({ l: 311, r: 471, t: 555, b: 578 }, [touching]), [true], 'within the margin counts as covered');
+  assert.deepEqual(coveredBy(null, [street]), [false], 'no caption hides nothing');
 });

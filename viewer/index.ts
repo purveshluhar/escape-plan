@@ -14,7 +14,8 @@ import { dropTarget, figureScale, movedPastSlop, pickToken, pressIntent } from '
 import type { DropTarget, Ray } from './drop.ts';
 import { figureLights, makeFigure } from './figures.ts';
 import type { Figure } from './figures.ts';
-import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
+import { coveredBy, failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
+import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
 } from './layout.ts';
@@ -358,6 +359,19 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     labels.render(rooms, camera);
     labels.render(fx, camera);
+    hideCoveredRooms();
+  }
+
+  // A room label under the selection caption hides while the caption is there (labels.ts coveredBy).
+  function hideCoveredRooms(): void {
+    const box = (el: Element): Rect => {
+      const b = el.getBoundingClientRect();
+      return { l: b.left, r: b.right, t: b.top, b: b.bottom };
+    };
+    const shown = captionObj?.visible && captionObj.element.isConnected ? box(captionObj.element) : null;
+    const tags = roomTags.filter((tag) => tag.obj.visible);
+    const hidden = coveredBy(shown, tags.map((tag) => box(tag.obj.element)));
+    tags.forEach((tag, i) => (tag.obj.element.style.visibility = hidden[i] ? 'hidden' : ''));
   }
 
   renderer.domElement.addEventListener('wheel', (e) => {

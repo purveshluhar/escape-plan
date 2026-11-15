@@ -44,7 +44,7 @@ export function placeName(building: Building, id: string): string {
 
 // Metres with at least one decimal, so a measurement reads as one: 2 -> "2.0 m", 1.17 -> "1.17 m".
 export function metres(v: number): string {
-  const s = v.toFixed(2);
+  const s = (Math.abs(v) < 0.005 ? 0 : v).toFixed(2); // no "-0.0 m"
   return `${s.endsWith('0') ? s.slice(0, -1) : s} m`;
 }
 

@@ -9,11 +9,12 @@ export interface Question {
   ask: string; // the question on the chip and the card: "Can my sofa get in?"
   yes: string; // the answer line when the solver says pass: "The sofa gets in"
   plural: boolean; // "People are stuck", not "People is stuck"
+  getsIn?: boolean; // the data walks it out, the person asks about getting in: list the route reversed
 }
 
 export const QUESTIONS: Readonly<Record<Id, Question>> = {
   wheelchair: { person: 'Family', ask: "Can my parent's wheelchair get out?", yes: 'The wheelchair gets out, no steps', plural: false },
-  sofa: { person: 'Home buyer', ask: 'Can my sofa get in?', yes: 'The sofa gets in', plural: false },
+  sofa: { person: 'Home buyer', ask: 'Can my sofa get in?', yes: 'The sofa gets in', plural: false, getsIn: true },
   people: { person: 'Building manager', ask: 'Can everyone get out?', yes: 'Everyone gets out', plural: true },
   chiller: { person: 'Building owner', ask: 'Can I widen this shaft for a new chiller?', yes: 'The chiller fits through the shaft', plural: false },
   load: { person: 'Building owner', ask: 'Does the structure still hold?', yes: 'The structure still holds', plural: false },
@@ -22,6 +23,12 @@ export const QUESTIONS: Readonly<Record<Id, Question>> = {
 
 export function questionOf(id: Id): Question | null {
   return Object.hasOwn(QUESTIONS, id) ? QUESTIONS[id]! : null;
+}
+
+// The route as the person reads it: from the street in for a get-in question (the solver walks the
+// sofa out; edges are two-way, so the answer is the same), as walked otherwise. A new array.
+export function routeShown(id: Id, path: readonly Id[]): Id[] {
+  return questionOf(id)?.getsIn ? [...path].reverse() : [...path];
 }
 
 // The yes line, or a plain one for a token copy.md has no question for yet.
