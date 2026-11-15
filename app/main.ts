@@ -12,7 +12,8 @@ import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
-import { loadBackdrop } from './backdrop-load.ts';
+import { cutHeight } from './backdrop.ts';
+import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
@@ -48,7 +49,7 @@ const S: State = {
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
-const viewer = createViewer($('viewer'));
+const viewer = createViewer($('viewer'), { onZoom: (zoom) => setCutHeight(cutHeight(zoom)) });
 // The model centres in the whole view, and moves left of the fix sheet only when a run has failures
 // (the sheet floats on the right on wider screens; on phones it sits at the bottom).
 const insetFor = (results: readonly Answer[]): number =>
