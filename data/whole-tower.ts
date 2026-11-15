@@ -1,5 +1,5 @@
-// The whole 432 Park tower as building graph data, built from the package metadata (the
-// git-ignored private-context/432-park/, docs/adr/0004). Pure: no files, no three.js. Owner: P5.
+// The whole 432 Park tower as building graph data, built from the package metadata (in
+// data/432-park/). Pure: no files, no three.js. Owner: P5.
 // whole-tower-build.ts reads the package and merges this into data/building.json.
 import type { Box, BuildingNode, Edge, Level, NodeType } from '../contract/types.ts';
 

@@ -42,9 +42,8 @@ git-ignored `.env`, never with a `VITE_` prefix. Nothing from `data/cityweft/` i
 ## The whole tower
 
 `building.json` holds the demo slice (L1 to L3, hand-written) plus the rest of 432 Park Avenue as
-levels `T04` to `T86`. It is built from the 432 Park package kept in git-ignored
-`private-context/432-park/` (never in the repo, ADR 0004), using the package's individual floor
-plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
+levels `T04` to `T86`. It is built from the 432 Park package in `data/432-park/`, using the
+package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
 
 - `node data/whole-tower-build.ts` does all of it, and is rerunnable (seed 432, same tower each time):
   1. `tower-plans.ts` gives every apartment floor a random plan, keeping the turn the package gave it.
@@ -60,8 +59,8 @@ plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
 - The two package models the viewer draws are in the repo, in `data/432-park/`:
   `432_Park_Avenue_Typical_Plans.glb` (the four floor plans) and `432_Park_Avenue_Lightweight.glb`
   (the complete tower, used for its exterior). They are our own approximate model (a reconstruction
-  from published diagrams), 4.8 MB together. The package's metadata, CSV and plan JSON that
-  `whole-tower-build.ts` reads stay in git-ignored `private-context/432-park/`.
+  from published diagrams), 4.8 MB together. The package's metadata, CSV, plan polygons and README
+  (sources and assumptions) that `whole-tower-build.ts` reads sit beside them.
 - The outside is the package's complete Lightweight model (`432_Park_Avenue_Lightweight.glb`): its
   exterior concrete grid, facade and window modules and roof parapet, 28.5 m by 425.5 m, centred on
   the tower. Its own levels, interiors and ground plinth are dropped (our floors and the backdrop

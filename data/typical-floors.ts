@@ -1,6 +1,5 @@
 // Where the real 432 Park typical floor sits in the viewer. Pure math, no three.js; the loader is
-// typical-floors-load.ts. Owner: P5. The floor file is the git-ignored package in private-context/
-// (docs/adr/0004), so a fresh clone or a build simply has no floor.
+// typical-floors-load.ts. Owner: P5. The floor files are the package models in data/432-park/.
 import type { Building } from '../contract/types.ts';
 import { TOWER_CENTRE } from '../app/backdrop.ts';
 import { glbPlanName } from './tower-plans.ts';
