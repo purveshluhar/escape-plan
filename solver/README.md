@@ -37,9 +37,11 @@ it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
   and must not cross a beam or transfer beam unless sleeved (`crosses_beam`). It has its own
   one-way search, so `search.ts` stays two-way. `downhill.test.ts` uses a fixture until P5 adds
   water data.
-- `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
-  over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
+- `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, and
+  solve() is pure and deterministic. The sofa
   and people are in `data/building.json`, with their cases in `data/expected.json`.
+- `mvp-resolve.timing.ts`: solve() over every expected case stays under 100 ms (ADR 0002). It runs
+  alone in `npm run test:timing`, not in `npm test`, because the wall clock needs a quiet CPU.
 - `level-complete.test.ts`: the tier 1 gate (P1-19). The glass record at `lobby-door`, every tier 1
   rule implemented, and the full-demo edits giving Yes to all for the tier 1 tokens in any
   order, with each fix needed. It reads the fixes from `full-demo`, so it holds when P5 adds

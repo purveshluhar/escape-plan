@@ -32,7 +32,8 @@ cd escape-plan
 npm ci
 npm run dev      # http://localhost:5173
 npm test         # contract, solver, data schema checks
-npm run check    # typecheck + test + build: run before every merge
+npm run test:timing  # the 100 ms solver budget, run alone
+npm run check    # typecheck + test + test:timing + build: run before every merge
 npm run server   # optional: reads typed edits on 127.0.0.1 (server/README.md)
 ```
 

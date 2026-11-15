@@ -14,7 +14,7 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 1. Read `contract/` first (`contract/README.md`, then `contract/types.ts`). Build against those types.
 2. Do not change `contract/`. P1 owns it. Changes happen only at a merge point. To ask for one, use the `contract-change` skill.
 3. Edit only your own folder (table below). Read other folders, and import from them, but leave their files alone.
-4. Run `npm run check` (typecheck, test, build) before every merge. It must pass. `npm test` alone
+4. Run `npm run check` (typecheck, test, test:timing, build) before every merge. It must pass. `npm test` alone
    does not check types. `main` must always run the tier 1 demo.
 5. `data/expected.json` is the truth. When a test fails against it, the code is wrong until a human proves the expected case wrong. Never change an expected value to make code pass.
 6. No secrets in code. Keys go in a git-ignored `.env` only, never with a `VITE_` prefix (Vite
@@ -49,11 +49,15 @@ Each folder's `README.md` says what it consumes and produces.
 | `npm run dev` | Start the app at http://localhost:5173. |
 | `npm run server` | Start the local server on 127.0.0.1 (`server/README.md`). It reads the git-ignored `.env`. |
 | `npm test` | Node's built-in test runner: contract, solver, data schema checks, and every `*.test.ts`. |
-| `npm run check` | Typecheck, test and build: the gate before every merge (CI runs it too). |
+| `npm run test:timing` | Wall-clock budget tests (`*.timing.ts`), one file at a time. `npm test` skips them. |
+| `npm run check` | Typecheck, test, test:timing and build: the gate before every merge (CI runs it too). |
 | `npm run typecheck` | `tsc --noEmit` over all source, test files included. |
 | `npm run build` | Production build into `dist/`. |
 
 Tests are `<folder>/*.test.ts`, run by `node --test` (Node 22.18+ runs TypeScript directly).
+A test that checks a time budget goes in a `*.timing.ts` file instead, so it does not compete for CPU
+with the parallel suite. List the file in the `test:timing` script, which runs them one at a time.
+A missing file makes the script fail.
 Import local files with the `.ts` extension, and use `import type` for types.
 `viewer/`, `app/` and `design/` run in the browser: no `node:*` imports, `process` or `Buffer`
 there. Typecheck loads Node types for the tests, so it does not catch this. `server/` runs in

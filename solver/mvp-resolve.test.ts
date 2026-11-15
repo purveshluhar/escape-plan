@@ -1,10 +1,9 @@
 // P1-07, the MVP gate: one edit changes each MVP token's result live (wheelchair, sofa, people),
-// solve() over every expected case stays under 100 ms (ADR 0002), and solve() is pure and
-// deterministic.
+// and solve() is pure and deterministic. The 100 ms budget (ADR 0002) is checked by
+// mvp-resolve.timing.ts, which runs alone in `npm run test:timing`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { performance } from 'node:perf_hooks';
 import { IMPLEMENTED_RULES, solve } from './index.ts';
 import { checkBuildingRefs, validate } from '../contract/validate.ts';
 import type { Building, Edit, ExpectedFile, Rule, SolverResult } from '../contract/types.ts';
@@ -34,17 +33,6 @@ const MVP_CASES: { id: string; edits: Edit[] }[] = [
   { id: 'mvp-widen-lobby', edits: [button('widen', 'lobby-door', 1.6)] },
   { id: 'mvp-widen-office', edits: [button('widen', 'office-door', 0.9)] },
 ];
-
-test('solve() over every expected case takes under 100 ms in total (ADR 0002)', (t) => {
-  // First in this file, and node --test runs each file in its own process: these are the first
-  // solve() calls in the process, as on the first click.
-  const start = performance.now();
-  for (const c of expected.cases) solve(building, c.edits);
-  for (const c of MVP_CASES) solve(mvp, c.edits);
-  const ms = performance.now() - start;
-  t.diagnostic(`solve() over ${expected.cases.length} expected cases + ${MVP_CASES.length} MVP edit cases: ${ms.toFixed(2)} ms`);
-  assert.ok(ms < 100, `took ${ms.toFixed(2)} ms`);
-});
 
 test('building.json has the sofa and people, and stays valid building data', () => {
   assert.deepEqual(['sofa', 'people'].map((id) => building.tokens.some((t) => t.id === id)), [true, true]);
