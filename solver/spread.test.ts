@@ -203,6 +203,30 @@ test('smoke that never reaches the people path changes nothing', () => {
   assert.deepEqual(record(byToken(solve(b), 'people')), ['pass', ['s', 'a', 'x'], null, null, null, null, 2]);
 });
 
+test('the race takes the earliest of two smoke tokens, and skips a smoke token that is not on a node', () => {
+  // smoke1 reaches a at step 2 (too late); smoke2 starts next to a and reaches it at step 1 (a tie).
+  const b = race(2);
+  b.nodes.push(node('g'));
+  b.edges.push(edge('ga', 'g', 'a'));
+  b.tokens = [people('s'), smoke('f', 'smoke1'), smoke('g', 'smoke2')];
+  assert.deepEqual(record(byToken(solve(b), 'people')), ['fail', ['s'], 'a', 'smoke_first', 1, 1, null]);
+  // A smoke token whose start is not a node gets no_route and races nobody.
+  b.tokens = [people('s'), smoke('nowhere', 'smoke1')];
+  const results = solve(b);
+  assert.deepEqual(record(byToken(results, 'people')), ['pass', ['s', 'a', 'x'], null, null, null, null, 2]);
+  assert.equal(byToken(results, 'smoke1').reason, 'no_route');
+});
+
+test('the records do not depend on the order of nodes, edges or tokens in the data', () => {
+  const b = race(1);
+  b.nodes.push(node('b'), node('c'));
+  b.edges.push(edge('sb', 's', 'b'), edge('bc', 'b', 'c'), edge('cx', 'c', 'x'), edge('fb', 'f', 'b'));
+  const sorted = (rs: SolverResult[]) => [...rs].sort((p, q) => (p.token < q.token ? -1 : 1));
+  const want = sorted(solve(b));
+  const flipped = { ...b, nodes: [...b.nodes].reverse(), edges: [...b.edges].reverse(), tokens: [...b.tokens].reverse() };
+  assert.deepEqual(sorted(solve(flipped)), want);
+});
+
 test('solve with smoke and people: schema-valid, deterministic, smoke record untouched by the race', () => {
   const b = race(1);
   const results = solve(b);

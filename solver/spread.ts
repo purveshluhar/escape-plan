@@ -12,7 +12,7 @@ export const SPREAD_KINDS: readonly WalkKind[] = ['door', 'opening', 'shaft', 's
 // The step at which smoke from this token reaches each node, by breadth-first search over the
 // open edges. In the order reached: by step, and inside one step by node id. Null when the
 // start is not a node.
-export function smokeSteps(building: Building, token: Token): Map<Id, number> | null {
+function smokeSteps(building: Building, token: Token): Map<Id, number> | null {
   const nodes = new Map<Id, BuildingNode>(building.nodes.map((n) => [n.id, n]));
   if (!nodes.has(token.start)) return null;
   const open = { ...building, edges: building.edges.filter((e) => e.open !== false) };
