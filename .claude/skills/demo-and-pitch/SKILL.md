@@ -23,8 +23,8 @@ Drop any sentence whose feature is not green at freeze.
    wheelchair hits a step. (Tier 2: smoke beats people to the stair.)
 2. **Widen the plant shaft to 2 m** (button, or typed if Jev is green). The chiller reaches
    the truck, but beam B2 is cut and the load turns red.
-3. **Add a transfer beam at B2, a ramp at the terrace door, and widen the lobby corner** (and
-   close the stair door, tier 2). Everything goes green: **LEVEL COMPLETE** (expected case
+3. **Add a transfer beam at B2, a ramp at the terrace door, widen the lobby corner, and widen the
+   office door for the people** (and close the stair door, tier 2). Everything goes green: **LEVEL COMPLETE** (expected case
    `full-demo`).
 4. Close: one graph, every discipline, every edit re-solved. A game, not a code check.
 

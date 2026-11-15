@@ -15,7 +15,8 @@ Escape Plan turns the building into a game. One building graph, one token per di
 Press **Escape!** and every token races out. The chiller sticks in the plant shaft. The glass
 will not turn the corner. The wheelchair hits a step. Widen the shaft, and the chiller reaches
 the truck, but the shaft cuts beam B2 and the load turns red. Add a transfer beam, a ramp at the
-terrace door, and widen the lobby corner, and everything goes green: **LEVEL COMPLETE**.
+terrace door, widen the lobby corner, and widen the office door for the people, and everything goes
+green: **LEVEL COMPLETE**.
 
 A deterministic solver decides every pass or fail and shows the numbers. Jev (TypeSafe AI)
 turns typed or spoken edits into actions and gives each discipline a vote bubble. Cityweft can

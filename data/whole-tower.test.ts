@@ -1,7 +1,7 @@
 // The whole 432 Park tower as graph data, built from the package metadata (a small fixture here).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FIRST_LEVEL, STAIR, buildTower, sliceJoin } from './whole-tower.ts';
+import { FIRST_LEVEL, buildTower, isGeneratedJoin, sliceJoin } from './whole-tower.ts';
 import type { PackageMeta } from './whole-tower.ts';
 
 const room = (floor: string, unit: string, a: [number, number], b: [number, number], type = 'Living / dining room') => ({
@@ -68,7 +68,7 @@ test('ids are unique', () => {
   for (const list of [t.levels, t.nodes, t.edges]) assert.equal(new Set(list.map((x) => x.id)).size, list.length);
 });
 
-test('each pair of cores is joined by two egress stairs, A and B, with landings as wide as the stair', () => {
+test('each pair of cores is joined by two egress stairs, A and B, a flight as wide as the package stair', () => {
   const t = buildTower(meta);
   const stairs = t.edges.filter((e) => e.kind === 'stair');
   assert.deepEqual(stairs.map((e) => [e.id, e.from, e.to]), [
@@ -76,10 +76,10 @@ test('each pair of cores is joined by two egress stairs, A and B, with landings 
     ['stair-a-T19', 'core-T10', 'core-T19'], ['stair-b-T19', 'core-T10', 'core-T19'],
   ]);
   for (const e of stairs) {
-    assert.deepEqual([e.clear_width, e.clear_height, e.step_height, e.corner_a, e.corner_b], [1.12, 2.03, 0, 1.12, 1.12], e.id);
+    // The package's return stair mesh is 2.34 m across (two flights of 1.17 m) and 3.6 m long.
+    assert.deepEqual([e.clear_width, e.clear_height, e.step_height, e.corner_a, e.corner_b], [1.17, 2.03, 0, 1.17, 1.17], e.id);
   }
   assert.equal(stairs[0]?.name, 'Stair A to level 10');
-  assert.deepEqual(STAIR, { clear_width: 1.12, clear_height: 2.03, step_height: 0, corner_a: 1.12, corner_b: 1.12 });
 });
 
 test('the slice joins the tower by lift and by both stairs, level by level down to the lobby', () => {
@@ -92,4 +92,9 @@ test('the slice joins the tower by lift and by both stairs, level by level down 
     ['stair-a-T04', 'plant', 'core-T04'], ['stair-b-T04', 'plant', 'core-T04'],
   ]);
   assert.equal(join.find((e) => e.id === 'lift-T-slice')?.name, 'Lift to level 4');
+});
+
+test('a rerun replaces only the edges the generator writes, never a hand-written slice edge', () => {
+  for (const id of ['lift-T-slice', 'lift-service-L3', 'stair-a-L2', 'stair-b-T04']) assert.equal(isGeneratedJoin(id, 'core-T04'), true, id);
+  for (const id of ['stair-terrace', 'lift-goods', 'core-lift', 'lobby-door']) assert.equal(isGeneratedJoin(id, 'core-T04'), false, id);
 });

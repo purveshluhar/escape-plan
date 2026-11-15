@@ -71,7 +71,7 @@ const out: Building = {
   levels: [...kept.levels, ...tower.levels],
   nodes: [...kept.nodes, ...tower.nodes],
   edges: [
-    ...building.edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to) && !isGeneratedJoin(e.id)),
+    ...building.edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to) && !(first && isGeneratedJoin(e.id, first.id))),
     ...join,
     ...tower.edges,
   ],

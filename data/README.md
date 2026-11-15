@@ -86,15 +86,22 @@ package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, t
   draw those). Without the file the floors show without a facade.
 - Levels with no plan (lobby, services, open mechanical) get a plain slab and the fixed core as a
   stand-in, using the GLB's own `Slab` and `Core` nodes: the package has no layout for them.
-- Elevations are real (86 levels, 425 m). The package has no door, lift or stair data: all doors,
-  lifts and stairs are self-made. Assumed values:
-  - Doors are 1.0 x 2.4 m.
-  - Lifts are 1.2 x 2.4 m. They are edges with no car node, so no car-size check runs.
-  - Stairs A and B are 1.12 m wide with 2.03 m headroom (44 in and 80 in, IBC 2021 1011.2 and
-    1011.3). Each landing is as wide as the stair (corner 1.12 by 1.12 m, IBC 2021 1011.6).
-  - Both stairs come down to the L1 lobby. In a real building at most half the exits may discharge
-    through a lobby (IBC 2021 1028.1). Here the lobby door stays the demo's one way out.
-  - These values come from code minimums as recalled, not checked against the code text.
+- The tower levels T04 to T86 have the package's real elevations (425 m in all). The slice is hand-made:
+  L1 and L2 sit at the package's level 1 and 2 elevations, and the L3 plant at 14.17 m is no package level.
+- The package has no door, lift or stair graph data, so every door, lift and stair edge is self-made.
+  It does draw one return stair per residential level (the `Model_Level_NNN_Stairs` meshes: 2.34 m
+  across, two flights of 1.17 m, 3.6 m long), and the stair width comes from that. Values:
+  - Tower unit doors are 1.0 x 2.4 m. Slice doors keep their own hand-made sizes.
+  - Lift openings are 1.2 x 2.4 m. Lifts are edges with no car node, so no car-size check runs.
+  - Stairs A and B: 1.17 m flights (the package mesh) with 2.03 m headroom, and landings as wide as
+    the flight (a 1.17 by 1.17 m corner).
+  - Assumed, from code minimums as recalled, not checked against the code text:
+    - two stairs per storey (IBC 2021 1006.3), where the package draws one;
+    - the 80 in (2.03 m) headroom (1011.3);
+    - landings as wide as the stair (1011.6).
+  - Stairs A and B share the cores, so they are two edges, not two independent routes.
+  - Both come down to the L1 lobby. In a real building at most half the exits may discharge through
+    a lobby (IBC 2021 1028.1). Here the lobby door stays the demo's one way out.
 - The slice's L2 is level 2: the names say so ("Level 2 core lobby"). It uses level 10's
   three-apartment plan as a stand-in typical floor. The tower's own level 10 is T10.
 - Tests: `tower-plans.test.ts`, `whole-tower.test.ts`, `typical-floors.test.ts`, and `egress.test.ts`
