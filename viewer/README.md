@@ -7,6 +7,8 @@
 `setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). `setCovered`
 takes node ids whose boxes are not drawn because the backdrop stands in for them (routes still use
 them, and the camera frames only the boxes that are drawn).
+The mouse wheel zooms out from the framed view (up to 60x) to see the backdrop; scroll back to 1x to
+reframe on the building.
 Pure layout math lives in `viewer/layout.ts` so it can be tested without a browser.
 
 Route math (`tokenRoute`), fail label words (`labels.ts`) and the rest of the pure logic are
