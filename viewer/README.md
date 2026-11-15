@@ -30,6 +30,11 @@ passes, the Yes to all banner shows.
 The model and the Yes to all banner centre in the space left of it. The canvas is transparent, so the
 page backdrop shows through.
 
+`viewer.focusLevel(id)` glides the camera up or down the tower until that floor (one passed to
+`setFloors`) is in the middle of the view, and the open floor follows it. The `onFocus` option says
+which floor is in the middle when the view changes by other means (a pan, a zoom). Reduced motion
+jumps. The floor scroller in `app/scroller-view.ts` drives it.
+
 Dev page: `npm run dev`, then open http://localhost:5173/viewer/dev.html (add `&inset=372` to
 mimic the app's side panel). It plays each case in `data/expected.json`. Tokens whose rule the
 solver does not answer yet use the hand-made results in `fixtures.ts`, and the header says

@@ -19,6 +19,8 @@ import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
 import { dimBlock, loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
+import { scrollerStops } from './scroller.ts';
+import { mountScroller } from './scroller-view.ts';
 import type { Answer } from './answers.ts';
 import { conflictOf } from './conflict.ts';
 import type { Conflict } from './conflict.ts';
@@ -87,6 +89,8 @@ const applyReveal = (): void => {
   if (context3d.block && context3d.amount !== context3d.dimmed) dimBlock(context3d.block, context3d.amount);
   context3d.dimmed = context3d.amount;
 };
+// The floor scroller on the right edge; it lists the drawn floors once they load and drives viewer.focusLevel.
+const rail = mountScroller($('hud'), (level) => viewer.focusLevel(level));
 const viewer = createViewer($('viewer'), {
   onZoom: (zoom) => setCutHeight(cutHeight(zoom)),
   onReveal: (amount, cut) => {
@@ -94,6 +98,8 @@ const viewer = createViewer($('viewer'), {
     applyReveal();
   },
   avoid: () => [$('banner')],
+  onFocus: (level) => rail.follow(level),
+  onInset: (pixels) => rail.setInset(pixels), // the scroller keeps clear of the same panels as the model
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
     const what = S.placed.includes(token) ? 'not moved' : 'not placed';
@@ -663,5 +669,7 @@ Promise.all([
   }
   viewer.setBackdrop(context);
   applyReveal();
-  viewer.setFloors(floor ? drawnLevels(building) : []); // only real floors can be opened
+  const drawn = floor ? drawnLevels(building) : [];
+  rail.setStops(scrollerStops(building.levels, drawn)); // before setFloors: its first frame tells the rail where the view is
+  viewer.setFloors(drawn); // only real floors can be opened
 });

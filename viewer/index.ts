@@ -30,6 +30,7 @@ import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
   focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, FLOOR_TAG_GAP,
+  glideStep, panForFocus,
   type Fade, type ScreenRect,
 } from './layout.ts';
 
@@ -42,6 +43,10 @@ export interface Viewer {
   // The levels drawn as real floors in the backdrop. Zooming in opens the facade only when there are
   // some, and only these levels are cut to and labelled. Default none.
   setFloors(levels: Iterable<Id>): void;
+  // Glide the camera up or down the tower until `level` (one of the floors from setFloors) is in the
+  // middle of the view; while the facade is open that floor is the one opened. A jump under reduced
+  // motion. Dragging the view, or a double-click reset, ends the glide where it is.
+  focusLevel(level: Id): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
   // Node ids left out of the frame, because something else (the real tower in the
@@ -75,6 +80,11 @@ export interface ViewerOptions {
   // easing both ways. `cut` is the elevation of the top floor to draw (Infinity at amount 0): the
   // floors above it are cut away so its plan shows. The viewer labels each floor in view itself.
   onReveal?: (amount: number, cut: number) => void;
+  // The floor in the middle of the view changed (null: none drawn). The floor the facade opens to is
+  // this one. Not called while a focusLevel glide runs; once, at its end, if the floor differs.
+  onFocus?: (level: Id | null) => void;
+  // The right inset changed (setInsetRight), for something beside the model that keeps clear of the same panels.
+  onInset?: (pixels: number) => void;
   // Elements of the app drawn over the model that take no pointer events (a banner, for example):
   // floor labels keep clear of them as they do of every panel.
   avoid?: () => Element[];
@@ -189,6 +199,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let hintSize: { text: string; w: number; h: number } | null = null; // measured once per text
   let toastAt: { x: number; y: number; until: number; w: number; h: number } | null = null; // until its fade ends
   let pickCeiling = Infinity; // dropCeiling at the current cut
+  let glideTo: number | null = null; // focusLevel: the pan.y the camera is gliding to
+  let glideAt = 0; // the last frame it moved
+  let focused: Id | null | undefined; // last onFocus; undefined: tell the app again at the next fit
   let chromeStale = false; // floor labels moved since the last panel check
   let smokeSpread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null = null;
   let haze: { group: THREE.Group; blocks: { mesh: THREE.Mesh; step: number; floor: number }[] } | null = null;
@@ -451,6 +464,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const drawn = shown ? shown.building.levels.filter((l) => floorLevels.has(l.id)) : [];
     cut = cutLevel(drawn, focusHeight(centre.y, view, pan));
     pickCeiling = dropCeiling(drawn, cut);
+    if (glideTo === null) {
+      const now = drawn.find((l) => l.elevation === cut)?.id ?? null;
+      if (now !== focused) options.onFocus?.((focused = now));
+    }
 
     // Each floor at or under the cut is labelled at the plate corner furthest left on screen.
     for (const tag of floorTags) {
@@ -728,6 +745,17 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (carried) carried.figure.object.scale.setScalar(figureScale(mpp, carried.figure.size, carried.figure.minPixels));
   }
 
+  // One step of a focusLevel glide, from the frame time.
+  function glide(now: number): void {
+    pan.y = glideStep(pan.y, glideTo!, Math.min(0.1, (now - glideAt) / 1000));
+    glideAt = now;
+    if (pan.y === glideTo) {
+      glideTo = null;
+      focused = undefined; // the glide is over: the app learns where the camera really is
+    }
+    fit();
+  }
+
   let lastFrame = 0;
   function frame(now: number): void {
     perf?.begin(now);
@@ -763,6 +791,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
+    if (glideTo !== null) glide(now);
     reveal(now);
     renderer.clear();
     if (backdropObject) {
@@ -982,6 +1011,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const onToken = e.button === 0 ? tokenAt(e.clientX, e.clientY) : null;
     const intent = pressIntent({ button: e.button, shiftKey: e.shiftKey, onToken, canDrag: dragEnabled });
     canvas.setPointerCapture(e.pointerId);
+    endGlide();
     if (intent === 'token' && onToken) {
       pickUp(onToken, e, false);
       return;
@@ -1017,6 +1047,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('dblclick', () => {
+    glideTo = null;
     pan.x = 0;
     pan.y = 0;
     view = { ...DEFAULT_VIEW };
@@ -1070,13 +1101,38 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   function setFloors(levels: Iterable<Id>): void {
     floorLevels = new Set(levels);
+    focused = undefined;
     if (shown) drawFloorTags(shown.building);
     setZoom(zoom);
+  }
+
+  // The camera stops where it is; the floor there is told to the app.
+  function endGlide(): void {
+    if (glideTo === null) return;
+    glideTo = null;
+    focused = undefined; // the thumb may be ahead of the camera
+    fit();
+  }
+
+  function focusLevel(level: Id): void {
+    const at = shown?.building.levels.find((l) => l.id === level);
+    if (!at || !Number.isFinite(at.elevation) || !floorLevels.has(level) || bounds.isEmpty()) {
+      focused = undefined; // nothing to go to: put the app's thumb back where the camera is
+      fit();
+      return;
+    }
+    if (glideTo === null) glideAt = performance.now();
+    glideTo = panForFocus(at.elevation, bounds.getCenter(new THREE.Vector3()).y, view);
+    if (!reduced) return;
+    pan.y = glideTo;
+    glideTo = null;
+    fit();
   }
 
   function setInsetRight(pixels: number): void {
     if (pixels === insetRight) return;
     insetRight = pixels;
+    options.onInset?.(pixels);
     banner.style.right = `${insetRight}px`;
     fit();
   }
@@ -1115,7 +1171,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
+  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements

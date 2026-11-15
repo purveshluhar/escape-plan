@@ -315,6 +315,21 @@ export function focusHeight(centreY: number, view: OrbitView, pan: { x: number; 
   return centreY + pan.y / Math.max(Math.cos(view.elevation), 1 / FOCUS_GAIN_MAX);
 }
 
+// The pan (metres up the screen) that puts a level at `height` in the middle of the view: the inverse
+// of focusHeight, with the same cap, so the floor the view reads back is the one asked for.
+export function panForFocus(height: number, centreY: number, view: OrbitView): number {
+  return (height - centreY) * Math.max(Math.cos(view.elevation), 1 / FOCUS_GAIN_MAX);
+}
+
+// A glide to a new pan: each frame covers a fixed share of what is left, so a target that moves while
+// it runs (a dragged scroller) never restarts a curve. 14 a second covers 97 percent in a quarter second.
+export const GLIDE_RATE = 14;
+export const GLIDE_SNAP = 0.02; // metres: this near the target it lands on it
+export function glideStep(current: number, target: number, dt: number, rate = GLIDE_RATE): number {
+  const next = current + (target - current) * (1 - Math.exp(-rate * Math.max(dt, 0)));
+  return Math.abs(target - next) < GLIDE_SNAP ? target : next;
+}
+
 // The elevation of the level nearest `height`: the top floor left standing. Infinity with no levels.
 export function cutLevel(levels: readonly Level[], height: number): number {
   if (!Number.isFinite(height)) return Infinity;
