@@ -134,7 +134,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
   }
   let data: unknown;
   // Inherited key names ("__proto__", "constructor", "toString") are refused here, before the
-  // schema check. contract/validate.ts refuses them too; this is a second guard.
+  // schema check. This guard stays even where contract/validate.ts also refuses them.
   const inherited: string[] = [];
   try {
     data = JSON.parse(text, (key: string, value: unknown) => {

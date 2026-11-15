@@ -83,17 +83,25 @@ A local Strands Decider (`strands-decider serve`, model
 these rules:
 
 - Strands is asked two questions only: which op (from `request.ops`) and which target (from
-  `request.targets`). Its confidence goes into `JevParse` as it is.
+  `request.targets`). Its confidence goes into `JevParse`, capped by the guards below. A question
+  with one option gets a "none of these" option too, because Strands needs 2; if the model picks
+  it, that slot gets confidence 0.
 - The value comes from the plan C number parser, with the same rules and the 0-5 m check as above.
-- Reset skips the target check: the target slot is the first target at confidence 1, and the value
-  is `null`.
-- Plan C's guards cap the op confidence at 0.4: a reset that also names a target or a number, the
-  own word of another op in the sentence ("reset the lobby door to 2 m" read as widen), and an op
-  word with a negation in the 3 words before it ("don't widen").
+- Reset skips the target check: a sure reset fills the target slot with the first target at
+  confidence 1, and the value is `null`. An unsure reset keeps the target the model read.
+- Plan C's guards cap the op confidence at 0.4 when: a reset has no reset word (`reset`, `undo`,
+  `restart`, `start over`) or also names a target or a number; the sentence has a word of another
+  op ("reset the lobby door to 2 m" read as widen, "widen it and shut it"); a negation comes in
+  the 3 words before the op's word, or anywhere when the op has no word in the sentence ("do not
+  make the lobby door 2 m wide"). They also cap the target at 0.4 when the sentence names one
+  other target in full. They do not check an op the sentence has no word for ("make the lobby door
+  1.5 metres wide" read as add_sleeve would apply).
 - Send only the targets on screen. Over 50 targets, the model is not asked. 50 is not measured: the
   spike found that 14 worked, 156 gave no answer at 0.8 or more, and 255 did not fit. Long names fill
   the model's window sooner; Strands then answers an error, and the rule below applies.
 - One Strands call runs at a time. A call that comes while one is running gets confidence 0 at once.
+  A call that timed out still counts as running until Strands answers it (at most 60 s), because
+  Strands does not stop work for a caller that left.
 - When Strands is down, takes longer than `STRANDS_TIMEOUT_MS`, answers with an error, or answers an
   op or target that was not offered, `POST /parse` still answers `200` with a valid `JevParse` at
   confidence 0. The app shows "Did you mean". The server logs one line with the reason. It never
@@ -101,9 +109,11 @@ these rules:
 - Strands runs on this machine only. The server sends the typed sentence to `STRANDS_URL` over
   `node:http`, so it follows no redirect and uses no proxy from the environment. Any program that
   listens on that port gets the sentences, so check the port is Strands' own (`/health`).
+  `strands-decider serve` checks no Host or Origin, so stop it when the demo ends.
 
-Use it only if the warm op + target call is under 2 s on the demo laptop. On this team's CPU
-Cloud Desktop it is slower (see the P1-12 timing log).
+Use it only if the warm op + target call is under 2 s on the demo laptop. On a 32-thread CPU
+Cloud Desktop with no other load, the 5 calls below took a median of about 1.0 s with 14 targets,
+and one call with 50 targets took 5.2 s. The spike measured 2.5 s at a high load.
 
 ### Time it on the laptop (macOS, Apple silicon)
 
@@ -111,8 +121,9 @@ Cloud Desktop it is slower (see the P1-12 timing log).
 
    ```bash
    mkdir -p ~/strands-spike && cd ~/strands-spike
-   python3.11 -m venv venv && source venv/bin/activate   # any Python 3.10 or later
-   pip install strands-decider
+   python3 --version   # needs 3.10 or later; else brew install python@3.11 and use python3.11
+   python3 -m venv venv && source venv/bin/activate
+   pip install 'strands-decider==0.3.0'   # the version the spike and P1-12 measured
    ```
 
 2. Start Strands in its own terminal. Wait for `warmed up in ... s`, or until
@@ -137,10 +148,11 @@ Cloud Desktop it is slower (see the P1-12 timing log).
    set -o pipefail; npm run time-parse | tee parse-timing.log; echo "exit $?"
    ```
 
-   Each call line shows the time, the answer, whether it passed the `JevParse` schema, and whether
-   it is the right edit. The last line names the decider (it must say `strands`) and shows the
-   median. If the median is under 2000 ms and all 5 are right, `DECIDER=strands` can go in `.env`.
-   If not, keep `keywords`. `exit 1` or "no answer from the decider" means Strands did not answer;
+   Each call line shows the time, the answer, whether it passed the `JevParse` schema, whether the
+   app would apply it, and whether it is the right edit. The last line names the decider (it must
+   say `strands`) and shows the median. If the median is under 2000 ms and the line says
+   `5/5 applied and right`, `DECIDER=strands` can go in `.env`. If not, keep `keywords`. A wrong
+   edit that would be applied also gives `exit 1`. `exit 1` or "no answer from the decider" means Strands did not answer;
    the server terminal says why. A first call can pass 5 s, so run step 4 twice.
 
 5. Stop each terminal with Ctrl+C. Delete `~/strands-spike` to remove Strands.

@@ -7,11 +7,12 @@
 //   did not fit. Over STRANDS_MAX_TARGETS the model is not asked.
 // - When Strands is down, slow, busy with another call, or answers something unusable, parse()
 //   answers at confidence 0, so the app shows "Did you mean". It never switches parser silently.
-// - Plan C's reset and negation guards cap the model's op confidence (keywordOpCap).
+// - Plan C's guards cap the model's op and target confidence (keywordOpCap, keywordTargetCap).
 // The Strands server must be on this machine: STRANDS_URL accepts only http://127.0.0.1.
 import type { EditOp, JevParse, JevParseRequest } from '../contract/types.ts';
+import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { request as httpRequest } from 'node:http';
-import { keywordOpCap, keywordValue } from './keywords.ts';
+import { keywordOpCap, keywordTargetCap, keywordValue } from './keywords.ts';
 
 export const DEFAULT_STRANDS_URL = 'http://127.0.0.1:8000'; // `strands-decider serve` default port
 export const DEFAULT_STRANDS_TIMEOUT_MS = 5000;
@@ -118,20 +119,33 @@ function postJson(url: string, body: string, timeoutMs: number): Promise<{ statu
   });
 }
 
-// Strands answers one call at a time. A second call while one runs would queue behind it and
-// time out, so it gets "Did you mean" at once instead.
+// Strands answers one call at a time and does not stop work for a caller that left. So `busy`
+// lasts until Strands really answers (or MAX_STRANDS_TIMEOUT_MS passes), not until our own
+// timeout, and a call meanwhile gets "Did you mean" at once instead of queueing into a timeout.
 let busy = false;
 
 const isConfidence = (x: unknown): x is number => typeof x === 'number' && x >= 0 && x <= 1;
 
-// One answer as { choice, confidence }, or null unless the choice is one of `allowed`.
-function readChoice(answers: unknown, key: string, allowed: readonly string[]): { choice: string; confidence: number } | null {
+// Strands refuses a choice with fewer than 2 options, so a single option gets a "none of these"
+// option beside it. Its key never equals a real option.
+function choices(options: [string, string][]): { criteria: Record<string, string>; none: string | null } {
+  if (options.length >= 2) return { criteria: Object.fromEntries(options), none: null };
+  let none = 'none of these';
+  while (options.some(([k]) => k === none)) none += '!';
+  // fromEntries makes own keys, so an id such as "__proto__" stays a choice.
+  return { criteria: Object.fromEntries([...options, [none, 'something else, or none of these']]), none };
+}
+
+// One answer as { choice, confidence }, or null unless the choice is one of `allowed`. The "none
+// of these" option reads as the only real option at confidence 0.
+function readChoice(answers: unknown, key: string, allowed: readonly string[], none: string | null): { choice: string; confidence: number } | null {
   if (typeof answers !== 'object' || answers === null || !Object.hasOwn(answers, key)) return null;
   const a = (answers as Record<string, unknown>)[key];
   if (typeof a !== 'object' || a === null) return null;
   const { choice, confidence } = a as Record<string, unknown>;
-  if (typeof choice !== 'string' || !allowed.includes(choice) || !isConfidence(confidence)) return null;
-  return { choice, confidence };
+  if (typeof choice !== 'string' || !isConfidence(confidence)) return null;
+  if (none !== null && choice === none) return { choice: allowed[0]!, confidence: 0 };
+  return allowed.includes(choice) ? { choice, confidence } : null;
 }
 
 export async function strandsParse(request: JevParseRequest, config: StrandsConfig): Promise<JevParse> {
@@ -139,27 +153,35 @@ export async function strandsParse(request: JevParseRequest, config: StrandsConf
   if (request.targets.length > STRANDS_MAX_TARGETS) {
     return unsure(request, `${request.targets.length} targets is over ${STRANDS_MAX_TARGETS}; send only the targets on screen`);
   }
+  const ops = [...new Set(request.ops)];
+  const ids = request.targets.map((t) => t.id);
+  const opQ = choices(ops.map((o) => [o, OP_TEXT[o]]));
+  const targetQ = choices(request.targets.map((t) => [t.id, t.name]));
   const body = {
     // JSON quoting, so a quote in the sentence cannot end the frame.
     state: `A player typed this edit command in a building game: ${JSON.stringify(request.text)}`,
     questions: {
-      op: { type: 'choice', instructions: 'Which edit does the player ask for?', criteria: Object.fromEntries(request.ops.map((o) => [o, OP_TEXT[o]])) },
-      // fromEntries makes own keys, so an id such as "__proto__" stays a choice.
-      target: { type: 'choice', instructions: 'Which object on screen does the player mean?', criteria: Object.fromEntries(request.targets.map((t) => [t.id, t.name])) },
+      op: { type: 'choice', instructions: 'Which edit does the player ask for?', criteria: opQ.criteria },
+      target: { type: 'choice', instructions: 'Which object on screen does the player mean?', criteria: targetQ.criteria },
     },
   };
   if (busy) return unsure(request, 'a Strands call is still running');
   busy = true;
+  const call = postJson(`${config.url}/v1/systemone`, JSON.stringify(body), MAX_STRANDS_TIMEOUT_MS);
+  call.then(() => { busy = false; }, () => { busy = false; });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), config.timeoutMs); });
   let text: string | null;
   try {
-    const reply = await postJson(`${config.url}/v1/systemone`, JSON.stringify(body), config.timeoutMs);
+    const reply = await Promise.race([call, deadline]);
+    if (reply === 'timeout') return unsure(request, `no answer in ${config.timeoutMs} ms`);
     if (reply.status !== 200) return unsure(request, `Strands answered HTTP ${reply.status}`);
     text = reply.text;
   } catch (e) {
-    if (e instanceof Timeout) return unsure(request, `no answer in ${config.timeoutMs} ms`);
+    if (e instanceof Timeout) return unsure(request, `no answer in ${MAX_STRANDS_TIMEOUT_MS} ms`);
     return unsure(request, `no answer from ${config.url} (${e instanceof Error ? e.message : String(e)})`);
   } finally {
-    busy = false;
+    clearTimeout(timer);
   }
   if (text === null) return unsure(request, `answer over ${MAX_ANSWER_BYTES} bytes`);
   let answers: unknown;
@@ -168,13 +190,17 @@ export async function strandsParse(request: JevParseRequest, config: StrandsConf
   } catch {
     return unsure(request, 'answer is not JSON');
   }
-  const op = readChoice(answers, 'op', request.ops);
-  const target = readChoice(answers, 'target', request.targets.map((t) => t.id));
-  if (op === null || target === null) return unsure(request, 'answer has no usable op or target');
-  // Plan C's guards still hold: a reset that names a target or a number, or a negated op word,
-  // stays below 0.8 whatever the model says.
+  const op = readChoice(answers, 'op', ops, opQ.none);
+  const read = readChoice(answers, 'target', ids, targetQ.none);
+  if (op === null || read === null) return unsure(request, 'answer has no usable op or target');
+  // Plan C's guards still hold whatever the model says (keywordOpCap, keywordTargetCap).
   const opChoice = { choice: op.choice as EditOp, confidence: Math.min(op.confidence, keywordOpCap(request, op.choice as EditOp)) };
-  // Reset has no target: the slot is the first target and is not in doubt (as in plan C, D1).
-  if (opChoice.choice === 'reset') return { op: opChoice, target: { choice: request.targets[0]!.id, confidence: 1 }, value: null };
+  const target = { choice: read.choice, confidence: Math.min(read.confidence, keywordTargetCap(request, read.choice)) };
+  if (opChoice.choice === 'reset') {
+    // A sure reset has no target: the slot is the first target and is not in doubt (plan C D1).
+    // An unsure one keeps the target the model read, so "Did you mean" shows it.
+    if (opChoice.confidence >= JEV_ACCEPT_CONFIDENCE) return { op: opChoice, target: { choice: ids[0]!, confidence: 1 }, value: null };
+    return { op: opChoice, target, value: null };
+  }
   return { op: opChoice, target, value: opChoice.choice === 'widen' ? keywordValue(request) : null };
 }

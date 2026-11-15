@@ -186,22 +186,35 @@ export function keywordValue(request: JevParseRequest): JevScore {
 }
 
 // The highest op confidence plan C allows for `op` in this sentence, for a decider that picks the
-// op itself (server/strands.ts): MIXED for a reset that also names a target or a number, for the
-// own word of another op ("reset the lobby door to 2 m" read as widen), or for an op word with a
-// negation in the 3 words before it; else SURE.
+// op itself (server/strands.ts). MIXED when:
+// - a reset has no reset word, or also names a target or a number;
+// - the sentence holds a word of another op, exact or near ("reset the lobby door to 2 m" read as
+//   widen, "widen it and shut it");
+// - a negation comes in the 3 words before the op's word, or anywhere when the op has no word in
+//   the sentence ("do not make the lobby door 2 m wide").
+// Else SURE.
 export function keywordOpCap(request: JevParseRequest, op: EditOp): number {
   const { tokens } = tokenizeSentence(request.text);
   const used = tokens.map(() => false);
   if (request.targets.length > 0) pickTarget(tokens, request, used);
-  if (op === 'reset' && (used.some(Boolean) || tokens.some((w, i) => !used[i] && isNumber(w)))) return MIXED;
-  const otherOp = EDIT_OPS.some((o) => o !== op && OP_WORDS[o].exact.some((p) => find(tokens, p, used).length > 0));
-  if (otherOp) return MIXED;
-  const at = [...OP_WORDS[op].exact, ...OP_WORDS[op].near].flatMap((p) => find(tokens, p, used));
-  const negated = at.some((a) => {
+  const wordsOf = (o: EditOp) => [...OP_WORDS[o].exact, ...OP_WORDS[o].near].flatMap((p) => find(tokens, p, used));
+  const own = wordsOf(op);
+  if (op === 'reset' && (own.length === 0 || used.some(Boolean) || tokens.some((w, i) => !used[i] && isNumber(w)))) return MIXED;
+  if (EDIT_OPS.some((o) => o !== op && wordsOf(o).length > 0)) return MIXED;
+  const negatedBefore = (a: number) => {
     for (let i = Math.max(0, a - NEGATION_REACH); i < a; i++) if (!used[i] && isNegation(tokens, i)) return true;
     return false;
-  });
+  };
+  const negated = own.length === 0 ? tokens.some((_, i) => !used[i] && isNegation(tokens, i)) : own.some(negatedBefore);
   return negated ? MIXED : SURE;
+}
+
+// The highest target confidence plan C allows for `id`: MIXED when the sentence names exactly
+// one other target in full (plan C reads it at confidence 1), else SURE.
+export function keywordTargetCap(request: JevParseRequest, id: Id): number {
+  const { tokens } = tokenizeSentence(request.text);
+  const read = pickTarget(tokens, request, tokens.map(() => false));
+  return read.confidence === SURE && read.choice !== id ? MIXED : SURE;
 }
 
 // One op from request.ops, one target from request.targets, and for widen a value in range.

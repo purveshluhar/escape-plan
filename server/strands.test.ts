@@ -40,6 +40,13 @@ before(async () => {
     req.on('end', () => {
       const body = raw === '' ? {} : JSON.parse(raw);
       seen.push({ path: req.url, method: req.method, body });
+      // strands-decider refuses a choice with fewer than 2 options (HTTP 422), so the fake does too.
+      const qs = Object.values((body.questions ?? {}) as Record<string, { criteria?: object }>);
+      if (qs.some((q) => Object.keys(q.criteria ?? {}).length < 2)) {
+        res.writeHead(422, { 'content-type': 'application/json' });
+        res.end('{"detail":"choice requires at least 2 options"}');
+        return;
+      }
       handler(body, res);
     });
   });
@@ -166,6 +173,7 @@ test('Strands too slow: the call stops at STRANDS_TIMEOUT_MS and answers at conf
   const ms = performance.now() - t0;
   unsure(p, 'timeout');
   assert.ok(ms < 1000, `${ms} ms`);
+  await new Promise((r) => setTimeout(r, 1500)); // let the fake finish, so the next test starts free
 });
 
 test('a broken or out-of-list Strands answer is never applied', async () => {
@@ -305,4 +313,63 @@ test('live: the own word of another op in the sentence makes the model op unclea
   }
   handler = answer('add_ramp', 0.95, 'lobby-door', 0.95);
   assert.ok(accepted(await run('the wheelchair cannot get up the lobby door step, put in a ramp')), 'one op word still applies');
+});
+
+// ---------- Adversarial review, round 2 ----------
+
+test('review 2: one target or one op on offer still reaches the model, with a "none of these" option', async () => {
+  handler = answer('widen', 0.95, 'lobby-door', 0.95);
+  const one = await run('widen the lobby door to 2 m', { targets: [{ id: 'lobby-door', name: 'Lobby door' }] });
+  assert.ok(accepted(one), JSON.stringify(one));
+  assert.equal(Object.keys(seen[0]!.body.questions.target.criteria).length, 2);
+  const single = await run('widen the lobby door to 2 m', { ops: ['widen'] });
+  assert.ok(accepted(single), JSON.stringify(single));
+  // The model picks "none of these": that slot is not trusted.
+  handler = (b, res) => answer('widen', 0.95, Object.keys(b.questions.target.criteria).find((k) => k !== 'lobby-door')!, 0.95)(b, res);
+  const none = await run('widen the stairs to 2 m', { targets: [{ id: 'lobby-door', name: 'Lobby door' }] });
+  assert.equal(none.target.choice, 'lobby-door');
+  assert.equal(none.target.confidence, 0);
+});
+
+test('review 2: a near word of another op makes the model op unclear', async () => {
+  handler = answer('widen', 0.95, 'lobby-door', 0.95);
+  for (const text of ['widen the lobby door to 2 m and shut it', 'widen the lobby door to 2 m, no wait, undo that']) {
+    assert.ok(!accepted(await run(text)), text);
+  }
+});
+
+test('review 2: a reset needs a reset word in the sentence', async () => {
+  handler = answer('reset', 0.95, 'lobby-door', 0.3);
+  for (const text of ['make it wider', 'shut it']) assert.ok(!accepted(await run(text)), text);
+  for (const text of ['reset', 'start over', 'undo everything']) assert.ok(accepted(await run(text)), text);
+});
+
+test('review 2: a model target that contradicts the one full name typed is not trusted', async () => {
+  handler = answer('widen', 0.95, 'beam-b2', 0.95);
+  assert.ok(!accepted(await run('make the lobby door 1.5 metres wide')));
+});
+
+test('review 2: a negation with no op word still makes the op unclear', async () => {
+  handler = answer('widen', 0.95, 'lobby-door', 0.95);
+  for (const text of ['do not make the lobby door 2 m wide', "please don't, the lobby door must stay 1 m wide"]) {
+    assert.ok(!accepted(await run(text)), text);
+  }
+  assert.ok(accepted(await run('make the lobby door 1.5 metres wide')), 'no negation still applies');
+});
+
+test('review 2: after a timeout, Strands counts as busy until it really answers', async () => {
+  handler = (b, res) => setTimeout(() => answer('widen', 0.99, 'plant-shaft', 0.98)(b, res), 400);
+  unsure(await run('widen the plant shaft to 2 m', {}, { STRANDS_TIMEOUT_MS: '100' }), 'timeout');
+  unsure(await run('widen the plant shaft to 2 m'), 'busy');
+  assert.equal(seen.length, 1, 'the second call never reached Strands');
+  await new Promise((r) => setTimeout(r, 500));
+  handler = answer('widen', 0.99, 'plant-shaft', 0.98);
+  assert.ok(accepted(await run('widen the plant shaft to 2 m')), 'free once Strands answered');
+});
+
+test('review 2: an unsure reset keeps the target the model read', async () => {
+  handler = answer('reset', 0.95, 'lobby-door', 0.6);
+  const p = await run('reset the lobby door to 2 m');
+  assert.ok(!accepted(p));
+  assert.equal(p.target.choice, 'lobby-door');
 });

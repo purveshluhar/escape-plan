@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createServer } from 'node:http';
 import { readConfig, startServer } from './http.ts';
 
 let server: Server;
@@ -59,6 +60,58 @@ test('review: with DECIDER=strands and Strands down, the run fails and says so',
 test('review: the log names the decider and grades each answer against the expected edit', async () => {
   const { out } = await runScript({ SERVER_PORT: String(port) });
   assert.match(out, /decider keywords/);
-  assert.match(out, /\d\/5 right/);
+  assert.match(out, /\d\/5 applied and right/);
   for (const l of out.split('\n').filter((x) => /^call [1-5] /.test(x))) assert.match(l, /(right|WRONG)/, l);
+});
+
+// ---------- Adversarial review, round 2 ----------
+
+// A fake Strands that answers each sentence as `answers` says, so grading runs on the Strands path.
+async function withFakeStrands(answers: Record<string, [string, number, string, number]>, fn: (port: number) => Promise<void>) {
+  const fake = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const state: string = JSON.parse(raw).state;
+      const hit = Object.entries(answers).find(([t]) => state.endsWith(JSON.stringify(t)));
+      const [op, oc, target, tc] = hit ? hit[1] : ['widen', 0.1, 'plant', 0.1];
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ answers: { op: { choice: op, confidence: oc }, target: { choice: target, confidence: tc } } }));
+    });
+  });
+  await new Promise<void>((done) => fake.listen(0, '127.0.0.1', done));
+  const s = await startServer(readConfig({ SERVER_PORT: '0', DECIDER: 'strands', STRANDS_URL: `http://127.0.0.1:${(fake.address() as AddressInfo).port}` }));
+  try {
+    await fn((s.address() as AddressInfo).port);
+  } finally {
+    await new Promise<void>((done) => s.close(() => done()));
+    fake.closeAllConnections();
+    await new Promise<void>((done) => fake.close(() => done()));
+  }
+}
+const RIGHT: Record<string, [string, number, string, number]> = {
+  'widen the plant shaft to 2 m': ['widen', 0.99, 'plant-shaft', 0.98],
+  'add a ramp at the terrace door': ['add_ramp', 0.97, 'terrace-door', 0.9],
+  reset: ['reset', 0.98, 'plant', 0.4],
+  'close the north door': ['close_door', 0.98, 'door-north', 0.97],
+  'make the lobby door 1.5 metres wide': ['widen', 0.99, 'lobby-door', 0.92],
+};
+
+test('review 2: all 5 applied and right on the Strands path exits 0', async () => {
+  await withFakeStrands(RIGHT, async (p) => {
+    const { code, out } = await runScript({ SERVER_PORT: String(p) });
+    assert.equal(code, 0, out);
+    assert.match(out, /decider strands: .*5\/5 applied and right/);
+  });
+});
+
+test('review 2: a wrong edit that would be applied fails the run; an unsure right one is not counted', async () => {
+  // A wrong op on a sentence with no op word passes every plan C guard (round 2 finding 4).
+  await withFakeStrands({ ...RIGHT, 'make the lobby door 1.5 metres wide': ['add_sleeve', 0.98, 'lobby-door', 0.97], reset: ['reset', 0.5, 'plant', 0.4] }, async (p) => {
+    const { code, out } = await runScript({ SERVER_PORT: String(p) });
+    assert.notEqual(code, 0, out);
+    assert.match(out, /call 5 .*applied, WRONG/);
+    assert.match(out, /call 3 .*Did you mean/);
+    assert.match(out, /3\/5 applied and right/);
+  });
 });
