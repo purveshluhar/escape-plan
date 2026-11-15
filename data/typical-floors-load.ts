@@ -9,8 +9,39 @@ import { fadeMaterials } from '../viewer/fade.ts';
 import { TOWER_CENTRE } from '../app/backdrop.ts';
 import { TOWER_FLOORS } from './tower-floors.ts';
 import {
-  FACADE_URL, TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, cutWallScale, floorPlacement, isCutWall, isInterior, looksLikeGlb, towerFloors, towerSlabs,
+  FACADE_URL, TYPICAL_FLOORS_URL, TYPICAL_PLAN_NODE, cutWallScale, floorPlacement, isCutWall, isInterior, looksLikeGlb, plantBandElevations,
+  towerFloors, towerSlabs, windowModuleAt,
 } from './typical-floors.ts';
+
+// An open mechanical band (typical-floors.ts plantBandElevations): the window module's glass is left
+// out, and its openings get louvres, slate slats in front of a dark plant space, in the glass's place.
+const LOUVRE_SLAT = new THREE.MeshLambertMaterial({ color: '#5b6574' });
+const LOUVRE_BACK = new THREE.MeshBasicMaterial({ color: '#2a313b' });
+const WINDOW_HALF = 14.0; // the glass plane, metres from the tower centre (the grid's face is at 14.25)
+const OPENING = { bottom: 0.66, top: 3.71 }; // the window opening within its 4.72 m module
+const SLAT = new THREE.BoxGeometry(2 * WINDOW_HALF, 0.12, 0.22);
+const BACK = new THREE.PlaneGeometry(2 * WINDOW_HALF, OPENING.top - OPENING.bottom);
+
+function louvreBand(elevation: number): THREE.Object3D {
+  const band = new THREE.Group();
+  band.name = 'plant-louvres';
+  for (let side = 0; side < 4; side++) {
+    const face = new THREE.Group();
+    face.rotation.y = (side * Math.PI) / 2;
+    for (let y = OPENING.bottom + 0.15; y < OPENING.top; y += 0.38) {
+      const s = new THREE.Mesh(SLAT, LOUVRE_SLAT);
+      s.position.set(0, y, WINDOW_HALF - 0.05);
+      s.rotation.x = -0.5; // tilted down and out, as louvres are
+      face.add(s);
+    }
+    const dark = new THREE.Mesh(BACK, LOUVRE_BACK);
+    dark.position.set(0, (OPENING.bottom + OPENING.top) / 2, WINDOW_HALF - 0.6);
+    face.add(dark);
+    band.add(face);
+  }
+  band.position.y = elevation;
+  return band;
+}
 
 export interface TypicalFloor {
   object: THREE.Object3D;
@@ -136,6 +167,18 @@ export async function loadTypicalFloor(): Promise<TypicalFloor | null> {
         tower.add(floor);
       }
       showFloors(); // an edit while the facade is open keeps the cut
+
+      if (facade) {
+        const bands = plantBandElevations(b);
+        const bare = new Set(bands.map(windowModuleAt));
+        facade.traverse((o) => {
+          if (/^Windows_Module_\d{3}$/.test(o.name)) o.visible = !bare.has(o.name);
+        });
+        for (const old of facade.children.filter((o) => o.name === 'plant-louvres')) facade.remove(old);
+        // The facade group sits at the tower centre, so the band is drawn about its origin.
+        for (const e of bands) facade.add(louvreBand(e));
+        fadeMaterials(facade, 1 - open.amount); // new louvres take the facade's fade now
+      }
     },
     reveal(amount, cut) {
       open = { amount, cut };

@@ -103,3 +103,19 @@ export function cutWallScale(height: number, amount: number): number {
   const a = Math.min(1, Math.max(0, amount));
   return 1 - a * (1 - CUT_WALL_HEIGHT / height);
 }
+
+// The Lightweight facade is one module per 4.7244 m storey: Facade_Module_001 at the ground, with its
+// window glass in Windows_Module_001, and so on up. The real open mechanical bands (tower level 19 and
+// up) already come without glass. A slice level that holds the plant stands for one of those bands
+// (the data note: L3 is tower level 19, an open mechanical band), so its module is drawn the same way:
+// no glass, louvres in the openings. No airflow is modelled; this is the look only.
+export const FACADE_MODULE_HEIGHT = 4.7244;
+
+export function plantBandElevations(b: Building): number[] {
+  const levels = new Set(b.nodes.filter((n) => n.type === 'plant' && !/^T\d\d$/.test(n.level)).map((n) => n.level));
+  return b.levels.filter((l) => levels.has(l.id)).map((l) => l.elevation);
+}
+
+export function windowModuleAt(elevation: number): string {
+  return `Windows_Module_${String(Math.round(elevation / FACADE_MODULE_HEIGHT) + 1).padStart(3, '0')}`;
+}

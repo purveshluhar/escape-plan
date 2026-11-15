@@ -27,7 +27,7 @@ import { followButton, followFrame, followOnPause, followOnResume, followOnShow,
 import type { CameraFrame, FollowState } from './follow.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
 import type { LabelSide } from './labels.ts';
-import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
+import { LOAD_PATH_TAG, flashPoint, flashingMembers, memberBoxes, memberTag, structureWanted } from './members.ts';
 import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
@@ -268,7 +268,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
   // Members drawn over the building, with their height: hidden with the floors when the facade opens.
-  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[] }[] = [];
+  // `holds`: not the red member, so it fades back when the facade opens. Each has a name tag.
+  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[]; holds: boolean; tag: CSS2DObject }[] = [];
+  // The structure shows only when it is needed (members.ts structureWanted), easing in and out.
+  let structure: Fade = { from: 0, to: 0, start: 0 };
+  let structureNow = 0; // its amount this frame
+  let touched: Id | null = null; // what the last edit changed (flash), until the next show()
+  let tagsCheckedAt = 0;
   let beating: THREE.MeshLambertMaterial[] = []; // members drawn red: they blink after the run, then stay red
   let roomTags: { obj: CSS2DObject; text: string }[] = [];
   // A label per level ("Level 10"), pinned left of its floor plate; shown only while the facade is open.
@@ -353,17 +359,80 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         o.rotation.y = m.yaw;
         fx.add(o);
       }
-      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: red.has(m.id) ? [] : [mat, line] });
+      const words = memberTag(b, m.id);
+      const el = document.createElement('div');
+      el.className = 'ep-member';
+      const face = document.createElement('span');
+      face.append(Object.assign(document.createElement('em'), { textContent: LOAD_PATH_TAG }),
+        Object.assign(document.createElement('b'), { textContent: words?.name ?? m.id }), Object.assign(document.createElement('i'), { textContent: words?.line ?? '' }));
+      el.append(face);
+      el.style.visibility = 'hidden'; // until the tag check finds it clear of every panel and text
+      const tag = new CSS2DObject(el);
+      // A beam's tag sits at the end it rests on (its column), clear of the load standing on its middle.
+      const half = m.kind === 'beam' || m.kind === 'transfer_beam' ? m.size[0] / 2 : 0;
+      tag.position.set(m.center[0] + half * Math.cos(m.yaw), m.center[1], m.center[2] - half * Math.sin(m.yaw));
+      fx.add(tag);
+      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: [mat, line], holds: !red.has(m.id), tag });
+    }
+  }
+
+  // Ease the structure in or out for what is on the model now.
+  function retargetStructure(): void {
+    const want = shown !== null && structureWanted(shown.building, shown.results, touched);
+    structure = retarget(structure, want ? 1 : 0, performance.now(), reduced);
+  }
+
+  // A member's tag shows while the structure does, and only where it covers no panel (the dock, the
+  // answer cards, the strip, the Hint, the fix sheet), no other text on the model and no other tag.
+  // Checked as the floor tags are: within 100 ms while things move, else every 250 ms.
+  function checkMemberTags(now: number): void {
+    if (now - tagsCheckedAt < (following() || structureNow < 1 ? 100 : 250)) return;
+    tagsCheckedAt = now;
+    const r = canvas.getBoundingClientRect();
+    const others = [...textOnModel(), ...floorTags.filter((t) => t.obj.visible && t.rect).map((t) => t.rect!)];
+    const placed: ScreenRect[] = [];
+    const m = 4;
+    const fits = (el: HTMLElement): ScreenRect | null => {
+      const b = el.getBoundingClientRect();
+      const box = { left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top };
+      return b.width > 0 && box.left >= 0 && box.top >= 0 && box.right <= r.width && box.bottom <= r.height
+        && ![...others, ...placed].some((o) => o.left < box.right + m && box.left - m < o.right && o.top < box.bottom + m && box.top - m < o.bottom)
+        && [[box.left - m, box.top - m], [box.right + m, box.top - m], [box.left - m, box.bottom + m], [box.right + m, box.bottom + m],
+          [(box.left + box.right) / 2, (box.top + box.bottom) / 2]].every(([x, y]) => document.elementFromPoint(r.left + x!, r.top + y!) === canvas)
+        ? box : null;
+    };
+    // Top member first: the first tag shown also says the drawing is a simplified load path. Each tag
+    // goes right of its member, else left of it, else hides.
+    let lead = true;
+    for (const { tag } of [...memberMarks].sort((a, b) => b.y - a.y)) {
+      const el = tag.element;
+      const face = el.firstElementChild as HTMLElement;
+      let box: ScreenRect | null = null;
+      if (tag.visible && structureNow >= 0.5) {
+        el.classList.toggle('lead', lead);
+        for (const side of ['right', 'left']) {
+          el.classList.toggle('left', side === 'left');
+          if ((box = fits(face))) break;
+        }
+      }
+      el.style.visibility = box ? '' : 'hidden';
+      if (box) {
+        placed.push(box);
+        lead = false;
+      }
     }
   }
 
   // A member on a hidden floor goes with it (tokens and their routes stay drawn, as always).
   // Zoomed in, a member that holds (not the red one) fades back, so it does not hide the plan, the
   // doors and the things at them; the red member stays strong.
+  // Hidden structure is not drawn at all; easing in or out, every member fades with it.
   function cutMembers(): void {
-    for (const { objs, y, mats } of memberMarks) {
-      for (const o of objs) o.visible = opened <= 0 || y < pickCeiling;
-      const k = 1 - MEMBER_FADE * Math.max(0, opened);
+    for (const { objs, y, mats, holds, tag } of memberMarks) {
+      const on = structureNow > 0 && (opened <= 0 || y < pickCeiling);
+      for (const o of objs) o.visible = on;
+      tag.visible = on;
+      const k = (holds ? 1 - MEMBER_FADE * Math.max(0, opened) : 1) * structureNow;
       for (const m of mats) m.opacity = m instanceof THREE.LineBasicMaterial ? k : MEMBER_OPACITY * k;
     }
   }
@@ -673,11 +742,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function reveal(now: number): void {
     opened = fadeAt(fade, now);
     const cutNow = opened > 0 ? cut : Infinity;
+    const structureThen = structureNow;
+    structureNow = fadeAt(structure, now);
     if (opened !== told.amount || cutNow !== told.cut) {
       told = { amount: opened, cut: cutNow };
       options.onReveal?.(opened, cutNow);
       cutMembers();
-    }
+    } else if (structureNow !== structureThen) cutMembers();
+    if (memberMarks.length > 0 && (structureNow > 0 || structureThen > 0)) checkMemberTags(now);
     if (opened <= 0) {
       for (const tag of floorTags) tag.obj.visible = false;
       return;
@@ -1246,8 +1318,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   function show(building: Building, results: SolverResult[]): number {
     shown = { building, results };
+    touched = null; // an edit that showed the structure counts for its own run only
     laidOut = false;
     retargetFade();
+    retargetStructure();
+    tagsCheckedAt = 0;
     drawBuilding(building);
     buildRuns(building, results);
     drawSmoke();
@@ -1345,6 +1420,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   }
 
   function flash(target: Id): void {
+    touched = target;
+    retargetStructure();
     const at = shown ? flashPoint(shown.building, target) : null;
     if (!at) return;
     const el = document.createElement('div');
@@ -1392,6 +1469,15 @@ function injectStyles(): void {
 .ep-floor span { position: absolute; right: ${FLOOR_TAG_GAP}px; transform: translateY(-50%); white-space: nowrap;
   font: 600 13px/1 ${FONT_BODY}; color: ${TEXT}; background: ${GLASS_STRONG}; border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 999px; padding: 5px 10px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+/* A member's name and what it holds up: a calm two-line pill right of its centre, under every answer. */
+.ep-member { z-index: 1 !important; width: 0; height: 0; }
+.ep-member span { position: absolute; left: 14px; transform: translateY(-50%); white-space: nowrap; background: ${GLASS_STRONG};
+  border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 10px; padding: 5px 9px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+.ep-member.left span { left: auto; right: 14px; }
+.ep-member em { display: none; font: 700 10px/1.3 ${FONT_BODY}; font-style: normal; letter-spacing: 1px; text-transform: uppercase; color: ${TEXT_MUTED}; }
+.ep-member.lead em { display: block; margin-bottom: 2px; }
+.ep-member b { display: block; font: 700 13px/1.25 ${FONT_BODY}; color: ${TEXT}; }
+.ep-member i { display: block; font: 600 12px/1.25 ${FONT_BODY}; font-style: normal; color: ${TEXT_MUTED}; }
 /* Exit names: quiet caps at street level, always under tokens and fail cards. */
 .ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;
