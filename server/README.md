@@ -87,8 +87,9 @@ these rules:
 - The value comes from the plan C number parser, with the same rules and the 0-5 m check as above.
 - Reset skips the target check: the target slot is the first target at confidence 1, and the value
   is `null`.
-- Plan C's guards cap the op confidence at 0.4: a reset that also names a target or a number, and
-  an op word with a negation in the 3 words before it ("don't widen").
+- Plan C's guards cap the op confidence at 0.4: a reset that also names a target or a number, the
+  own word of another op in the sentence ("reset the lobby door to 2 m" read as widen), and an op
+  word with a negation in the 3 words before it ("don't widen").
 - Send only the targets on screen. Over 50 targets, the model is not asked. 50 is not measured: the
   spike found that 14 worked, 156 gave no answer at 0.8 or more, and 255 did not fit. Long names fill
   the model's window sooner; Strands then answers an error, and the rule below applies.
