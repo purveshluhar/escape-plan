@@ -15,17 +15,22 @@ They are not real answers. Replace them with v1.
 - Every case lists the edits applied in order, and only the fields you checked by hand.
 - `npm test` validates every `data/*.json` file against its schema and checks that every id
   points at something real. A new JSON file needs a line in `SCHEMA_FOR` in `data.test.ts`.
-- Self-made and synthetic data only, with one exception: the Cityweft block (`data/cityweft/block.glb`
-  and `meta.json`) is committed so a fresh clone shows the real city around the tower. Credit:
-  Cityweft, OpenStreetMap, Overture Maps Foundation, Meta & WRI canopy heights. `instances.json` and
-  anything else Cityweft writes stays git-ignored.
+- Self-made and synthetic data only. No Cityweft files here: the Cityweft block is fetched locally
+  into git-ignored `data/cityweft/` (below) and never committed (`docs/adr/0004`).
 
 ## Cityweft block (tier 2)
 
-`node --env-file=.env data/cityweft-fetch.ts` fetches a 500 m block around 432 Park Avenue (override with
-`CITYWEFT_SIZE_M`) into git-ignored `data/cityweft/`. It needs `CITYWEFT_API_KEY` in the
-git-ignored `.env`, never with a `VITE_` prefix. Nothing from `data/cityweft/` is ever committed
-(`docs/adr/0004`).
+The block is not in the repo, so a fresh clone shows the plain ground. To see the city around the
+tower, fetch it on your machine:
+
+1. Copy `.env.example` to `.env` (git-ignored) and put your key after `CITYWEFT_API_KEY=`.
+   Never give it a `VITE_` prefix.
+2. Run `node --env-file=.env data/cityweft-fetch.ts`. It fetches a 500 m block around 432 Park
+   Avenue (override with `CITYWEFT_SIZE_M`) into git-ignored `data/cityweft/`.
+3. Reload the game in `npm run dev`. The dev server serves the block; a build never has it.
+
+Nothing from `data/cityweft/` is ever committed (`docs/adr/0004`). Credit: Cityweft, OpenStreetMap,
+Overture Maps Foundation, Meta & WRI canopy heights.
 
 - The block is centred 162 m north and 10 m west of 432 Park Avenue so a little of Central Park
   (north of 59th Street, west of Fifth Avenue) fills its north-west corner. `meta.json` records
