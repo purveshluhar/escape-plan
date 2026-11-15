@@ -1283,7 +1283,7 @@ function injectStyles(): void {
 /* The selected token's line sits under its figure: fail labels never go below a token. */
 .ep-tag { z-index: 100000 !important; } /* over a red X; cards keep clear of it (labels.ts avoid) */
 .ep-tag span { position: absolute; transform: translate(-50%, 14px); white-space: nowrap; font: 700 14px/1 ${FONT_BODY};
-  color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px solid ${ACCENT}; border-radius: 999px; padding: 7px 11px;
+  color: ${TEXT}; background: #ffffff; border: 2px solid ${ACCENT}; border-radius: 999px; padding: 7px 11px;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14); }
 .ep-tag-dot { display: inline-block; width: 10px; height: 10px; margin: 0 7px 1px 0; border-radius: 50%;
   vertical-align: middle; box-shadow: 0 0 0 1.5px ${TEXT}; }
@@ -1303,9 +1303,10 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
   border: 2px solid ${FAIL}; border-radius: 10px; padding: 8px 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
   animation: ep-fade 0.4s ${EASE_GLASS}; }
 /* The corner diagram's one line of numbers, left of the dashed line it names, clear of the card (right) and the caption (below). */
-.ep-fits { z-index: 99998 !important; width: 0; height: 0; }
+/* Text on the model sits over the red Xs on an opaque plate, so an X never shows through its words. */
+.ep-fits { z-index: 100000 !important; width: 0; height: 0; }
 .ep-fits span { position: absolute; transform: translate(calc(-100% - 16px), -50%); white-space: nowrap; font: 700 13px/1 ${FONT_BODY};
-  color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px dashed ${ACCENT}; border-radius: 999px; padding: 5px 9px; }
+  color: ${TEXT}; background: #ffffff; border: 2px dashed ${ACCENT}; border-radius: 999px; padding: 5px 9px; }
 .side-right .ep-card { left: ${LABEL_GAP}px; }
 .side-left .ep-card { right: ${LABEL_GAP}px; }
 .side-above .ep-card { left: 0; top: ${X_LIFT - 32}px; transform: translate(-50%, -100%); }
