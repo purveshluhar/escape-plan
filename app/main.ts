@@ -255,7 +255,7 @@ function applyFix(edit: Edit, label: string): void {
   const priorGame = S.game;
   S.game = applyEdit(S.game, edit);
   if (S.game !== priorGame && edit.op !== 'reset') void askPanel(priorGame, edit);
-  else if (edit.op === 'reset') closePanel();
+  else closePanel(); // Undo edits, or an edit already applied: the last votes are about another edit
   S.editOpen = false;
   S.read = null;
   ($('editInput') as HTMLInputElement).value = '';

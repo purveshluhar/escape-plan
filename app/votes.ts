@@ -6,7 +6,7 @@ import type { Building, Discipline, Edit, JevVote, JevVoteRequest, SolverResult,
 import { JEV_ACCEPT_CONFIDENCE, VOTES } from '../contract/types.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { questionOf } from './questions.ts';
-import { REASON_TEXT, placeName } from './scoreboard.ts';
+import { stuckLine } from './scoreboard.ts';
 
 export const VOTES_URL = '/votes'; // same origin; vite.config.ts proxies it to 127.0.0.1
 export const VOTES_TIMEOUT_MS = 2500; // the latency budget; the server gives the model 2 s of it
@@ -15,8 +15,9 @@ const NBSP = '\u00a0';
 const MAX_MODEL_QUESTIONS = 2; // server/votes.ts: more changed answers than this go to the rules
 
 // One request per discipline in the data, in building order. When two tokens share a discipline
-// (glass and sofa are both logistics), the first one whose answer this edit changed speaks for it,
-// else the first one.
+// (glass and sofa are both logistics), the one this edit broke (Yes to No) speaks for it, else the
+// one it fixed (No to Yes), else the first one; the first wins a tie.
+const weight = (b: SolverResult, a: SolverResult): number => (b.status === a.status ? 0 : a.status === 'fail' ? 2 : 1);
 export function voteRequests(building: Building, edit: Edit, before: readonly SolverResult[], after: readonly SolverResult[]): JevVoteRequest[] {
   const out = new Map<Discipline, JevVoteRequest>();
   for (const t of building.tokens) {
@@ -24,15 +25,14 @@ export function voteRequests(building: Building, edit: Edit, before: readonly So
     const a = after.find((r) => r.token === t.id);
     if (!b || !a) continue;
     const held = out.get(t.discipline);
-    const changed = b.status !== a.status;
-    if (!held || (changed && held.before.status === held.after.status)) out.set(t.discipline, { discipline: t.discipline, edit, before: b, after: a });
+    if (!held || weight(b, a) > weight(held.before, held.after)) out.set(t.discipline, { discipline: t.discipline, edit, before: b, after: a });
   }
   return [...out.values()];
 }
 
 // Why the panel shows what it shows: the model voted, the rules voted (no model answered), or no
 // votes came (server down, slower than the budget, or an answer that cannot be used).
-export type PanelWhy = 'pending' | 'strands' | 'rules' | 'down' | 'slow' | 'refused';
+export type PanelWhy = 'pending' | 'strands' | 'rules' | 'down' | 'slow' | 'busy' | 'refused';
 
 export interface PanelReading {
   requests: JevVoteRequest[];
@@ -74,7 +74,11 @@ export async function readVotes(requests: JevVoteRequest[], deps: VoteDeps = {})
     const voter = res.headers.get('x-voter');
     const decider = res.headers.get('x-decider');
     // 502, 503 or 504 with no x-voter is the Vite proxy saying it could not reach the server.
-    if (!res.ok) return voter === null && res.status >= 502 && res.status <= 504 ? done('down') : done('refused', [], voter, decider);
+    if (!res.ok) {
+      if (voter === null && res.status >= 502 && res.status <= 504) return done('down');
+      // 429 is the Vite guard: its few places are shared with /parse.
+      return res.status === 429 ? done('busy') : done('refused', [], voter, decider);
+    }
     const body: unknown = await res.json().catch(() => undefined);
     if (ctl.signal.aborted) return done('slow');
     if ((voter !== 'strands' && voter !== 'rules') || !usable(body, requests)) return done('refused', [], voter, decider);
@@ -115,15 +119,14 @@ export interface PanelModel {
 const yesNo = (r: SolverResult): 'Yes' | 'No' => (r.status === 'pass' ? 'Yes' : 'No');
 
 // The one-line reason: what the rules found for this discipline's question, before and after. It
-// starts with "Rules:", because it is the rules' finding, not the voter's own words.
+// starts with "Rules:", because it is the rules' finding, not the voter's own words. A No uses the
+// one stuck line every screen uses (design/copy.md section 3, scoreboard.ts stuckLine).
 function reasonLine(building: Building, r: JevVoteRequest): string {
+  const same = r.before.status === r.after.status;
+  if (r.after.status === 'fail') return `Rules: ${same ? 'still No' : 'was Yes, now No'}. ${stuckLine(building, r.after)}`;
   const name = tokenName(r.after.token);
   const plural = questionOf(r.after.token)?.plural ?? false;
-  const why = REASON_TEXT[r.after.reason ?? 'no_route'];
-  const stuck = r.after.status === 'pass' ? ''
-    : r.after.blocked_at ? `, stuck at ${placeName(building, r.after.blocked_at)} (${why})` : ` (${why})`;
-  if (r.before.status === r.after.status) return `Rules: ${name} ${plural ? 'are' : 'is'} still ${yesNo(r.after)}${stuck}`;
-  return `Rules: ${name} ${plural ? 'were' : 'was'} ${yesNo(r.before)}, now ${yesNo(r.after)}${stuck}`;
+  return same ? `Rules: ${name} ${plural ? 'are' : 'is'} still Yes` : `Rules: ${name} ${plural ? 'were' : 'was'} No, now Yes`;
 }
 
 // The server asks the model only about these (server/votes.ts `changed`); the rules vote the rest.
@@ -149,6 +152,7 @@ function sourceText(r: PanelReading): string {
     }
     case 'down': return 'No votes - the server is not reachable';
     case 'slow': return `No votes - no answer in ${seconds(VOTES_TIMEOUT_MS)}`;
+    case 'busy': return 'No votes - the page is making too many calls at once';
     case 'refused': return 'No votes - the server answer could not be used';
   }
 }

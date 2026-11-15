@@ -44,6 +44,10 @@ test('one vote request per discipline in the data, with what the rules said befo
   ]);
   for (const r of shaftRequests) assert.deepEqual(r.edit, SHAFT);
   // Two tokens share logistics: the one whose answer this edit changed speaks for it.
+  // A Yes-to-No speaks first: glass No to Yes and sofa Yes to No, sofa speaks (its break is shown).
+  const res = (token: string, status: 'pass' | 'fail') => ({ token, status, path: [], blocked_at: null, reason: null, needed: null, available: null });
+  const mixed = voteRequests(building, LOBBY, [res('glass', 'fail'), res('sofa', 'pass')], [res('glass', 'pass'), res('sofa', 'fail')]);
+  assert.deepEqual(mixed.map((x) => x.after.token), ['sofa']);
   const sofaOnly = voteRequests(building, LOBBY, solve(building), solve(building, [LOBBY]));
   assert.equal(sofaOnly.find((r) => r.discipline === 'logistics')!.after.token, 'glass');
   const moved = { ...building, tokens: building.tokens.map((t) => (t.id === 'glass' ? { ...t, size: { ...t.size, length: 9 } } : t)) };
@@ -70,10 +74,10 @@ test('model votes: a vote that disagrees with the rules is shown as a disagreeme
   assert.equal(m.source, 'x-voter: strands - on this computer, 1.2\u00a0s');
   assert.deepEqual(m.bubbles.map((b) => [b.discipline, b.who, b.vote, b.confidence, b.reason, b.rules]), [
     ['MEP', 'Strands Decider', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
-    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: Glass is still No, stuck at Lobby door (cannot turn the corner)', ''],
-    ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Rules: Wheelchair is still No, stuck at Terrace door (step in the way)', ''],
-    ['Structure', 'Strands Decider', 'Accept', '0.72', 'Rules: Load was Yes, now No, stuck at beam B2 (nothing holds it up)', 'This vote disagrees with the rules'],
-    ['Life safety', 'Rules, no change', 'Review', '1.00', 'Rules: People are still No, stuck at Office door (too narrow)', ''],
+    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Glass is stuck at Lobby door: cannot turn the corner, needs 4.0 m, has 3.71 m', ''],
+    ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Wheelchair is stuck at Terrace door: step in the way, 0.15 m high, needs level', ''],
+    ['Structure', 'Strands Decider', 'Accept', '0.72', 'Rules: was Yes, now No. Load is stuck at beam B2: nothing holds it up, no path down to a foundation', 'This vote disagrees with the rules'],
+    ['Life safety', 'Rules, no change', 'Review', '1.00', 'Rules: still No. People are stuck at Office door: too narrow, needs 0.6 m, has 0.5 m', ''],
   ]);
   assert.deepEqual(m.bubbles.map((b) => b.clash), [false, false, false, true, false]);
   // Under 0.80 (JEV_ACCEPT_CONFIDENCE) a vote is marked not sure, as in the who decided strip.
@@ -149,6 +153,10 @@ test('server down, slow or unusable: no votes, and the panel says the rules stil
     [RULES, 'someone', 200],
     [{ votes: RULES }, 'rules', 200],
   ];
+  // The Vite guard's 429 (its places are shared with /parse) is busy, not an unusable answer.
+  const busy = await readVotes(shaftRequests, { fetch: fakeFetch(() => reply({ error: 'too many calls' }, null, null, 429)) });
+  assert.equal(busy.why, 'busy');
+  assert.equal(panelModel(busy, building).source, 'No votes - the page is making too many calls at once');
   for (const [body, voter, status] of broken) {
     const r = await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(body, voter, 'keywords', status)) });
     assert.equal(r.why, 'refused', JSON.stringify(body).slice(0, 80));
@@ -159,7 +167,7 @@ test('server down, slow or unusable: no votes, and the panel says the rules stil
 
 test('panel text has no game words, and browser code imports nothing from node or server', () => {
   const src = readFileSync(new URL('./votes.ts', import.meta.url), 'utf8') + readFileSync(new URL('./votes-view.ts', import.meta.url), 'utf8');
-  const strings = [...src.matchAll(/'([^'\n]*)'|`([^`\n]*)`/g)].map((m) => m[1] ?? m[2] ?? '')
+  const strings = [...src.matchAll(/'([^'\n]*)'|`([^`\n]*)`|"([^"\n]*)"/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '')
     .filter((s) => s !== 'pass' && s !== 'fail').join('\n');
   assert.doesNotMatch(strings, /\b(level complete|level|score|win|player|play|tokens?|PASS|FAIL|escaping|game)\b/i);
   assert.doesNotMatch(src, /from 'node:|from '\.\.\/server\//);

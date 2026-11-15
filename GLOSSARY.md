@@ -88,7 +88,7 @@ Units are metres and kN.
 - **Review panel**: the vote bubbles after an edit, one per discipline in the data (`POST /votes`). Voted by Strands Decider, or by the rules when no model answers. A vote that says the opposite of the rules is shown as "Rules disagree"; the rules' answer stands.
 - **Plan B**: a general LLM forced to return the same typed answers as Jev.
 - **Plan C**: a keyword parser and the buttons.
-- **Strands Decider**: the open-source (Apache-2.0) typed-decision model that fills Jev's parse slot today, with `DECIDER=strands` (server/README.md). It reads the op and the target only; on screen it is named "Strands Decider". ADRs keep the name Jev for history.
+- **Strands Decider**: the open-source (Apache-2.0) typed-decision model that fills Jev's parse slot today, with `DECIDER=strands` (server/README.md). It reads the op and the target only, and votes in the review panel (`POST /votes`); on screen it is named "Strands Decider". ADRs keep the name Jev for history.
 - **Who decided strip**: the panel after a typed edit: the sentence, the reading with a confidence per part, then the rules' answer. Below 0.8 it turns amber, says "Not sure" and changes nothing.
 - **Reader**: who read a typed sentence: Strands Decider (on the server), or the page's own keyword reader (`app/shell.ts parseEdit`) when the server runs keywords, is down, or takes over 2.5 s.
 - **Phone messages** (T3): `join`, `escape`, `vote` from a phone; `result` back to it.
