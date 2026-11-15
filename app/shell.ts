@@ -19,8 +19,8 @@ export interface PickItem {
   key: number | null; // keyboard shortcut 1..9; null past the ninth object
 }
 
-// The objects the dock offers: every token in the building in data order, or with a `roster` (the
-// MVP game) only those tokens, in roster order. Nothing else shows: no "Later" chips.
+// The questions the dock offers: every token in the building in data order, or with a `roster`
+// (the MVP set) only those tokens, in roster order. Nothing else shows: no "Later" chips.
 export function pickerItems(building: Building, roster?: readonly Id[]): PickItem[] {
   const play = roster ? roster.flatMap((id) => building.tokens.filter((t) => t.id === id)) : building.tokens;
   return play.map((t: Token, i): PickItem => {
@@ -60,14 +60,14 @@ export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Bui
   };
 }
 
-// The line shown over a selected object: its name, where it starts, and how it did (Escaping while
-// a run plays).
+// The line shown under a selected token on the model: its name, where it starts, and its answer
+// (Checking while a run plays).
 export function tokenCaption(building: Building, token: Id, result: SolverResult | null, running = false): string {
   const t = building.tokens.find((x) => x.id === token);
   const where = t ? placeName(building, t.start) : '';
-  const state = running ? 'Escaping' : !result ? 'Ready'
-    : result.status === 'pass' ? 'PASS'
-    : `FAIL: ${REASON_TEXT[result.reason ?? 'no_route']}`;
+  const state = running ? 'Checking' : !result ? 'Ready'
+    : result.status === 'pass' ? 'Yes'
+    : `No: ${REASON_TEXT[result.reason ?? 'no_route']}`;
   return [tokenName(token), where, state].filter(Boolean).join(' - ');
 }
 
@@ -88,17 +88,30 @@ export function phaseAfterRun(results: readonly SolverResult[]): Phase {
   return results.length > 0 && results.every((r) => r.status === 'pass') ? 'complete' : 'result';
 }
 
-export const PHASE_WORD: Record<Phase, string> = {
-  empty: 'Ready', placed: 'Ready', running: 'Running', result: 'Result', complete: 'LEVEL COMPLETE',
-};
+const count = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-export function countText(phase: Phase, placed: number, results: readonly SolverResult[] | null): string {
-  if (phase === 'empty') return 'Pick an object to place it';
-  if (phase === 'running') return `${placed} escaping`;
-  if ((phase === 'result' || phase === 'complete') && results) {
-    return `${results.filter((r) => r.status === 'pass').length} of ${placed} out`;
+// The first word of the summary pill (design/copy.md S13). No game words: no LEVEL COMPLETE.
+export function phaseWord(phase: Phase, placed: number): string {
+  switch (phase) {
+    case 'empty': return 'Your building';
+    case 'placed': return 'Ready';
+    case 'running': return 'Checking';
+    case 'result': return placed === 1 ? 'Answer' : 'Answers';
+    case 'complete': return placed === 1 ? 'Yes' : 'Yes to all';
   }
-  return `${placed} placed`;
+}
+
+// The second part of the pill: what to do, how many questions, or the answers (S14 to S17).
+export function countText(phase: Phase, placed: number, results: readonly SolverResult[] | null): string {
+  if (phase === 'empty') return 'Pick a question to start';
+  if (phase === 'running') return count(placed, 'route');
+  if ((phase === 'result' || phase === 'complete') && results) {
+    const yes = results.filter((r) => r.status === 'pass').length;
+    if (phase === 'complete') return `${yes} of ${results.length} yes`;
+    if (results.length === 1) return yes === 1 ? 'Yes' : 'No';
+    return `${yes} yes, ${results.length - yes} no`;
+  }
+  return count(placed, 'question');
 }
 
 // Seconds the viewer needs to finish every placed token's walk (stagger plus one full path).

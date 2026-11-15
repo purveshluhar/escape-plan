@@ -9,8 +9,9 @@ the demo script (`design/demo-script.md` when written).
 
 ## Status
 
-Look locked: **Liquid Glass v2** (light frosted building, glass UI chrome, one blue accent, pixel
-type for moments only). The board is always 3D isometric: shaded, x-ray or exploded floors.
+Look locked: **Liquid Glass v2**, a calm, light surface (light frosted building, glass UI chrome,
+one blue accent, pixel type for the wordmark and CONFLICT! only). The model is always 3D
+isometric: shaded, x-ray or exploded floors.
 
 - `tokens.ts`: palette, glass, discipline colours, glyphs and glyph ink, fonts, type sizes,
   space, radius, views, `PATH`, `MOTION`, `GHOST_OPACITY`, `contrastRatio()`. Export names
@@ -24,8 +25,8 @@ type for moments only). The board is always 3D isometric: shaded, x-ray or explo
 
 ## Tier 1 first task
 
-Lock the discipline colours and glyphs in `design/tokens.ts`, the path style, and the fail and
-win moments, following `look.md` and its colour rules. Use the `demo-and-pitch` skill for the
+Lock the discipline colours and glyphs in `design/tokens.ts`, the path style, and the No and
+all-yes moments, following `look.md` and its colour rules. Use the `demo-and-pitch` skill for the
 script. Every asset is self-made or properly licensed; record the
 source of any third-party asset in this README.
 

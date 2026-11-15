@@ -1,8 +1,8 @@
 // Visual tokens shared by viewer/ and app/. Owner: P4. See design/look.md.
-// Look: Escape Plan Liquid Glass v2. A calm, light game surface: a pale frosted building, glass
+// Look: Escape Plan Liquid Glass v2. A calm, light surface: a pale frosted building, glass
 // panels for the UI, one blue accent, four character colours and two status colours. The board
 // is always a 3D isometric view (shaded, x-ray or exploded floors), never a plan.
-// Pixel type stays for a few moments only (wordmark, ESCAPE!, CONFLICT!, LEVEL COMPLETE).
+// Pixel type stays for the wordmark only. Show me and the Yes to all answer use FONT_BODY (design/copy.md).
 // Each discipline has a colour AND a glyph, so status never relies on colour alone.
 // Source: the "Escape Plan · Liquid Glass" design system (project/tokens.json, v2).
 import type { Discipline } from '../contract/types.ts';
@@ -29,7 +29,7 @@ export const SHADOW_GLASS =
 
 // ---------- Accent: one filled control per state ----------
 
-export const ACCENT = '#2f5bff'; // fills the single primary action (ESCAPE!, APPLY, REPLAY), selection, focus
+export const ACCENT = '#2f5bff'; // fills the single primary action (Show me, Apply, Try again), selection, focus
 export const ACCENT_DEEP = '#2146d6'; // pressed accent
 export const ON_ACCENT = '#ffffff'; // text on ACCENT, PASS and FAIL fills
 
@@ -38,7 +38,7 @@ export const ON_ACCENT = '#ffffff'; // text on ACCENT, PASS and FAIL fills
 export const TEXT = '#0f172a'; // `ink`: primary text, 15.9:1 on BACKGROUND
 export const TEXT_MUTED = '#475569'; // `ink-muted`: secondary text, 6.7:1
 export const TEXT_DIM = '#64748b'; // `ink-dim`: 16 px and up only (hints, disabled), 4.2:1
-export const SCORE = ACCENT; // headline moments in pixel type: READY, LEVEL COMPLETE
+export const SCORE = ACCENT; // accent for a headline (export name kept for the code; not a score)
 
 // ---------- Status (never used for a discipline) ----------
 
@@ -76,8 +76,8 @@ export const FONT_STYLESHEET =
 
 // Sizes at the 1920 x 1080 projector master (the 1366 laptop preset uses 15 body / 12 labels).
 export const TYPE = {
-  displayXl: 88, // LEVEL COMPLETE only
-  displayLg: 40, // ESCAPE!, CONFLICT!
+  displayXl: 88, // largest headline (not used for the Yes to all answer)
+  displayLg: 40, // large headline
   displayMd: 24, // wordmark only
   labelLg: 20, // names, secondary buttons; bold, uppercase, tracked 1.5 px
   labelSm: 15, // badges, tabs; minimum label size
@@ -119,14 +119,14 @@ export const DIM_OPACITY = 0.6; // last run's statuses after an edit, until the 
 
 export const MOTION = {
   secondsPerToken: 2, // travel time along a full path (1.5-2.5 s)
-  staggerSeconds: 0.25, // start offset between tokens after ESCAPE!
+  staggerSeconds: 0.25, // start offset between tokens after Show me
   failShakeMs: 150, // shake when a token hits blocked_at (3 x 3 px, stepped)
   failFreezeMs: 400, // everything holds before the fail is shown (`dur-beat`)
   failBlinkHz: 2, // cross blink rate; must stay at or under MAX_FLASH_HZ
   failBlinkCount: 3,
-  winFlashHz: 2, // building outline blinks ACCENT <-> white on LEVEL COMPLETE
+  winFlashHz: 2, // retired: the Yes to all answer does not flash (design/copy.md); kept so imports compile
   winFlashCount: 4,
-  bannerHoldSeconds: 2.4, // CONFLICT! banner hold before it docks into the card
+  bannerHoldSeconds: 2.4, // how long a viewer banner holds full size before it docks small
   pressMs: 120, // `dur-tick`
   quickMs: 240, // `dur-quick`: hover, selection, panel slide
   showMs: 1200, // `dur-show`: nothing important lasts less than this

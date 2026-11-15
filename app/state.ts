@@ -43,7 +43,7 @@ export function editLabel(building: Building, edit: Edit): string {
     case 'add_sleeve':
       return `Add sleeve at ${lower}`;
     case 'reset':
-      return 'Reset';
+      return 'Undo edits';
   }
 }
 

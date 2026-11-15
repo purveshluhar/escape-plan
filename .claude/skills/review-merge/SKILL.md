@@ -15,7 +15,7 @@ description: Checks to run before a merge to main, by the author and by P1. Use 
 3. `contract/` is unchanged, or the change was approved by P1 (`contract-change`).
 4. `data/expected.json` values are unchanged, unless you are P5 and checked them by hand.
 5. Run `npm ci` if `package.json` changed, then `npm run check` (typecheck, test, build). It passes.
-6. Run `npm run dev`, press **Escape!**, and walk the demo path. It still works.
+6. Run `npm run dev`, press **Show me**, and walk the demo path. It still works.
 7. Search the diff for secrets and big files: no keys, no `.env`, no `*.glb`, no `*.3dm`, no
    Cityweft export, nothing over 5 MB.
 8. Commit messages are Conventional Commits in plain ASCII.

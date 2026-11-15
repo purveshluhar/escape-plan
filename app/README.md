@@ -1,7 +1,7 @@
 # app/
 
 **Owner:** P3 (@minsookim1014 and @jackwayfeel).
-**Purpose:** the game shell: app state, edit buttons, reset, scoreboard. Later the text box and
+**Purpose:** the app shell: app state, edit buttons, Undo edits, the Answers panel. Later the text box and
 "Did you mean" buttons for Jev edits (T2), vote bubbles, phone controllers and voice (T3). P3
 wires these screens to P1's local server in `server/` (ADR 0008), which makes the Jev, plan B and
 plan C calls and runs the phone sockets.
@@ -11,7 +11,7 @@ Pure logic (`app/scoreboard.ts`) is tested in `app/scoreboard.test.ts`.
 
 ## Status
 
-Starter: an Escape! button, a scoreboard and a LEVEL COMPLETE banner.
+Starter: a Show me button, the Answers panel and the Yes to all banner.
 
 ## Tier 1 first task
 

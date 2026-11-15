@@ -21,13 +21,13 @@ tested without a browser.
 
 Tier 1 (#5), restyled to Liquid Glass v2 (`design/look.md`). Every `show()` re-runs all tokens,
 `MOTION.staggerSeconds` apart. Each token, a tile with its glyph, travels the route dots along
-its `path`, which goes through the door between rooms. On a fail it shakes, and a blinking red
-X pops above `blocked_at` with a label: "CHILLER  TOO NARROW / Plant shaft: needs 1.6 m, has
+its `path`, which goes through the door between rooms. On a No it shakes, and a blinking red
+X pops above `blocked_at` with a label: "Chiller: too narrow / Plant shaft: needs 1.6 m, has
 1.2 m". Labels go right, left or above their X, whichever overlaps least. When every token
-passes, LEVEL COMPLETE shows.
+passes, the Yes to all banner shows.
 
 `createViewer(container, { insetRight })`: pixels on the right covered by a floating panel.
-The model and LEVEL COMPLETE centre in the space left of it. The canvas is transparent, so the
+The model and the Yes to all banner centre in the space left of it. The canvas is transparent, so the
 page backdrop shows through.
 
 Dev page: `npm run dev`, then open http://localhost:5173/viewer/dev.html (add `&inset=372` to

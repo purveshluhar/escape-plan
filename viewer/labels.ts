@@ -1,47 +1,58 @@
-// Words for the fail moment (design/look.md): a title and a line of numbers next to the red X.
-// Pure, so it is easy to test.
+// Words next to the red X when the answer is No (design/copy.md, section 3): a title and a line
+// with the place and the numbers. Sentence case, calm. Pure, so it is easy to test.
 import type { Building, Reason, SolverResult } from '../contract/types.ts';
 
+// The same words as REASON_TEXT in app/scoreboard.ts (the viewer does not import from app/).
 const REASON_WORDS: Record<Reason, string> = {
-  too_narrow: 'TOO NARROW',
-  too_low: 'TOO LOW',
-  cannot_turn: 'CANNOT TURN',
-  step: 'STEP',
-  no_support: 'NO SUPPORT',
-  smoke_first: 'SMOKE FIRST',
-  uphill: 'UPHILL',
-  crosses_beam: 'CROSSES BEAM',
-  no_supply: 'NO SUPPLY',
-  no_route: 'NO ROUTE',
+  too_narrow: 'too narrow',
+  too_low: 'too low',
+  cannot_turn: 'cannot turn the corner',
+  step: 'step in the way',
+  no_support: 'nothing holds it up',
+  smoke_first: 'smoke gets there first',
+  uphill: 'runs uphill',
+  crosses_beam: 'crosses a beam',
+  no_supply: 'no power reaches it',
+  no_route: 'no way through',
 };
 
 const METRES: ReadonlySet<Reason> = new Set(['too_narrow', 'too_low', 'cannot_turn']);
 
-const num = (n: number): string => String(Math.round(n * 100) / 100);
+// At least one decimal, so a measurement reads as one: 2 -> "2.0", 1.17 -> "1.17".
+const num = (n: number): string => {
+  const s = n.toFixed(2);
+  return s.endsWith('0') ? s.slice(0, -1) : s;
+};
+
+// A member has no name in the data: "beam-b2" -> "beam B2" (as app/scoreboard.ts placeName).
+const memberName = (id: string): string => {
+  const parts = id.split(/[-_]/);
+  const last = parts.pop() ?? id;
+  return [...parts, last.toUpperCase()].join(' ');
+};
 
 export interface FailText {
-  title: string; // "CHILLER  TOO NARROW"
+  title: string; // "Chiller: too narrow"
   detail: string; // "Plant shaft: needs 1.6 m, has 1.2 m"
 }
 
 export function failText(b: Building, r: SolverResult): FailText | null {
   if (r.status !== 'fail') return null;
-  const token = b.tokens.find((t) => t.id === r.token);
-  const label = tokenName(r.token).toUpperCase();
+  const label = tokenName(r.token);
   const reason = r.reason ?? 'no_route';
   const place = b.edges.find((e) => e.id === r.blocked_at)?.name
     ?? b.nodes.find((n) => n.id === r.blocked_at)?.name
-    ?? r.blocked_at;
+    ?? (r.blocked_at && b.members.some((m) => m.id === r.blocked_at) ? memberName(r.blocked_at) : r.blocked_at);
 
   let numbers = '';
-  if (reason === 'step' && r.available !== null) numbers = `step ${num(r.available)} m, needs level`;
-  else if (reason === 'no_support') numbers = 'no load path to a foundation';
+  if (reason === 'step' && r.available !== null) numbers = `${num(r.available)} m high, needs level`;
+  else if (reason === 'no_support') numbers = 'no path down to a foundation';
   else if (r.needed !== null && r.available !== null) {
     const unit = METRES.has(reason) ? ' m' : '';
     numbers = `needs ${num(r.needed)}${unit}, has ${num(r.available)}${unit}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');
-  return { title: `${label}  ${REASON_WORDS[reason]}`, detail };
+  return { title: `${label}: ${REASON_WORDS[reason]}`, detail };
 }
 
 // Where each fail label goes: right of its red X, left of it, or above it (never below: the

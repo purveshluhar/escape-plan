@@ -27,7 +27,7 @@ tower, fetch it on your machine:
    Never give it a `VITE_` prefix.
 2. Run `node --env-file=.env data/cityweft-fetch.ts`. It fetches a 500 m block around 432 Park
    Avenue (override with `CITYWEFT_SIZE_M`) into git-ignored `data/cityweft/`.
-3. Reload the game in `npm run dev`. The dev server serves the block; a build never has it.
+3. Reload the app in `npm run dev`. The dev server serves the block; a build never has it.
 
 Nothing from `data/cityweft/` is ever committed (`docs/adr/0004`). Credit: Cityweft, OpenStreetMap,
 Overture Maps Foundation, Meta & WRI canopy heights.

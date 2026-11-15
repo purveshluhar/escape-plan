@@ -11,16 +11,21 @@ const fail = (r: Partial<SolverResult>): SolverResult => ({
 
 test('fail label names the token, the reason, the place and both numbers in metres', () => {
   assert.deepEqual(failText(b, fail({ blocked_at: 'plant-shaft', reason: 'too_narrow', needed: 1.6, available: 1.2 })), {
-    title: 'CHILLER  TOO NARROW',
+    title: 'Chiller: too narrow',
     detail: 'Plant shaft: needs 1.6 m, has 1.2 m',
   });
 });
 
 test('a step says how high it is; a lost support says why', () => {
   const step = failText(b, fail({ token: 'wheelchair', blocked_at: 'terrace-door', reason: 'step', needed: 0, available: 0.15 }));
-  assert.equal(step?.detail, 'Terrace door: step 0.15 m, needs level');
+  assert.equal(step?.detail, 'Terrace door: 0.15 m high, needs level');
   const load = failText(b, fail({ token: 'load', blocked_at: 'beam-b2', reason: 'no_support' }));
-  assert.deepEqual(load, { title: 'LOAD  NO SUPPORT', detail: 'beam-b2: no load path to a foundation' });
+  assert.deepEqual(load, { title: 'Load: nothing holds it up', detail: 'beam B2: no path down to a foundation' });
+});
+
+test('metres on the model show at least one decimal', () => {
+  const sofa = failText(b, fail({ token: 'sofa', blocked_at: 'lobby-door', reason: 'cannot_turn', needed: 2.2, available: 1.9967350242673378 }));
+  assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: needs 2.2 m, has 2.0 m' });
 });
 
 test('a pass has no fail label', () => {

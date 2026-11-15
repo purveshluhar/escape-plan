@@ -13,11 +13,11 @@ order and the green gates below, not the clock (ADR 0009).
 
 | Role | Folder | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|---|
-| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/`, `server/` | Contract; MVP first: wheelchair, sofa and people walk out; then chiller, glass, load; re-solve; tests | People and smoke race; water; local server; Jev parse (or plan B or C) | Electrical; Jev votes; phone sockets in the server |
-| P2 3D and animation (@justinjao) | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
-| P3 Front-end and edits (@minsookim1014, @jackwayfeel) | `app/` | Edit buttons, reset, scoreboard, app state | Text box and "Did you mean" buttons for Jev edits | Vote bubbles; phone controllers; voice |
-| P4 Designer and presenter (@minsookim1014, @jackwayfeel) | `design/` | Icons, colours, path style, script | Sound | LLM post-game report (with P3); final deck |
-| P5 Domain modeller and tester (@kalunkuo) | `data/` | `building.json`; `expected.json` for the 4 tokens, plus the sofa and people tokens and their expected cases | Cityweft export; expected cases for the people and smoke race, and water | Electrical data; Q&A prep |
+| P1 Graph and solver lead (@purveshluhar) | `contract/`, `solver/`, `server/` | Contract; MVP first: wheelchair, sofa and people walk out; then chiller, glass, load; re-solve; tests | People and smoke; water; local server; Jev parse (or plan B or C) | Electrical; Jev votes; phone sockets in the server |
+| P2 3D and animation (@justinjao) | `viewer/` | Isometric cutaway; token paths; red X and the Yes to all banner | Cityweft backdrop; smoke spread animation | Look polish, camera moves |
+| P3 Front-end and edits (@minsookim1014, @jackwayfeel) | `app/` | Edit buttons, Undo edits, the Answers panel, app state | Text box and "Did you mean" buttons for Jev edits | Vote bubbles; phone controllers; voice |
+| P4 Designer and presenter (@minsookim1014, @jackwayfeel) | `design/` | Icons, colours, path style, script | Sound | LLM report after the session (with P3); final deck |
+| P5 Domain modeller and tester (@kalunkuo) | `data/` | `building.json`; `expected.json` for the 4 tokens, plus the sofa and people tokens and their expected cases | Cityweft export; expected cases for people and smoke, and water | Electrical data; Q&A prep |
 
 Humans keep: the contract, the expected results, the merge, the look, and the demo script.
 
@@ -32,7 +32,7 @@ chiller, glass and load, live re-solve, the shaft-breaks-beam moment. The 3D cut
 stacked plans.
 
 **Tier 2** (go only when every tier 1 token is green and `tier1-demo` is re-tagged), in order:
-1. People and smoke race.
+1. People and smoke.
 2. Jev parse, or plan B.
 3. Cityweft backdrop.
 4. Sound.
@@ -43,7 +43,7 @@ stacked plans.
 2. Phone controllers.
 3. Electrical.
 4. Voice.
-5. LLM post-game report.
+5. LLM report after the session.
 
 **Cut order.** When the team calls a cut, cut from the bottom of tier 3 upward, then the bottom
 of tier 2 upward. Tier 1 is never cut.
@@ -98,5 +98,6 @@ merge, run the `review-merge` skill.
 
 - All code is written at the event. MIT from the first commit.
 - Self-made building data. No Cityweft data in the repo.
-- It is a game, not a code check.
-- The solver decides pass or fail. Jev parses edits and votes, but never decides.
+- It answers people's questions about their building. It is a quick check of sizes and routes,
+  not a code review (ADR 0010).
+- The solver decides each Yes or No. Jev parses edits and votes, but never decides.

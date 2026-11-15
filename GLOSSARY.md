@@ -3,15 +3,21 @@
 Plain words for every term in `contract/types.ts`. Use these terms in code, tests, issues and UI.
 Units are metres and kN.
 
-## Game
+## Experience
 
-- **Token**: one discipline's thing that must escape the building (chiller, glass panel, ...). Each token has a start, a goal, a size and one rule.
-- **Escape**: run the solver and animate every token along its path.
+- **Question**: what a person asks about their building, such as "Can my sofa get in?". Each question is about one token. The dock chips show the questions.
+- **Answer**: the solver's verdict on one question, shown as **Yes** or **No** (code: status `pass` or `fail`). A No says where the thing is stuck and gives the numbers.
+- **Person**: who asks the question: home buyer, family, owner or manager.
+- **Token**: the code term for one discipline's thing that must get through the building (chiller, glass panel, ...). Each token has a start, a goal, a size and one rule. On screen it is named (Sofa), never called a token.
+- **Show me**: the button that runs the solver and animates every token along its path (code: `escape()`).
+- **Answers panel**: the list of answers, one row per question (code: `app/scoreboard.ts`).
 - **Discipline**: the trade a token stands for: `mep`, `logistics`, `accessibility`, `structure`, `life_safety`, `fire`, `plumbing`, `electrical`.
 - **Edit**: one change to the building, such as widening a door. Every edit re-solves every token.
 - **Re-solve**: run the solver again on the building with all edits applied.
-- **LEVEL COMPLETE**: every token passes.
-- **Red X**: the mark drawn where a token is blocked (`blocked_at`).
+- **Yes to all**: the banner when every answer is Yes (code: phase `complete`).
+- **Undo edits**: the button that removes every edit (code: edit op `reset`).
+- **Suggested fixes**: the sheet with preset edits for a No answer.
+- **Red X**: the mark drawn where a token is blocked (`blocked_at`). On screen the words are "stuck at {Place}".
 - **Tier**: a scope band. Tier 1 must ship. Tier 2 starts when all of tier 1 is green; tier 3 starts when tier 2 is tagged.
 - **Gate**: one step in the ordered list in `docs/plan.md`. It is passed when its condition is green, not at a time. The **MVP gate** (wheelchair, sofa and people green) tags `tier1-demo`. **Feature freeze** (gate 11) allows fixes only.
 - **Expected case**: one hand-checked scenario in `data/expected.json`: a list of edits and the results a person checked.
@@ -23,8 +29,8 @@ Units are metres and kN.
 - **Sofa** (T1, `logistics`, rule `corner_turn`): furniture that must turn corridor corners on its way out.
 - **Wheelchair** (T1, `accessibility`, rule `no_steps`): must reach an exit with no step.
 - **Load** (T1, `structure`, rule `downward`): gravity load that must reach a foundation through supporting members.
-- **People** (T1 for the walk out, T2 for the race with smoke, `life_safety`, rule `shortest_exit`): walk the path with the fewest edges to an exit.
-- **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and races the people.
+- **People** (T1 for the walk out, T2 for people timed against the smoke, `life_safety`, rule `shortest_exit`): walk the path with the fewest edges to an exit.
+- **Smoke** (T2, `fire`, rule `spread`): spreads one open edge per time step and is timed against the people.
 - **Water** (T2, `plumbing`, rule `downhill`): a drain that must fall all the way.
 - **Power** (T3, `electrical`, rule `supply`): electricity from its start node (the building's service entry) through a `panel` node to the kitchen.
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -38,10 +38,15 @@ test('phase and summary words', () => {
   assert.equal(phaseAfterRun([res('chiller', 'pass'), res('glass', 'pass')]), 'complete');
   assert.equal(phaseAfterRun([res('chiller', 'pass'), res('glass', 'fail')]), 'result');
   assert.equal(phaseAfterRun([]), 'result');
-  assert.equal(countText('empty', 0, null), 'Pick an object to place it');
-  assert.equal(countText('placed', 2, null), '2 placed');
-  assert.equal(countText('running', 3, null), '3 escaping');
-  assert.equal(countText('result', 2, [res('chiller', 'pass'), res('glass', 'fail')]), '1 of 2 out');
+  assert.equal(countText('empty', 0, null), 'Pick a question to start');
+  assert.equal(countText('placed', 1, null), '1 question');
+  assert.equal(countText('placed', 2, null), '2 questions');
+  assert.equal(countText('running', 3, null), '3 routes');
+  assert.equal(countText('result', 2, [res('chiller', 'pass'), res('glass', 'fail')]), '1 yes, 1 no');
+  assert.equal(countText('result', 1, [res('glass', 'fail')]), 'No');
+  assert.equal(countText('complete', 3, [res('a', 'pass'), res('b', 'pass'), res('c', 'pass')]), '3 of 3 yes');
+  assert.deepEqual((['empty', 'placed', 'running'] as const).map((p) => phaseWord(p, 2)), ['Your building', 'Ready', 'Checking']);
+  assert.deepEqual([phaseWord('result', 1), phaseWord('result', 2), phaseWord('complete', 1), phaseWord('complete', 3)], ['Answer', 'Answers', 'Yes', 'Yes to all']);
   assert.equal(runSeconds(0, 2, 0.25), 0);
   assert.equal(runSeconds(4, 2, 0.25), 2.75);
 });
@@ -109,12 +114,23 @@ test('a selected object says where it is and how it did', () => {
   const mvp = building;
   assert.equal(tokenCaption(mvp, 'wheelchair', null), 'Wheelchair - Terrace - Ready');
   const fail: SolverResult = { ...res('wheelchair', 'fail'), reason: 'step', blocked_at: 'terrace-door' };
-  assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - FAIL: step in the way');
-  assert.equal(tokenCaption(mvp, 'wheelchair', res('wheelchair', 'pass')), 'Wheelchair - Terrace - PASS');
-  assert.equal(tokenCaption(mvp, 'wheelchair', null, true), 'Wheelchair - Terrace - Escaping', 'during a run');
+  assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - No: step in the way');
+  assert.equal(tokenCaption(mvp, 'wheelchair', res('wheelchair', 'pass')), 'Wheelchair - Terrace - Yes');
+  assert.equal(tokenCaption(mvp, 'wheelchair', null, true), 'Wheelchair - Terrace - Checking', 'during a run');
 });
 
-test('an open scoreboard hides the LEVEL COMPLETE banner, so the route under it reads', () => {
+test('the all-yes banner shows with the Answers panel open, in the empty fix sheet slot, never over the panel', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(page, /body\.scoring #banner\.on\{display:none\}/);
+  assert.doesNotMatch(page, /body\.scoring #banner\.on\{display:none\}/);
+  assert.match(page, /#banner\{position:fixed;right:24px;bottom:104px;/, 'the banner sits where the fix sheet sits (empty when all is yes)');
+});
+
+test('the page puts no game words in front of people', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const body = page.slice(page.indexOf('<body>'));
+  for (const w of [/level complete/i, /escape!/i, /scoreboard/i, /\bgame\b/i, /\bPASS\b/, /\bFAIL\b/, /\bobject\b/i, /\bplace an\b/i]) {
+    assert.doesNotMatch(body, w);
+  }
+  assert.match(body, />Show me <kbd>Space<\/kbd><\/button>/);
+  assert.match(page, /<title>Escape Plan - ask your building<\/title>/);
 });

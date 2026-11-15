@@ -10,7 +10,7 @@
 
 Every tier 1 rule is done: `no_steps` (wheelchair), `corner_turn` (sofa and glass),
 `shortest_exit` (people, no smoke), `clearance` (chiller) and `downward` (load). The full-demo
-edits give LEVEL COMPLETE (`level-complete.test.ts`). Tier 2 `spread` (smoke, and the people
+edits give Yes to all (`level-complete.test.ts`). Tier 2 `spread` (smoke, and the people
 race with it) is done. The other tier 2 and 3 rules are still placeholders, so their expected
 cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVERS` in `index.ts` puts
 it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
@@ -41,7 +41,7 @@ it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
   over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
   and people are in `data/building.json`, with their cases in `data/expected.json`.
 - `level-complete.test.ts`: the tier 1 gate (P1-19). The glass record at `lobby-door`, every tier 1
-  rule implemented, and the full-demo edits giving LEVEL COMPLETE for the tier 1 tokens in any
+  rule implemented, and the full-demo edits giving Yes to all for the tier 1 tokens in any
   order, with each fix needed. It reads the fixes from `full-demo`, so it holds when P5 adds
   tokens. `full-demo` includes the office door fix that lets people out.
 

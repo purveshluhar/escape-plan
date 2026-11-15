@@ -12,26 +12,26 @@ test('a failed token shows its reason in words, where, and the numbers', () => {
   const [row] = scoreRows(building, [exampleResultFail]);
   assert.equal(row?.label, 'Chiller');
   assert.equal(row?.status, 'fail');
-  assert.equal(row?.detail, 'too narrow at Plant shaft');
+  assert.equal(row?.detail, 'Chiller is stuck at Plant shaft: too narrow, needs 1.6 m, has 1.2 m');
   assert.equal(row?.numbers, 'needs 1.6 m, has 1.2 m');
 });
 
-test('a passed token says escaped and shows no numbers', () => {
+test('a passed token says its yes line and shows no numbers', () => {
   const [row] = scoreRows(building, [exampleResultPass]);
-  assert.deepEqual([row?.status, row?.detail, row?.numbers], ['pass', 'escaped', '']);
+  assert.deepEqual([row?.status, row?.detail, row?.numbers], ['pass', 'The chiller fits through the shaft', '']);
 });
 
-test('a fail without numbers, such as no support at a member, shows no numbers line', () => {
+test('a lost support at a member says there is no path down', () => {
   const noSupport: SolverResult = {
     token: 'load', status: 'fail', path: ['beam-b2'], blocked_at: 'beam-b2',
     reason: 'no_support', needed: null, available: null,
   };
   const [row] = scoreRows(building, [noSupport]);
-  assert.equal(row?.detail, 'no support at beam B2');
-  assert.equal(row?.numbers, '');
+  assert.equal(row?.detail, 'Load is stuck at beam B2: nothing holds it up, no path down to a foundation');
+  assert.equal(row?.numbers, 'no path down to a foundation');
 });
 
-test('the people and smoke race counts time steps, not metres', () => {
+test('people and smoke count time steps, not metres', () => {
   assert.equal(numbersText(exampleResultPeople), 'needs 4 steps, has 3 steps');
 });
 
@@ -45,8 +45,13 @@ test('place names come from edges, nodes and members', () => {
   assert.equal(placeName(building, 'nowhere'), 'nowhere');
 });
 
-test('LEVEL COMPLETE only when every token passes', () => {
+test('Yes to all only when every answer is yes', () => {
   assert.equal(levelComplete([exampleResultPass]), true);
   assert.equal(levelComplete([exampleResultPass, exampleResultFail]), false);
   assert.equal(levelComplete([]), false);
+});
+
+test('reason words are the calm words of copy.md', () => {
+  assert.deepEqual([REASON_TEXT.cannot_turn, REASON_TEXT.no_support, REASON_TEXT.no_route, REASON_TEXT.smoke_first, REASON_TEXT.no_supply],
+    ['cannot turn the corner', 'nothing holds it up', 'no way through', 'smoke gets there first', 'no power reaches it']);
 });

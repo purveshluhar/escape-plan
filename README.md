@@ -1,26 +1,26 @@
 # Escape Plan
 
-**Every discipline has to get out.**
+**Ask your building: can my sofa get in, can my parent's wheelchair get out?**
 
 ## The problem
 
 Every discipline has the same hidden question: can my thing get through the building? The new
 chiller in year 15. The 4 m glass panel on delivery day. The wheelchair at the terrace door.
-Smoke racing people to the stair. A drain that must cross a beam. A load that needs a path to
+Smoke reaching the stair before the people. A drain that must cross a beam. A load that needs a path to
 the ground. Each trade checks its own path alone and late, and the clash shows up on site.
 
 ## What the demo shows
 
-Escape Plan turns the building into a game. One building graph, one token per discipline.
-Press **Escape!** and every token races out. The chiller sticks in the plant shaft. The glass
-will not turn the corner. The wheelchair hits a step. Widen the shaft, and the chiller reaches
-the truck, but the shaft cuts beam B2 and the load turns red. Add a transfer beam, a ramp at the
-terrace door, widen the lobby corner, and widen the office door for the people, and everything goes
-green: **LEVEL COMPLETE**.
+Escape Plan answers the questions people ask about a building. A home buyer asks if the sofa
+gets in. A family asks if a parent's wheelchair gets out. An owner asks if the shaft can be
+widened for a new chiller. Press **Show me** and the building answers each one, with the place
+and the numbers. Fix one answer and every other answer is checked again: widen the shaft and
+the structure answer turns to No at beam B2. It is a quick check of sizes and routes, not a
+code review.
 
-A deterministic solver decides every pass or fail and shows the numbers. Jev (TypeSafe AI)
+A deterministic solver decides every Yes or No and shows the numbers. Jev (TypeSafe AI)
 turns typed or spoken edits into actions and gives each discipline a vote bubble. Cityweft can
-put the building in its real NYC block as a backdrop. It is a game, not a code check.
+put the building in its real NYC block as a backdrop.
 
 ## Quickstart
 
@@ -42,9 +42,9 @@ Roles: P1 @purveshluhar, P2 @justinjao, P3 and P4 @minsookim1014 and @jackwayfee
 | Folder | Owner | What it is |
 |---|---|---|
 | `contract/` | P1 | Shared TypeScript types and JSON Schemas. Read first. |
-| `solver/` | P1 | Deterministic pass or fail per token. |
-| `viewer/` | P2 | three.js isometric cutaway and token paths. |
-| `app/` | P3 | Game shell: edits, scoreboard, text box, phone controllers. |
+| `solver/` | P1 | Deterministic pass or fail per token (Yes or No on screen). |
+| `viewer/` | P2 | three.js isometric cutaway and the route of each thing. |
+| `app/` | P3 | App shell: edits, answers, text box, phone controllers. |
 | `server/` | P1 | Small local server: keys, Jev and plan B or C calls, votes, phone sockets (tier 2 and 3). |
 | `design/` | P4 | Colours, icons, motion, sound, demo script. |
 | `data/` | P5 | `building.json` and the hand-checked `expected.json`. |
@@ -70,10 +70,10 @@ and [docs/plan.md](docs/plan.md) disagree, docs/plan.md wins.
 - **Tier 1 (must ship):** MVP first: wheelchair, sofa and people walk out. Tag `tier1-demo`
   at the MVP gate. Then chiller, glass and load; live re-solve; the shaft-breaks-beam moment;
   the 3D cutaway, or 2D stacked plans. Re-tag `tier1-demo` when all of tier 1 is green.
-- **Tier 2** (starts when all of tier 1 is green): people and smoke race, Jev parsing, Cityweft
+- **Tier 2** (starts when all of tier 1 is green): people and smoke, Jev parsing, Cityweft
   backdrop, sound, water. Tag `tier2-demo` when tier 2 is done.
 - **Tier 3** (starts when tier 2 is tagged): Jev votes, phone controllers, electrical, voice,
-  post-game report.
+  report after the session.
 - Work follows the gate order in [docs/plan.md](docs/plan.md), not the clock. Feature freeze
   is gate 11 there.
 

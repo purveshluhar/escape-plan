@@ -1,9 +1,11 @@
 # AGENTS.md - Escape Plan
 
-Escape Plan is a browser game built on one building graph. Each discipline plays a token (wheelchair,
-sofa, people, chiller, glass panel, load; later smoke, water, power) that must escape the building.
-Every edit re-solves every token live. A deterministic solver decides pass or fail. It is a game,
-not a code check.
+Escape Plan answers the questions people ask about a building, in the browser, from one
+building graph. Ask your building: can my sofa get in, can my parent's wheelchair get out?
+Each question is about one thing that must get through (wheelchair, sofa, people, chiller, glass
+panel, load; later smoke, water, power). In code that thing is a token. Every edit checks every
+answer again, live. A deterministic solver decides each Yes or No. It is a quick check of sizes
+and routes, not a code review.
 
 This file is the one source of truth for every coding agent (Claude Code reads it via `CLAUDE.md`).
 
@@ -30,8 +32,8 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 | Role | Person | Folder | Tier 1 job |
 |---|---|---|---|
 | P1 Graph and solver lead | @purveshluhar | `contract/`, `solver/`, `server/` | Contract; MVP first: wheelchair, sofa and people walk out; then chiller, glass, load rules; re-solve; tests (later: the local server in `server/` with Jev parse, plan B and C, Jev votes and the phone sockets) |
-| P2 3D and animation | @justinjao | `viewer/` | Isometric cutaway; token paths; red X and LEVEL COMPLETE |
-| P3 Front-end and edits | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, reset, scoreboard, app state |
+| P2 3D and animation | @justinjao | `viewer/` | Isometric cutaway; token paths; red X and the Yes to all banner |
+| P3 Front-end and edits | @minsookim1014, @jackwayfeel | `app/`, `index.html` | Edit buttons, Undo edits, the Answers panel, app state |
 | P4 Designer and presenter | @minsookim1014, @jackwayfeel | `design/` | Icons, colours, path style, demo script |
 | P5 Domain modeller and tester | @kalunkuo | `data/` | `data/building.json`; `data/expected.json` for the 4 tokens, plus the sofa and people tokens and their expected cases |
 
@@ -44,7 +46,7 @@ Each folder's `README.md` says what it consumes and produces.
 | Command | What it does |
 |---|---|
 | `npm ci` | Install exact versions from `package-lock.json`. |
-| `npm run dev` | Start the game at http://localhost:5173. |
+| `npm run dev` | Start the app at http://localhost:5173. |
 | `npm run server` | Start the local server on 127.0.0.1 (`server/README.md`). It reads the git-ignored `.env`. |
 | `npm test` | Node's built-in test runner: contract, solver, data schema checks, and every `*.test.ts`. |
 | `npm run check` | Typecheck, test and build: the gate before every merge (CI runs it too). |

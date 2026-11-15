@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Escape Plan</title>
+<title>Escape Plan - ask your building</title>
 <style>
 /* Design B: daylight model, spatial glass. The model fills the screen; light glass floats over it:
    the summary pill at the top, the dock at the bottom, the fix sheet and the edit box above it. */
@@ -20,7 +20,7 @@
 html,body{margin:0;height:100%;overflow:hidden;font-family:var(--font);color:var(--ink);
   background:linear-gradient(180deg,#c9d8ea 0%,#e6ebf0 55%,#f4efe6 100%);-webkit-font-smoothing:antialiased}
 #viewer{position:fixed;inset:0}
-/* The app shows LEVEL COMPLETE in its own banner, with the line under it. */
+/* The app shows the all-yes answer in its own banner, with the yes lines under it. */
 #viewer .ep-banner{display:none}
 #hud{position:fixed;inset:0;pointer-events:none;z-index:2}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -57,7 +57,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .word.pass{color:var(--pass)} .word.fail{color:var(--fail)} .word.ready{color:var(--muted);font-weight:600}
 
 /* ---------- Dock (bottom capsule) ---------- */
-#dock{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);border-radius:999px;padding:8px;
+#dock{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);border-radius:999px;padding:8px;width:max-content;
   display:flex;align-items:center;max-width:calc(100vw - 24px);transition:padding .5s var(--spring)}
 #dock.pop{animation:settle .6s var(--spring)}
 @keyframes settle{from{transform:translateX(-50%) scale(.94);opacity:.6}to{transform:translateX(-50%) scale(1);opacity:1}}
@@ -74,6 +74,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .chip[aria-pressed="true"]{background:#fff;border:1px solid rgba(20,22,28,.6);box-shadow:0 1px 3px rgba(20,22,28,.10)}
 .chip:disabled{color:#4a4f5a;background:rgba(255,255,255,.3);border-style:dashed;height:40px;font-size:14px;padding:0 12px 0 6px;gap:7px}
 .chip:disabled .dot{width:24px;height:24px;font-size:12px}
+.chip .short{display:none}
 .later{font:600 13px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 0 10px}
 .sep{width:1px;height:30px;background:rgba(20,22,28,.16);flex:none}
 .tool{height:42px;padding:0 13px;border-radius:999px;background:transparent;border:1px solid rgba(20,22,28,.10);
@@ -117,17 +118,18 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 .srow:last-child{border-bottom:0}
 .srow .nm{font:600 17px/1.2 var(--font)} .srow .word{font-size:20px}
 .srow .det{grid-column:2 / 4;font:400 16px/1.35 var(--font);color:var(--muted)}
+.snote{padding:10px 4px 4px;font:400 14px/1.3 var(--font);color:var(--muted)}
 @keyframes fadeup{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 
 #note{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-/* ---------- LEVEL COMPLETE ---------- */
-#banner{position:fixed;left:0;right:0;top:104px;text-align:center;pointer-events:none;display:none}
-#banner.on{display:block;animation:bannerIn .9s var(--spring)}
-body.scoring #banner.on{display:none}
-#banner .big{font:800 clamp(40px,5.2vw,76px)/1 var(--font);letter-spacing:.03em;color:var(--ink)}
-#banner .sub{margin-top:10px;font:500 20px/1.3 var(--font);color:var(--muted)}
-@keyframes bannerIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+/* ---------- All yes: a calm answer in the fix sheet slot (empty when every answer is yes) ---------- */
+/* It never sits over the Answers panel (top centre), so it stays on while that panel is open. */
+#banner{position:fixed;right:24px;bottom:104px;width:min(380px,calc(100vw - 16px));border-radius:28px;padding:18px 22px 20px;pointer-events:none;display:none}
+#banner.on{display:block;animation:sheetIn .5s var(--soft)}
+body.editing #banner.on{display:none}
+#banner .big{font:800 34px/1.1 var(--font);color:var(--pass)}
+#banner .sub{margin-top:8px;font:500 18px/1.4 var(--font);color:var(--ink)}
 
 /* ---------- Buttons in panels ---------- */
 .fixbtn{height:46px;padding:0 18px;border-radius:999px;font:600 16px/1 var(--font);text-align:left;white-space:nowrap;
@@ -144,8 +146,9 @@ body.scoring #banner.on{display:none}
 #sheet.on{display:block;animation:sheetIn .5s var(--spring)}
 #sheet .lbl{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px}
 .fcard{padding:10px 8px;border-bottom:1px solid rgba(20,22,28,.08)}
+.fcard .who{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px 2px}
 .fcard .top{display:flex;align-items:center;gap:10px}
-.fcard .nm{font:600 17px/1.1 var(--font)}
+.fcard .nm{font:600 17px/1.2 var(--font);min-width:0}
 .fcard .word{font-size:20px;margin-left:auto}
 .fcard .rs{margin:8px 0 2px 2px;font:600 16px/1.25 var(--font)}
 .fcard .rs span{font-weight:400}
@@ -180,9 +183,28 @@ body.scoring #banner.on{display:none}
 #jev .opts{display:flex;flex-wrap:wrap;gap:6px}
 #jev .src{font:400 13px/1.3 var(--font);color:var(--muted);margin:10px 4px 6px}
 
+/* ---------- Laptop (1366 px): three questions, the tools and Show me fit in one dock ---------- */
+@media (max-width:1500px){
+  .chip{font-size:15px;padding:0 12px 0 8px;gap:8px}
+  .chip kbd,.tool kbd,#btnEscape kbd{display:none}
+  .tool{padding:0 12px}
+  #btnEscape{padding:0 24px}
+}
+
+/* ---------- Short screens (768 px): the fix sheet keeps its foot buttons in view ---------- */
+@media (max-height:820px){
+  #sheet{bottom:96px;max-height:calc(100vh - 116px);padding:8px 8px 6px}
+  #sheet .lbl{padding:2px 8px 4px}
+  .fcard{padding:6px 8px}
+  .fcard .who{margin-bottom:4px}
+  .fcard .rs{margin-top:4px}
+  .fcard .fx{margin-top:6px}
+  .fcard .fx .fixbtn{height:38px}
+}
+
 /* ---------- Compact (phone) ---------- */
 @media (max-width:700px){
-  #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;border-radius:30px}
+  #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;width:auto;border-radius:30px}
   .dock-full{flex-wrap:wrap;row-gap:6px;width:100%}
   #picker{flex-basis:100%}
   #picker .chip{flex:1;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
@@ -194,15 +216,16 @@ body.scoring #banner.on{display:none}
   .tools{order:-1}
   #btnEscape{height:52px;padding:0 18px;font-size:18px;margin-left:4px}
   #btnEscape kbd{display:none}
-  #dock.slim{left:50%;right:auto;transform:translateX(-50%)}
+  #dock.slim{left:50%;right:auto;width:max-content;transform:translateX(-50%)}
   #summary{top:30px;padding:8px 10px 8px 16px;gap:10px;font-size:16px;flex-wrap:wrap;justify-content:center;border-radius:28px;row-gap:8px;width:max-content;white-space:normal}
-  #summary .vbar,#summary .caret,.chip kbd,.glabel{display:none}
+  #summary .vbar,#summary .caret,.chip kbd,.glabel,.chip .ask{display:none}
+  .chip .short{display:inline}
   #summary .sline{flex-basis:100%;justify-content:center;gap:8px}
   .schip .word{font-size:16px}
   #scorePanel{top:120px}
   #sheet{left:8px;right:8px;width:auto;bottom:136px;max-height:45vh}
   #editPanel{bottom:136px;left:8px;right:8px;width:auto}
-  #banner{top:128px}
+  #banner{left:8px;right:8px;width:auto;bottom:136px}
   #banner .sub{font-size:16px}
 }
 @keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
@@ -214,28 +237,28 @@ body.scoring #banner.on{display:none}
 <body>
 <div id="viewer" aria-label="3D model of the building" role="img"></div>
 <div id="hud">
-  <nav id="dock" class="glass" aria-label="Game controls">
+  <nav id="dock" class="glass" aria-label="Building controls">
     <div class="dock-full">
-      <div id="picker" role="group" aria-label="Pick an object"><span class="later glabel" aria-hidden="true">Place</span></div>
+      <div id="picker" role="group" aria-label="Pick a question"><span class="later glabel" aria-hidden="true">Ask</span></div>
       <div class="scrollwrap"><div class="scroller">
         <span class="sep" aria-hidden="true"></span>
         <div class="tools">
-          <button type="button" class="tool" id="btnEdit" aria-label="Type an edit">Edit <kbd>/</kbd></button>
-          <button type="button" class="tool" id="btnReset">Reset <kbd>R</kbd></button>
+          <button type="button" class="tool" id="btnEdit" aria-label="Edit the building">Edit <kbd>/</kbd></button>
+          <button type="button" class="tool" id="btnReset">Undo edits <kbd>R</kbd></button>
           <button type="button" class="tool" id="btnClear">Clear</button>
         </div>
       </div></div>
-      <button type="button" id="btnEscape" aria-describedby="escHint">Escape! <kbd>Space</kbd></button>
+      <button type="button" id="btnEscape" aria-describedby="escHint">Show me <kbd>Space</kbd></button>
     </div>
-    <div class="dock-slim" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="slimText">Running</span></div>
+    <div class="dock-slim" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="slimText">Checking</span></div>
   </nav>
   <button type="button" id="summary" class="glass" aria-expanded="false" aria-controls="scorePanel"></button>
-  <div id="scorePanel" class="glass" role="region" aria-label="Scoreboard"></div>
+  <div id="scorePanel" class="glass" role="region" aria-label="Answers"></div>
   <div id="note" role="status"></div>
-  <div id="banner" role="status"><div class="big">LEVEL COMPLETE</div><div class="sub" id="bannerSub">Every object got out of the building</div></div>
-  <div id="sheet" class="glass" role="region" aria-label="Fixes"></div>
-  <div id="editPanel" class="glass" role="dialog" aria-label="Type an edit">
-    <div class="ehead"><label for="editInput">Type an edit</label><button type="button" class="tool" id="editClose">Close <kbd>Esc</kbd></button></div>
+  <div id="banner" class="glass" role="status"><div class="big" id="bannerBig">Yes</div><div class="sub" id="bannerSub"></div></div>
+  <div id="sheet" class="glass" role="region" aria-label="Suggested fixes"></div>
+  <div id="editPanel" class="glass" role="dialog" aria-label="Edit the building">
+    <div class="ehead"><label for="editInput">Edit the building</label><button type="button" class="tool" id="editClose">Close <kbd>Esc</kbd></button></div>
     <form class="row" id="editForm" autocomplete="off">
       <input id="editInput" type="text" placeholder="For example: widen the lobby door to 1.6 m" />
       <button type="submit" class="fixbtn">Apply</button>
@@ -243,7 +266,7 @@ body.scoring #banner.on{display:none}
     <div class="quick" id="quick"></div>
     <div id="jev" role="alert"></div>
   </div>
-  <span id="escHint" hidden>Place an object first</span>
+  <span id="escHint" hidden>Pick a question first</span>
 </div>
 <script type="module" src="/app/main.ts"></script>
 </body>

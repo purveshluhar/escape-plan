@@ -1,28 +1,28 @@
 # The look: Liquid Glass
 
 Owner: P4. Values live in `design/tokens.ts`; this file says how to use them. Source: the
-"Escape Plan · Liquid Glass" design system (v2). The flow is in `design/flow.md`.
+"Escape Plan - Liquid Glass" design system (v2). The flow is in `design/flow.md`.
 Clickable preview of every screen: the canvas linked in `design/flow.md`.
 
-A calm, light game surface: the building is a pale frosted model, the UI is glass floating over
-it, and colour is rationed so the routes and the objects carry the information. Pixel type is
-kept for a few moments only: the wordmark, ESCAPE!, CONFLICT! and LEVEL COMPLETE.
+A calm, light surface: the building is a pale frosted model, the UI is glass floating over it,
+and colour is rationed so the routes and the things on them carry the information. Pixel type
+is kept for two places only: the wordmark and CONFLICT!.
 
-Readable first. A judge at the back of the room must see which object failed, where, and why
+Readable first. A person at the back of the room must see which answer is No, where, and why
 within five seconds.
 
 ## Six rules
 
-1. **One accent, one fill.** `ACCENT` fills exactly one control per state (ESCAPE!, APPLY or
-   REPLAY). Everything else is glass or a tinted pill.
+1. **One accent, one fill.** `ACCENT` fills exactly one control per state (Show me, Apply or
+   Try again). Everything else is glass or a tinted pill.
 2. **Identity is not status.** A discipline colour never changes. Status is a tinted badge, a
    round check or cross, a ring and a line style.
 3. **Glass is for chrome, not content.** HUD, card, bar, pop-ups and banners are glass
    (`GLASS`, `GLASS_BLUR`, `SHADOW_GLASS`). The model is never frosted over.
 4. **Colour means information.** The building is near-white and grey-blue. Anything saturated is
-   a route, an object, the primary action or a problem.
-5. **Pixel for moments.** `FONT_DISPLAY` only for the wordmark, ESCAPE!, CONFLICT! and LEVEL
-   COMPLETE. Labels and sentences are `FONT_BODY`; numbers are `FONT_DATA`.
+   a route, a thing on its route (Sofa), the primary action or a problem.
+5. **Pixel for the wordmark.** `FONT_DISPLAY` only for the wordmark and CONFLICT!. Show me, the
+   Yes to all banner, labels and sentences are `FONT_BODY`; numbers are `FONT_DATA`.
 6. **Always 3D isometric, never a plan.** Views: shaded, x-ray, exploded floors (`VIEWS`).
 
 ## Building
@@ -35,31 +35,32 @@ within five seconds.
 | Slab tops | `WALL_TOP` | Translucent, so lower floors read through |
 | Hairlines, ground grid | `GRID` | Decorative only |
 
-## Objects and routes
+## Things and routes
 
 | Route state | Look |
 |---|---|
 | Available | small `ROUTE_DOT` (accent) dots at `ROUTE_DOT_OPACITY` |
 | Selected | larger dots in the discipline colour |
-| Travelled or escaped | solid line in the discipline colour, check badge in `PASS` |
-| Blocked | solid up to `blocked_at`, `FAIL` dashes beyond, double red ring, cross badge |
+| Travelled (answer Yes) | solid line in the discipline colour, check badge in `PASS` |
+| Stuck (answer No) | solid up to `blocked_at`, `FAIL` dashes beyond, double red ring, cross badge |
 | Structural load | violet line with white down chevrons into a ground symbol |
 | Proposed (Jev) | accent dashed outline with pale hatch; ghost route at `GHOST_OPACITY` |
 
-Objects are tiles in the discipline colour with the glyph in `glyphInk`. Selection is an accent
+Each thing (Sofa, Wheelchair) is a tile in the discipline colour with the glyph in `glyphInk`. Selection is an accent
 ring.
 
 ## Moments
 
-- **Fail:** everything holds `MOTION.failFreezeMs`, the object shakes (`failShakeMs`), the cross
+- **No:** everything holds `MOTION.failFreezeMs`, the thing shakes (`failShakeMs`), the cross
   blinks `failBlinkCount` times at `failBlinkHz`. Callout on the model in `FONT_DATA`:
-  `1.2 < 1.6 m`. The card says it in words: "Insufficient clearance".
-- **Conflict:** a status flips from escaped to blocked between runs. CONFLICT! banner holds
+  `1.2 < 1.6 m`. The card says it in words: "Too narrow at Plant shaft".
+- **Conflict:** an answer flips from Yes to No after an edit. CONFLICT! banner holds
   `bannerHoldSeconds`, then docks into the card.
 - **Apply:** proposed tint fades into the normal material over 400 ms with `EASE_GLASS`, then
-  ESCAPE! is the only lit control again.
-- **Level complete:** the building outline blinks `winFlashCount` times at `winFlashHz`;
-  LEVEL COMPLETE in `FONT_DISPLAY`, `SCORE` colour.
+  Show me is the only lit control again.
+- **Yes to all:** the banner says Yes (one question) or Yes to all {n} in `FONT_BODY`, with the
+  yes lines under it. No flash and no confetti. The look task retires the pixel font and the
+  outline flash (`winFlashCount`, `winFlashHz`) for this banner.
 - **Reduced motion:** no shake, blink or pulse; routes draw complete; banners wait for dismissal.
 
 ## Colour rules (checked by `design/tokens.test.ts`)

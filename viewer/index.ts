@@ -1,14 +1,14 @@
 // Viewer: draws the building as an isometric cutaway and animates every token. Owner: P2.
 // The look is design/look.md (Liquid Glass v2): route dots the token travels over, a low-poly
-// figure for each token (figures.ts), a shake and a blinking red X on fail, LEVEL COMPLETE on win.
+// figure for each token (figures.ts), a shake and a blinking red X on a No, a calm Yes to all when every answer is yes.
 // The building on screen is the real 432 Park backdrop; the graph's own rooms are not drawn.
 // A press on a token picks it up: drop it on any floor (drop.ts), or click it to select it.
 import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Building, Id, SolverResult } from '../contract/types.ts';
 import {
-  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
-  GLASS_STRONG, MOTION, PATH, SCORE, TEXT, TEXT_MUTED,
+  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_STYLESHEET,
+  GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED,
 } from '../design/tokens.ts';
 import { dropTarget, figureScale, movedPastSlop, pickToken, pressIntent } from './drop.ts';
 import type { DropTarget, Ray } from './drop.ts';
@@ -103,7 +103,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   container.appendChild(labels.domElement);
   const banner = document.createElement('div');
   banner.className = 'ep-banner';
-  banner.textContent = 'LEVEL COMPLETE';
+  banner.textContent = 'Yes to all';
   banner.style.right = `${insetRight}px`;
   container.appendChild(banner);
   // Under the pointer while a token is carried: where it would land, or that it cannot land there.
@@ -690,7 +690,7 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
 .ep-card b { display: block; font: 700 14px/1.3 ${FONT_BODY}; letter-spacing: 1px; color: ${FAIL_INK}; white-space: pre; }
 .ep-card span { display: block; margin-top: 4px; font: 600 15px/1.3 ${FONT_BODY}; color: ${TEXT}; }
 .ep-banner { position: absolute; left: 0; right: 0; top: 50%; text-align: center; pointer-events: none; z-index: 100001;
-  font: clamp(24px, 5vw, 64px) ${FONT_DISPLAY}; color: ${SCORE};
+  font: 700 clamp(24px, 4vw, 48px) ${FONT_BODY}; color: ${PASS_INK};
   opacity: 0; transform: translateY(-50%) scale(0.6); transition: opacity 0.3s, transform 0.3s, top 0.4s, font-size 0.4s; }
 .ep-banner.on { opacity: 1; transform: translateY(-50%) scale(1); }
 .ep-banner.on.small { top: 32px; font-size: 20px; }

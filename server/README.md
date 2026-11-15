@@ -4,7 +4,7 @@
 **Purpose:** the small local Node server. It keeps keys out of the browser. It turns a typed
 sentence into an edit (Jev parse, or plan B or plan C), gives one vote per discipline after an
 edit (Jev votes), and relays the phone messages over WebSocket in tier 3. Any other call that
-needs a key, such as the LLM post-game report (P4 with P3), also goes through this server; who
+needs a key, such as the LLM report after the session (P4 with P3), also goes through this server; who
 writes that route is box A in docs/plan-graph.html. Jev never decides pass or fail; the solver does.
 **Consumes:** `JevParseRequest`, `JevVoteRequest` and the phone messages (`contract/types.ts`).
 **Produces:** `JevParse` and `JevVote`. Plan B (a general LLM) and plan C (a keyword parser)
@@ -45,7 +45,7 @@ The server does not read `HOST` or `PORT`, because shells and tools export those
   `JevParseRequest`), `403` (Host or Origin not allowed), `404`, `405`, `413` (body too big) or
   `415` (not `application/json`). A body with an inherited key name (`__proto__`, `constructor`)
   is a `400`. A client that sends too slowly gets `408` after about 10 s.
-- Callers: the game page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
+- Callers: the app page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
   (`npm run dev`), or port 4173 (`npm run preview`). Other browser origins get `403`.
 - Accept a parse only when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Else show
   "Did you mean" and the buttons.

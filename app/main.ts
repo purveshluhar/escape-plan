@@ -1,6 +1,6 @@
-// App entry, design B (daylight model, spatial glass): place objects from the dock (click a chip,
-// or drag it onto any floor), move them by dragging on the model, press Escape!, read PASS or FAIL
-// in the summary pill, and apply a fix from the sheet or the edit box.
+// App entry, design B (daylight model, spatial glass): ask a question from the dock (click a chip,
+// or drag it onto any floor), move it by dragging on the model, press Show me, read Yes or No
+// in the summary pill, and apply a fix from the sheet or the edit box. Words: design/copy.md.
 // Every fix re-solves the placed objects. Owner: P3. The logic lives in shell.ts, state.ts,
 // answers.ts, flow.ts and scoreboard.ts (tested in Node); this file only draws and wires it.
 import * as THREE from 'three';
@@ -19,9 +19,10 @@ import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
-import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
+import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
+import { allYesText, questionOf, yesLine } from './questions.ts';
 import {
-  PHASE_WORD, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts,
+  countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
 import type { ParseOutcome, Phase, PickItem } from './shell.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
@@ -72,10 +73,11 @@ const viewer = createViewer($('viewer'), {
 // Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
 // so framing them shows an empty 424 m view until (or unless) the real floors load.
 viewer.setCovered(coveredNodes(building));
-// The model centres in the whole view, and moves left of the fix sheet only when a run has failures
-// (the sheet floats on the right on wider screens; on phones it sits at the bottom).
+// The model centres in the whole view, and moves left of the fix sheet or the all-yes banner after
+// a run (both float on the right on wider screens; on phones they sit at the bottom).
+// The all-yes banner uses the same slot, so the model also moves left of it when every answer is yes.
 const insetFor = (results: readonly Answer[]): number =>
-  innerWidth > 700 && results.some((r) => r.status === 'fail') ? SIDE_PANEL : 0;
+  innerWidth > 700 && results.length > 0 ? SIDE_PANEL : 0;
 let runTimer = 0;
 
 // ---------- Small DOM helper (textContent only, never innerHTML) ----------
@@ -95,13 +97,15 @@ function btn(label: Child | Child[], cls: string, onClick: () => void, attrs: Re
 }
 
 const itemOf = (id: Id): PickItem => items.find((i) => i.token === id)!;
+// The question a person asks for this token (questions.ts), or its name when there is none yet.
+const askOf = (id: Id): string => questionOf(id)?.ask ?? itemOf(id).label;
 function dot(item: PickItem, small = false): HTMLElement {
   return h('span', {
     class: `dot${small ? ' sm' : ''}`, 'aria-hidden': 'true', style: `--c:${item.color};--gi:${item.glyphInk}`,
   }, item.glyph);
 }
 const word = (r: Answer | null | undefined, running = false): HTMLElement => r
-  ? h('b', { class: `word ${r.status}` }, r.status === 'pass' ? 'PASS' : 'FAIL')
+  ? h('b', { class: `word ${r.status}` }, r.status === 'pass' ? 'Yes' : 'No')
   : h('span', { class: 'word ready' }, running ? '...' : 'Ready');
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -169,7 +173,7 @@ function place(id: Id): void {
   render();
 }
 
-// A drop on the model (or an arrow key): the object starts in `node` and waits there for Escape!,
+// A drop on the model (or an arrow key): the token starts in `node` and waits there for Show me,
 // like a placement from the dock. The last run's results no longer hold, so they are cleared.
 function moveTo(id: Id, node: Id): void {
   if (S.phase === 'running') return;
@@ -177,7 +181,7 @@ function moveTo(id: Id, node: Id): void {
   S.placed = dropPlaced(building, S.placed, id);
   S.selected = id;
   S.results = null;
-  S.note = `${itemOf(id).label} placed in ${placeName(building, node)}`;
+  S.note = `${itemOf(id).label} starts in ${placeName(building, node)}`;
   S.phase = 'placed';
   idle();
   render();
@@ -189,7 +193,7 @@ function applyFix(edit: Edit, label: string): void {
   S.editOpen = false;
   S.jev = null;
   ($('editInput') as HTMLInputElement).value = '';
-  S.note = `Re-solved after ${label}`;
+  S.note = `Checked again after: ${label}`;
   if (S.placed.length) escape();
   else {
     idle();
@@ -200,7 +204,7 @@ function applyFix(edit: Edit, label: string): void {
 function reset(): void {
   if (S.phase === 'running' || S.game.edits.length === 0) return;
   S.game = initialState();
-  S.note = 'Re-solved after Reset (back to building.json)';
+  S.note = 'Checked again with the original building';
   if (S.results && S.placed.length) escape();
   else {
     idle();
@@ -271,8 +275,8 @@ function render(): void {
   const n = S.game.edits.length;
   const rb = $('btnReset') as HTMLButtonElement;
   rb.disabled = running || n === 0;
-  rb.replaceChildren(n ? `Reset (${n}) ` : 'Reset ', h('kbd', {}, 'R'));
-  rb.setAttribute('aria-label', n ? `Reset, ${plural(n, 'edit')} applied` : 'Reset');
+  rb.replaceChildren(n ? `Undo edits (${n}) ` : 'Undo edits ', h('kbd', {}, 'R'));
+  rb.setAttribute('aria-label', n ? `Undo edits, ${n} applied` : 'Undo edits');
   ($('btnClear') as HTMLButtonElement).disabled = running || S.placed.length === 0;
   ($('btnEdit') as HTMLButtonElement).disabled = running;
   const dock = $('dock');
@@ -283,12 +287,14 @@ function render(): void {
     void dock.offsetWidth;
     dock.classList.add('pop');
   }
-  $('slimText').textContent = `Running - ${plural(S.placed.length, 'object')} escaping`;
+  $('slimText').textContent = `Checking ${plural(S.placed.length, 'route')}`;
 
   // Summary pill
   const sm = $('summary') as HTMLButtonElement;
-  const line = h('span', { class: 'sline' }, h('span', { class: 'phase' }, PHASE_WORD[S.phase]),
-    h('span', { class: 'vbar' }), h('span', { class: 'count num' }, countText(S.phase, S.placed.length, S.results)));
+  const phase = phaseWord(S.phase, S.placed.length);
+  const counted = countText(S.phase, S.placed.length, S.results);
+  const line = h('span', { class: 'sline' }, h('span', { class: 'phase' }, phase),
+    h('span', { class: 'vbar' }), h('span', { class: 'count num' }, counted));
   const chips = S.placed.length
     ? [h('span', { class: 'schips' }, ...S.placed.map((id) => h('span', { class: 'schip' }, dot(itemOf(id), true), word(resOf(id), running)))),
       h('span', { class: 'caret', 'aria-hidden': 'true' })]
@@ -296,9 +302,10 @@ function render(): void {
   sm.replaceChildren(line, ...chips);
   sm.disabled = S.phase === 'empty';
   sm.setAttribute('aria-expanded', String(S.scoreOpen));
-  sm.setAttribute('aria-label', `Scoreboard: ${sm.textContent?.replace(/\s+/g, ' ').trim() ?? ''}`);
+  const each = S.placed.map((id) => `${itemOf(id).label} ${resOf(id) ? (resOf(id)!.status === 'pass' ? 'yes' : 'no') : running ? 'checking' : 'ready'}`);
+  sm.setAttribute('aria-label', `${[phase, counted, ...each].join(', ')}. Opens the answers.`);
 
-  // Scoreboard rows
+  // Answers rows, and the footer line that keeps the claim honest (ADR 0010)
   const b = edited();
   const sp = $('scorePanel');
   sp.classList.toggle('open', S.scoreOpen && S.placed.length > 0);
@@ -307,15 +314,17 @@ function render(): void {
     const r = resOf(id);
     const token = b.tokens.find((t) => t.id === id)!;
     const det = !r ? `Starts in ${placeName(b, token.start)}`
-      : r.status === 'pass' ? `Out via ${r.path.map((p) => placeName(b, p)).join(', ')}`
-      : failLine(r, b);
-    return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, itemOf(id).label), word(r), h('span', { class: 'det num' }, det));
-  }));
+      : r.status === 'pass' ? `${yesLine(id)}. Route: ${r.path.map((p) => placeName(b, p)).join(', ')}`
+      : stuckLine(b, r);
+    return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, askOf(id)), word(r), h('span', { class: 'det num' }, det));
+  }), h('div', { class: 'snote' }, 'A quick check of sizes and routes, not a code review.'));
 
-  // Live note and LEVEL COMPLETE
+  // Live note and the all-yes banner
   $('note').textContent = S.note;
   $('banner').classList.toggle('on', S.phase === 'complete');
-  $('bannerSub').textContent = `${S.placed.length} of ${S.placed.length} out with ${plural(n, 'edit')}`;
+  const yes = allYesText(S.placed, n);
+  $('bannerBig').textContent = yes.title;
+  $('bannerSub').textContent = yes.lines;
 
   renderSheet(b);
   renderEdit();
@@ -323,14 +332,7 @@ function render(): void {
   viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel), running));
 }
 
-function failLine(r: Answer, b: Building): string {
-  const why = r.reason ? REASON_TEXT[r.reason] : 'blocked';
-  const at = r.blocked_at ? ` at ${placeName(b, r.blocked_at)}` : '';
-  const nums = numbersText(r);
-  return `${cap(why)}${at}${nums ? ` - ${nums}` : ''}`;
-}
-
-// One card per failed object: verdict, reason, numbers and the demo fixes that matter to it.
+// One card per No answer: who asks, the question, the reason, the numbers and the fixes that matter.
 function renderSheet(b: Building): void {
   const sheet = $('sheet');
   const fails = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
@@ -338,11 +340,11 @@ function renderSheet(b: Building): void {
   if (fails.length === 0) return sheet.replaceChildren();
   const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
   sheet.replaceChildren(
-    h('div', { class: 'lbl' }, 'Fix it'),
+    h('div', { class: 'lbl' }, 'Suggested fixes'),
     ...cards,
     h('div', { class: 'foot' },
       btn('Type an edit', 'fixbtn ghost', openEdit),
-      btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' })),
+      btn('Undo edits', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' })),
   );
 }
 
@@ -354,13 +356,15 @@ function fixCard(r: Answer, b: Building): HTMLElement {
   const targets = moved ? new Set<Id>() : relevantTargets(building, expected, r.token);
   if (r.blocked_at) targets.add(r.blocked_at);
   const fixes = fixesFor(buttons, targets, S.game.edits);
-  const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
+  const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Stuck';
   const nums = numbersText(r);
-  return h('div', { class: 'fcard', role: 'group', 'aria-label': `${it.label} failed` },
-    h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, it.label), h('span', { class: 'word fail' }, 'FAIL')),
+  const q = questionOf(r.token);
+  return h('div', { class: 'fcard', role: 'group', 'aria-label': `${askOf(r.token)} No` },
+    q && h('div', { class: 'who' }, q.person),
+    h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, askOf(r.token)), h('span', { class: 'word fail' }, 'No')),
     h('div', { class: 'rs' }, why, r.blocked_at && h('span', {}, ` at ${placeName(b, r.blocked_at)}`)),
     nums && h('div', { class: 'nb num' }, cap(nums)),
-    fixes.length === 0 && h('div', { class: 'none' }, 'No preset fix for this object.'),
+    fixes.length === 0 && h('div', { class: 'none' }, 'No suggested fix here yet. Type an edit.'),
     // "More fixes" opens every preset fix and the text box: in play tests it was the first move
     // after reading a failure, so it sits on each card, not only at the foot of the sheet.
     h('div', { class: 'fx', role: 'group', 'aria-label': `Fix for ${it.label}` },
@@ -379,7 +383,7 @@ function renderEdit(): void {
       const on = isApplied(S.game, f.edit);
       return btn(on ? `Applied: ${f.label}` : f.label, 'fixbtn', () => applyFix(f.edit, f.label), { 'aria-pressed': String(on) });
     }),
-    btn('Reset', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
+    btn('Undo edits', 'fixbtn ghost', reset, S.game.edits.length ? {} : { disabled: '' }),
   );
   const jev = $('jev');
   jev.classList.toggle('on', S.jev !== null);
@@ -395,23 +399,25 @@ function renderEdit(): void {
         render();
         $('editInput').focus();
       })),
-    h('div', { class: 'src' }, 'Typed edits use the keyword parser until Jev is connected.'),
+    h('div', { class: 'src' }, 'Matched by keywords for now. Jev is not connected yet.'),
   );
 }
 
 // ---------- Build the dock once ----------
 
-// A click on a chip places the object in its own start room (a second click takes it off); a drag
-// from a chip carries it onto the model, where the viewer drops it on the floor under the pointer.
+// A chip is a question. A click asks it, with the token in its own start room (a second click takes
+// it off); a drag from a chip carries it onto the model, where the viewer drops it on that floor.
+// Wide screens show the question; phones show the short name (index.html, .ask and .short).
 let chipPress: { id: Id; pointerId: number; x: number; y: number } | null = null;
 let dragged = false; // the click that ends a chip drag is not a placement
 for (const it of items) {
   const id = it.token;
-  const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => {
+  const b = btn([dot(it), h('span', { class: 'ask' }, askOf(id)), h('span', { class: 'short' }, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => {
     if (dragged) dragged = false;
     else place(id);
   }, {
-    'data-token': id, 'aria-pressed': 'false', title: 'Click to place, or drag onto a floor. Arrow up or down moves the selected object a floor.',
+    'data-token': id, 'aria-pressed': 'false', 'aria-label': askOf(id),
+    title: 'Click to ask. Or drag it onto a floor to start it there. Arrow up or down moves it one floor.',
     ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}),
   });
   b.addEventListener('pointerdown', (e) => {
@@ -469,7 +475,7 @@ document.addEventListener('keydown', (ev) => {
   const k = Number(ev.key);
   const hit = items.find((i) => i.key === k);
   if (hit?.token) return place(hit.token);
-  // Space is always Escape! (outside the text box); Enter is Escape! unless a button has focus.
+  // Space is always Show me (outside the text box); Enter is Show me unless a button has focus.
   if (ev.key === ' ' || (ev.key === 'Enter' && !onBtn)) {
     ev.preventDefault();
     return escape();

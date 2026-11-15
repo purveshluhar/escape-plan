@@ -1,6 +1,6 @@
 # 0007. A game, not a code check
 
-Status: accepted (2026-11-14)
+Status: superseded by 0010 (2026-11-15)
 
 ## Context
 
