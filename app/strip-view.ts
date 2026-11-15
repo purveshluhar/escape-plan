@@ -41,7 +41,7 @@ export function renderStrip(el: HTMLElement, building: Building, v: StripView): 
 
   const read = m
     ? h('div', { class: `box read${m.sure ? '' : ' amber'}` },
-      h('div', { class: 'bh' }, h('span', { class: 'step' }, '1'), `Read: ${m.reader}`),
+      h('div', { class: 'bh' }, h('span', { class: 'step' }, '1'), `Read by: ${m.reader}`),
       h('div', { class: 'srcline' }, m.source),
       ...m.rows.map((r) => {
         const pct = String(Math.round(r.confidence * 100));
@@ -70,7 +70,7 @@ export function renderStrip(el: HTMLElement, building: Building, v: StripView): 
       h('b', { class: `word ${a.answer === 'Yes' ? 'yes' : 'no'}` }, a.answer),
       a.detail && h('span', { class: 'ad num' }, a.detail)));
   const decided = h('div', { class: 'box decided' },
-    h('div', { class: 'bh' }, h('span', { class: 'step' }, '2'), `Decided: building rules${m?.sure && v.answers !== null ? solveText(v.solveMs) : ''}`),
+    h('div', { class: 'bh' }, h('span', { class: 'step' }, '2'), `Decided: building rules${m?.sure && v.answers !== null && !v.checking ? solveText(v.solveMs) : ''}`),
     ...lines);
 
   el.replaceChildren(

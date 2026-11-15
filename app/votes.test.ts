@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, Edit, JevVote, JevVoteRequest } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
+import { withSmoke } from '../data/smoke.ts';
 import { VOTES_TIMEOUT_MS, VOTES_URL, panelModel, readVotes, voteRequests } from './votes.ts';
 import type { PanelReading } from './votes.ts';
 
@@ -55,6 +56,29 @@ test('one vote request per discipline in the data, with what the rules said befo
   assert.equal(r.after.token, 'sofa', 'glass still stuck, sofa now gets in: the sofa speaks for logistics');
 });
 
+test('only the questions asked get a vote: no Glass when glass was not asked', () => {
+  const asked = voteRequests(building, SHAFT, solve(building), solve(building, [SHAFT]), ['chiller', 'load']);
+  assert.deepEqual(asked.map((r) => `${r.discipline}:${r.after.token}`), ['mep:chiller', 'structure:load']);
+  // The sofa asked alone speaks for logistics, even when glass (not asked) is the one the edit changed.
+  const sofa = voteRequests(building, LOBBY, solve(building), solve(building, [LOBBY]), ['sofa']);
+  assert.deepEqual(sofa.map((r) => `${r.discipline}:${r.after.token}`), ['logistics:sofa']);
+  // The smoke question votes under its own name with the people's answer; the people are not asked.
+  const withS = withSmoke(building);
+  const OFFICE: Edit = { op: 'widen', target: 'office-door', value: 0.9, source: 'button' };
+  const smoky = voteRequests(withS, OFFICE, solve(withS), solve(withS, [OFFICE]), ['smoke']);
+  assert.deepEqual(smoky.map((r) => `${r.discipline}:${r.after.token}`), ['fire:smoke']);
+  // Nothing asked: nothing to vote on.
+  assert.deepEqual(voteRequests(building, SHAFT, solve(building), solve(building, [SHAFT]), []), []);
+});
+
+test('the panel and the strip name who voted or read in plain words, never a header name', async () => {
+  for (const [voter, decider] of [['rules', 'keywords'], ['rules', 'strands'], ['strands', 'strands']] as const) {
+    const m = panelModel(await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(voter === 'rules' ? RULES : MODEL, voter, decider)) }), building);
+    assert.doesNotMatch(m.source, /x-voter|x-decider/);
+    assert.match(m.source, /^Votes by: the (rules|model)/);
+  }
+});
+
 test('it posts the requests as JSON to /votes', async () => {
   const calls: Call[] = [];
   await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(RULES, 'rules'), calls) });
@@ -71,7 +95,7 @@ test('model votes: a vote that disagrees with the rules is shown as a disagreeme
   assert.equal(r.why, 'strands');
   const m = panelModel(r, building);
   assert.equal(m.title, 'Review panel: Strands Decider');
-  assert.equal(m.source, 'x-voter: strands - on this computer, 1.2\u00a0s');
+  assert.equal(m.source, 'Votes by: the model, on this computer, 1.2\u00a0s');
   assert.deepEqual(m.bubbles.map((b) => [b.discipline, b.who, b.vote, b.confidence, b.reason, b.rules]), [
     ['MEP', 'Strands Decider', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
     ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: still No. Glass is stuck at Lobby door: cannot turn the corner, needs 4.0 m, has 3.71 m', ''],
@@ -103,7 +127,7 @@ test('a disagreement is about what the edit did: accepting a Yes-to-No edit, or 
 test('the rules vote when no model answers: the panel says so, and every vote matches the rules', async () => {
   const keywords = panelModel(await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(RULES, 'rules', 'keywords')) }), building);
   assert.equal(keywords.title, 'Review panel: rules only');
-  assert.equal(keywords.source, 'x-voter: rules - the server runs keywords, so the rules vote');
+  assert.equal(keywords.source, 'Votes by: the rules. The server reads by keywords.');
   assert.equal(keywords.bubbles[3]!.vote, 'Object');
   assert.equal(keywords.bubbles[3]!.rules, 'This vote agrees with the rules');
   assert.ok(keywords.bubbles.every((b) => !b.clash));
@@ -112,15 +136,15 @@ test('the rules vote when no model answers: the panel says so, and every vote ma
   const fallback = panelModel(await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(RULES, 'rules', 'strands')) }), building);
   assert.equal(fallback.title, 'Review panel: rules only');
   // Neutral words: the server falls back for many reasons (off, slow, busy, an unusable answer).
-  assert.equal(fallback.source, 'x-voter: rules - the model gave no usable vote (off, busy, slow or unclear), so the rules vote');
+  assert.equal(fallback.source, 'Votes by: the rules. The model gave no usable vote (off, busy, slow or unclear).');
   // More than 2 changed answers never go to the model: about 1 s each does not fit the budget.
   const three = shaftRequests.map((r, i) => (i === 2 ? { ...r, before: { ...r.before, status: 'pass' as const } } : r));
   const many = panelModel(await readVotes(three, { fetch: fakeFetch(() => reply(RULES, 'rules', 'strands')) }), building);
-  assert.equal(many.source, 'x-voter: rules - this edit changed 3 answers, more than the model can vote on in time, so the rules vote');
+  assert.equal(many.source, 'Votes by: the rules. This edit changed 3 answers, more than the model can vote on in time.');
   // An edit that changed no answer never asks the model.
   const unchanged = shaftRequests.filter((r) => r.before.status === r.after.status);
   const none = panelModel(await readVotes(unchanged, { fetch: fakeFetch(() => reply(RULES.filter((x) => x.vote === 'review'), 'rules', 'strands')) }), building);
-  assert.equal(none.source, 'x-voter: rules - this edit changed no answer, so the rules vote');
+  assert.equal(none.source, 'Votes by: the rules. This edit changed no answer.');
 });
 
 test('server down, slow or unusable: no votes, and the panel says the rules still decide', async () => {

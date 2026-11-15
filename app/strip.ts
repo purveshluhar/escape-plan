@@ -19,8 +19,8 @@ export interface StripRow {
 
 export interface StripModel {
   typed: string;
-  reader: string; // who read the sentence
-  source: string; // the x-decider header value, and why this reader answered
+  reader: string; // who read the sentence: "the model" or "this page"
+  source: string; // why this reader answered, in words (the x-decider header is never shown)
   rows: StripRow[];
   sure: boolean; // the edit was made
   lowest: number;
@@ -42,16 +42,16 @@ export function metresText(v: number): string {
 const NBSP = '\u00a0';
 const keepUnits = (s: string): string => s.replace(/(\d) (m|s|ms)\b/g, `$1${NBSP}$2`);
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
-const LOCAL = 'so this page read it';
 
+// Why this reader read the sentence, in plain words; the header line says who ("Read by: this page").
 function sourceText(r: Reading): string {
   switch (r.why) {
-    case 'strands': return `x-decider: strands - on this computer, ${seconds(r.ms)}`;
-    case 'keywords': return `x-decider: keywords - the server reads by keywords, ${LOCAL}`;
-    case 'down': return `x-decider: none - the server is not reachable, ${LOCAL}`;
-    case 'slow': return `x-decider: none - the server took over ${seconds(PARSE_TIMEOUT_MS)}, ${LOCAL}`;
-    case 'refused': return `x-decider: ${r.decider ?? 'none'} - the server answer could not be used, ${LOCAL}`;
-    case 'no-model': return `x-decider: strands - the model gave no answer (down or busy), ${LOCAL}`;
+    case 'strands': return `On this computer, ${seconds(r.ms)}.`;
+    case 'keywords': return 'The server reads by keywords.';
+    case 'down': return 'The server is not reachable.';
+    case 'slow': return `The server took over ${seconds(PARSE_TIMEOUT_MS)}.`;
+    case 'refused': return 'The server answer could not be used.';
+    case 'no-model': return 'The model gave no answer (down or busy).';
   }
 }
 
@@ -68,7 +68,7 @@ export function stripModel(r: Reading, building: Building): StripModel {
     : lowest < JEV_ACCEPT_CONFIDENCE ? `Not sure (${lowest.toFixed(2)}). Nothing was changed.`
     : 'Not sure: that is not one of the edits offered here. Nothing was changed.';
   return {
-    typed: r.text, reader: r.reader === 'strands' ? 'Strands Decider' : 'Keyword reader in this page',
+    typed: r.text, reader: r.reader === 'strands' ? 'the model' : 'this page',
     source: keepUnits(sourceText(r)), rows, sure, lowest, verdict,
   };
 }

@@ -353,7 +353,9 @@ async function submitText(text: string): Promise<void> {
 async function askPanel(before: GameState, edit: Edit): Promise<void> {
   const ask = ++panelAsk;
   const start = played();
-  const requests = voteRequests(start, edit, run(start, before).results, run(start, S.game).results);
+  // Only the questions asked get a vote; with none asked there is nothing to vote on.
+  const requests = voteRequests(start, edit, run(start, before).results, run(start, S.game).results, S.placed);
+  if (requests.length === 0) return closePanel();
   panel = { requests, votes: [], why: 'pending', voter: null, decider: null, ms: 0 };
   render();
   const r = await readVotes(requests);
@@ -454,7 +456,8 @@ function render(): void {
   renderSheet(b);
   renderEdit();
   renderHintPanel();
-  renderVotes($('votes'), building, panel, () => { closePanel(); render(); });
+  // The votes wait for the answers: while the walks play, the panel would tell the answer first.
+  renderVotes($('votes'), building, running ? null : panel, () => { closePanel(); render(); });
   const picked = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
   viewer.select(picked, picked === null ? null : tokenCaption(b, picked, resOf(picked), running));
 }

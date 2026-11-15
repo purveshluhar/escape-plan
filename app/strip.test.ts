@@ -19,29 +19,32 @@ const local = (text: string, why: Reading['why'], decider: string | null = null)
 test('applied: three parts with their confidences, and the edit was made', () => {
   const m = stripModel({ ...local(DEMO, 'strands', 'strands'), reader: 'strands', ms: 1040 }, building);
   assert.equal(m.typed, DEMO);
-  assert.equal(m.reader, 'Strands Decider');
-  assert.match(m.source, /x-decider: strands/);
-  assert.match(m.source, /1\.0\ss/);
+  assert.equal(m.reader, 'the model');
+  assert.equal(m.source, 'On this computer, 1.0\u00a0s.');
   assert.deepEqual(m.rows.map((r) => [r.name, r.text]), [['Edit', 'Widen'], ['Where', 'Lobby door'], ['Size', '1.5 m']]);
   assert.ok(m.rows.every((r) => r.confidence !== null && r.confidence >= 0.8));
   assert.equal(m.sure, true);
   assert.match(m.verdict, /edit was made/);
 });
 
-test('keywords server: the strip says the header value and that this page read the sentence', () => {
+test('keywords server: the strip says in plain words that this page read the sentence, and why', () => {
   const m = stripModel(local(DEMO, 'keywords', 'keywords'), building);
-  assert.notEqual(m.reader, 'Strands Decider');
-  assert.match(m.source, /x-decider: keywords/);
+  assert.equal(m.reader, 'this page');
+  assert.equal(m.source, 'The server reads by keywords.');
   assert.equal(m.sure, true);
 });
 
-test('server down or slow: the strip says so and shows x-decider: none', () => {
-  assert.match(stripModel(local(DEMO, 'down'), building).source, /x-decider: none.*not reachable/);
-  assert.match(stripModel(local(DEMO, 'slow'), building).source, /x-decider: none.*2\.5\ss/);
+test('server down or slow: the strip says so, with no header name', () => {
+  assert.equal(stripModel(local(DEMO, 'down'), building).source, 'The server is not reachable.');
+  assert.equal(stripModel(local(DEMO, 'slow'), building).source, 'The server took over 2.5\u00a0s.');
+  for (const why of ['strands', 'keywords', 'down', 'slow', 'refused', 'no-model'] as const) {
+    const m = stripModel(local(DEMO, why, why === 'keywords' ? 'keywords' : 'strands'), building);
+    assert.doesNotMatch(`${m.reader} ${m.source}`, /x-decider|x-voter/);
+  }
 });
 
 test('Strands gave no answer: the strip says so', () => {
-  assert.match(stripModel(local(DEMO, 'no-model', 'strands'), building).source, /x-decider: strands.*no answer/);
+  assert.equal(stripModel(local(DEMO, 'no-model', 'strands'), building).source, 'The model gave no answer (down or busy).');
 });
 
 test('no repeated reader words, and a number never wraps away from its unit', () => {

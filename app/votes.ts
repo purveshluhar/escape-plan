@@ -15,7 +15,8 @@ export const VOTES_TIMEOUT_MS = 2500; // the latency budget; the server gives th
 const NBSP = '\u00a0';
 const MAX_MODEL_QUESTIONS = 2; // server/votes.ts: more changed answers than this go to the rules
 
-// One request per discipline in the data, in building order. When two tokens share a discipline
+// One request per discipline of the questions asked (`asked`, every token when left out), in building
+// order: a question nobody asked (glass, when only the chiller is asked) gets no vote. When two tokens share a discipline
 // (glass and sofa are both logistics), the one this edit broke (Yes to No) speaks for it, else the
 // one it fixed (No to Yes), else the first one; the first wins a tie.
 const weight = (b: SolverResult, a: SolverResult): number => (b.status === a.status ? 0 : a.status === 'fail' ? 2 : 1);
@@ -28,9 +29,10 @@ function resultOf(results: readonly SolverResult[], token: string): SolverResult
   const people = results.find((r) => r.token === PEOPLE);
   return people && { ...people, token: RACE };
 }
-export function voteRequests(building: Building, edit: Edit, before: readonly SolverResult[], after: readonly SolverResult[]): JevVoteRequest[] {
+export function voteRequests(building: Building, edit: Edit, before: readonly SolverResult[], after: readonly SolverResult[], asked?: readonly string[]): JevVoteRequest[] {
   const out = new Map<Discipline, JevVoteRequest>();
   for (const t of building.tokens) {
+    if (asked && !asked.includes(t.id)) continue;
     const b = resultOf(before, t.id);
     const a = resultOf(after, t.id);
     if (!b || !a) continue;
@@ -48,8 +50,8 @@ export interface PanelReading {
   requests: JevVoteRequest[];
   votes: JevVote[]; // one per request, in order; [] when no votes came
   why: PanelWhy;
-  voter: string | null; // the x-voter header as sent
-  decider: string | null; // the x-decider header as sent
+  voter: string | null; // the x-voter header as sent (never shown; sourceText says it in words)
+  decider: string | null; // the x-decider header as sent (never shown)
   ms: number;
 }
 
@@ -157,13 +159,15 @@ const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}${NBSP}s`;
 function sourceText(r: PanelReading): string {
   switch (r.why) {
     case 'pending': return 'Asking each discipline...';
-    case 'strands': return `x-voter: strands - on this computer, ${seconds(r.ms)}`;
+    // Plain words for who voted, never a header name. "Votes by", not "Decided by": the rules decide
+    // every answer, and a vote never changes one.
+    case 'strands': return `Votes by: the model, on this computer, ${seconds(r.ms)}`;
     case 'rules': {
       const n = r.requests.filter(changed).length;
-      return r.decider !== 'strands' ? 'x-voter: rules - the server runs keywords, so the rules vote'
-        : n === 0 ? 'x-voter: rules - this edit changed no answer, so the rules vote'
-        : n > MAX_MODEL_QUESTIONS ? `x-voter: rules - this edit changed ${n} answers, more than the model can vote on in time, so the rules vote`
-        : 'x-voter: rules - the model gave no usable vote (off, busy, slow or unclear), so the rules vote';
+      return r.decider !== 'strands' ? 'Votes by: the rules. The server reads by keywords.'
+        : n === 0 ? 'Votes by: the rules. This edit changed no answer.'
+        : n > MAX_MODEL_QUESTIONS ? `Votes by: the rules. This edit changed ${n} answers, more than the model can vote on in time.`
+        : 'Votes by: the rules. The model gave no usable vote (off, busy, slow or unclear).';
     }
     case 'down': return 'No votes - the server is not reachable';
     case 'slow': return `No votes - no answer in ${seconds(VOTES_TIMEOUT_MS)}`;
