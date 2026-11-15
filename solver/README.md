@@ -30,8 +30,11 @@ it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
 - `spread.ts`: smoke (T2). Smoke moves one open edge per time step (`buildGraph()` from the
   core, no checks). People race it in `shortest-exit.ts`: smoke at a path node at the same step
   or earlier gives `smoke_first` there. Tests use fixtures until P5 adds smoke cases.
-- `downward.ts`: the load. It walks `supported_by` to a foundation and holds `cutOf()`, the
-  shaft-breaks-beam cut (also for `supply` later).
+- `downhill.ts`: water (T2). It walks `drain_route` edges one way, from `from` to `to`. Each
+  edge must fall at least 1 % over the plan distance between the two box centres (`uphill`),
+  and must not cross a beam or transfer beam unless sleeved (`crosses_beam`). It has its own
+  one-way search, so `search.ts` stays two-way. `downhill.test.ts` uses a fixture until P5 adds
+  water data.
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
   over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
   and people tokens there are fixtures until P5 adds them to `data/`.
