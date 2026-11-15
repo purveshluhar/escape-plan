@@ -28,7 +28,7 @@ export function renderVotes(el: HTMLElement, building: Building, r: PanelReading
         h('b', { class: 'vv' }, b.vote, !b.sure && h('span', { class: 'vns' }, ', not sure')),
         h('span', { class: `vc num${b.sure ? '' : ' low'}` }, b.confidence)),
       h('div', { class: 'vr' }, b.reason),
-      h('div', { class: 'vrules' }, b.rules))),
+      b.rules && h('div', { class: 'vrules' }, b.rules))),
     h('div', { class: `vsum${m.bubbles.some((b) => b.clash) ? ' clash' : ''}` }, m.summary),
   );
 }

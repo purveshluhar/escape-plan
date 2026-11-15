@@ -209,6 +209,7 @@ body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
 #votes .accept .vv{color:var(--pass)} #votes .object .vv{color:var(--fail)} #votes .review .vv{color:var(--muted)}
 #votes .vr{font:400 14px/1.3 var(--font);margin-top:2px}
 #votes .vrules{font:600 13px/1.3 var(--font);color:var(--muted);margin-top:2px} #votes .clash .vrules{color:#7a3306}
+@media (max-width:1100px) and (min-width:701px){#votes{top:84px;max-height:calc(100vh - 420px)} body.scoring #votes{display:none}}
 #votes .vsum{font:600 14px/1.3 var(--font);margin:8px 2px 2px} #votes .vsum.clash{color:#7a3306}
 /* ---------- Who decided strip: the sentence, the reading, the rules' answer ---------- */
 #strip{position:fixed;left:24px;bottom:104px;width:min(800px,calc(100vw - 48px));border-radius:26px;padding:14px 16px 12px;display:none}
@@ -359,7 +360,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   </div>
   <div id="strip" class="glass" role="region" aria-label="Who decided" aria-live="polite"></div>
   <div id="hint" class="glass" role="region" aria-label="Hint" aria-live="polite"></div>
-  <div id="votes" class="glass" role="region" aria-label="Review panel"></div>
+  <div id="votes" class="glass" role="region" aria-label="Review panel" aria-live="polite"></div>
   <span id="escHint" hidden>Pick a question first</span>
 </div>
 <script type="module" src="/app/main.ts"></script>

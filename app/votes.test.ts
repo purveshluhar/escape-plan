@@ -69,15 +69,18 @@ test('model votes: a vote that disagrees with the rules is shown as a disagreeme
   assert.equal(m.title, 'Review panel: Strands Decider');
   assert.equal(m.source, 'x-voter: strands - on this computer, 1.2\u00a0s');
   assert.deepEqual(m.bubbles.map((b) => [b.discipline, b.who, b.vote, b.confidence, b.reason, b.rules]), [
-    ['MEP', 'Strands Decider', 'Accept', '0.93', 'Chiller was No, now Yes', 'Rules agree: Yes'],
-    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Glass is still No: cannot turn the corner at Lobby door', 'Rules: No'],
-    ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Wheelchair is still No: step in the way at Terrace door', 'Rules: No'],
-    ['Structure', 'Strands Decider', 'Accept', '0.72', 'Load was Yes, now No: nothing holds it up at beam B2', 'Rules disagree: No'],
-    ['Life safety', 'Rules, no change', 'Review', '1.00', 'People are still No: too narrow at Office door', 'Rules: No'],
+    ['MEP', 'Strands Decider', 'Accept', '0.93', 'Rules: Chiller was No, now Yes', 'This vote agrees with the rules'],
+    ['Logistics', 'Rules, no change', 'Review', '1.00', 'Rules: Glass is still No, stuck at Lobby door (cannot turn the corner)', ''],
+    ['Accessibility', 'Rules, no change', 'Review', '1.00', 'Rules: Wheelchair is still No, stuck at Terrace door (step in the way)', ''],
+    ['Structure', 'Strands Decider', 'Accept', '0.72', 'Rules: Load was Yes, now No, stuck at beam B2 (nothing holds it up)', 'This vote disagrees with the rules'],
+    ['Life safety', 'Rules, no change', 'Review', '1.00', 'Rules: People are still No, stuck at Office door (too narrow)', ''],
   ]);
   assert.deepEqual(m.bubbles.map((b) => b.clash), [false, false, false, true, false]);
   // Under 0.80 (JEV_ACCEPT_CONFIDENCE) a vote is marked not sure, as in the who decided strip.
   assert.deepEqual(m.bubbles.map((b) => b.sure), [true, true, true, false, true]);
+  // "Not sure" follows the number on screen: 0.7996 shows as 0.80, so it is sure.
+  const edge = panelModel({ ...r, votes: MODEL.map((x, i) => (i === 3 ? { ...x, confidence: 0.7996 } : x)) }, building).bubbles[3]!;
+  assert.deepEqual([edge.confidence, edge.sure], ['0.80', true]);
   assert.equal(m.summary, '1 vote disagrees with the rules. The rules decide every answer.');
 });
 
@@ -85,10 +88,10 @@ test('a disagreement is about what the edit did: accepting a Yes-to-No edit, or 
   const at = (votes: JevVote[]) => panelModel({ requests: shaftRequests, votes, why: 'strands', voter: 'strands', decider: 'strands', ms: 900 }, building).bubbles;
   const set = (i: number, vote: JevVote['vote']) => MODEL.map((x, k) => (k === i ? { ...x, vote } : x));
   assert.deepEqual(at(set(3, 'object')).map((b) => b.clash), [false, false, false, false, false]);
-  assert.equal(at(set(3, 'object'))[3]!.rules, 'Rules agree: No');
-  assert.equal(at(set(3, 'review'))[3]!.rules, 'Rules: No');
+  assert.equal(at(set(3, 'object'))[3]!.rules, 'This vote agrees with the rules');
+  assert.equal(at(set(3, 'review'))[3]!.rules, '');
   assert.deepEqual(at(set(0, 'object')).map((b) => b.clash), [true, false, false, true, false]);
-  assert.equal(at(set(0, 'object'))[0]!.rules, 'Rules disagree: Yes');
+  assert.equal(at(set(0, 'object'))[0]!.rules, 'This vote disagrees with the rules');
   // Accepting an edit that left a No as it was is no disagreement: the edit did not cause it.
   assert.equal(at(set(1, 'accept'))[1]!.clash, false);
 });
@@ -98,13 +101,18 @@ test('the rules vote when no model answers: the panel says so, and every vote ma
   assert.equal(keywords.title, 'Review panel: rules only');
   assert.equal(keywords.source, 'x-voter: rules - the server runs keywords, so the rules vote');
   assert.equal(keywords.bubbles[3]!.vote, 'Object');
-  assert.equal(keywords.bubbles[3]!.rules, 'Rules agree: No');
+  assert.equal(keywords.bubbles[3]!.rules, 'This vote agrees with the rules');
   assert.ok(keywords.bubbles.every((b) => !b.clash));
   assert.equal(keywords.summary, 'Votes only. They never change an answer: the rules decide.');
   assert.ok(keywords.bubbles.every((b) => b.who === 'Rules'));
   const fallback = panelModel(await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(RULES, 'rules', 'strands')) }), building);
   assert.equal(fallback.title, 'Review panel: rules only');
-  assert.equal(fallback.source, 'x-voter: rules - the model did not answer in 2.0\u00a0s (off, busy or slow), so the rules vote');
+  // Neutral words: the server falls back for many reasons (off, slow, busy, an unusable answer).
+  assert.equal(fallback.source, 'x-voter: rules - the model gave no usable vote (off, busy, slow or unclear), so the rules vote');
+  // More than 2 changed answers never go to the model: about 1 s each does not fit the budget.
+  const three = shaftRequests.map((r, i) => (i === 2 ? { ...r, before: { ...r.before, status: 'pass' as const } } : r));
+  const many = panelModel(await readVotes(three, { fetch: fakeFetch(() => reply(RULES, 'rules', 'strands')) }), building);
+  assert.equal(many.source, 'x-voter: rules - this edit changed 3 answers, more than the model can vote on in time, so the rules vote');
   // An edit that changed no answer never asks the model.
   const unchanged = shaftRequests.filter((r) => r.before.status === r.after.status);
   const none = panelModel(await readVotes(unchanged, { fetch: fakeFetch(() => reply(RULES.filter((x) => x.vote === 'review'), 'rules', 'strands')) }), building);
@@ -123,7 +131,7 @@ test('server down, slow or unusable: no votes, and the panel says the rules stil
   assert.equal(slow.why, 'slow');
   for (const [why, title, source] of [
     [down, 'Review panel is off', 'No votes - the server is not reachable'],
-    [slow, 'Review panel is off', 'No votes - no answer in 2.5\u00a0s'],
+    [slow, 'Review panel: no votes', 'No votes - no answer in 2.5\u00a0s'],
   ] as const) {
     const m = panelModel(why, building);
     assert.equal(m.title, title);
@@ -145,6 +153,7 @@ test('server down, slow or unusable: no votes, and the panel says the rules stil
     const r = await readVotes(shaftRequests, { fetch: fakeFetch(() => reply(body, voter, 'keywords', status)) });
     assert.equal(r.why, 'refused', JSON.stringify(body).slice(0, 80));
     assert.equal(panelModel(r, building).source, 'No votes - the server answer could not be used');
+    assert.equal(panelModel(r, building).title, 'Review panel: no votes');
   }
 });
 
@@ -156,7 +165,7 @@ test('panel text has no game words, and browser code imports nothing from node o
   assert.doesNotMatch(src, /from 'node:|from '\.\.\/server\//);
 });
 
-test('a pending panel says it is asking; no panel before any edit', () => {
+test('a pending panel says it is asking', () => {
   const pending: PanelReading = { requests: shaftRequests, votes: [], why: 'pending', voter: null, decider: null, ms: 0 };
   const m = panelModel(pending, building);
   assert.equal(m.title, 'Review panel');

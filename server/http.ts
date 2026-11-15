@@ -78,8 +78,18 @@ function requestProblems(r: JevParseRequest): string[] {
 // token each, all after the same edit.
 const sameEdit = (a: JevVoteRequest, b: JevVoteRequest): boolean =>
   a.edit.op === b.edit.op && a.edit.target === b.edit.target && a.edit.value === b.edit.value && a.edit.source === b.edit.source;
+// Ids in a vote request look like the data's ids ("plant-shaft", "beam-b2"), so no free text reaches
+// the model prompt and none is long.
+export const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 function voteProblems(list: JevVoteRequest[]): string[] {
   const out: string[] = [];
+  const badId = (x: string | null) => x !== null && !ID_PATTERN.test(x);
+  list.forEach((r, i) => {
+    for (const [where, res] of [['before', r.before], ['after', r.after]] as const) {
+      if ([res.token, res.blocked_at, ...res.path].some(badId)) out.push(`$[${i}].${where}: ids must match ${ID_PATTERN}`);
+    }
+    if (badId(r.edit.target)) out.push(`$[${i}].edit.target: must match ${ID_PATTERN}`);
+  });
   if (new Set(list.map((r) => r.discipline)).size !== list.length) out.push('$: one request per discipline');
   list.forEach((r, i) => {
     if (r.before.token !== r.after.token) out.push(`$[${i}]: before and after must be about the same token`);

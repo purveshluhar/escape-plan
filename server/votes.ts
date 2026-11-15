@@ -16,6 +16,10 @@ export const MAX_VOTE_REQUESTS = DISCIPLINES.length; // one per discipline
 // The app waits 2.5 s for its votes (app/votes.ts); the model gets 2 s of it, so the rules can still
 // answer in time when the model is slow.
 export const VOTE_TIMEOUT_MS = 2000;
+// About 1 s per question on a CPU (1 took 0.9 s, 2 took 1.1 to 1.8 s, 5 took 6.5 s on the dev host),
+// so more than 2 never fit VOTE_TIMEOUT_MS. Those votes go to the rules at once and never hold the
+// Strands lock that /parse needs (a call that timed out still holds it until Strands answers).
+export const MAX_MODEL_QUESTIONS = 2;
 
 export type Voter = 'strands' | 'rules';
 
@@ -41,16 +45,16 @@ const VOTE_TEXT: Record<Vote, string> = {
 };
 
 const resultText = (r: SolverResult): string =>
-  r.status === 'pass' ? 'Yes' : `No, ${r.reason ?? 'no_route'}${r.blocked_at ? ` at ${r.blocked_at}` : ''}`;
+  r.status === 'pass' ? 'Yes' : `No, ${r.reason ?? 'no_route'}${r.blocked_at ? ` at ${JSON.stringify(r.blocked_at)}` : ''}`;
 
 const editText = (e: Edit): string => `${e.op} ${e.target ?? ''}${e.value !== null ? ` to ${e.value} m` : ''}`.trim();
 
-// The Strands question for one discipline. Ids and enum words only, so nothing typed by a person
-// reaches the frame unquoted.
+// The Strands question for one discipline. The server checks every id against ID_PATTERN, and the
+// ids are JSON-quoted here, so a request cannot add words to the question.
 function question(r: JevVoteRequest) {
   return {
     type: 'choice',
-    instructions: `You review this edit for ${DISCIPLINE_TEXT[r.discipline]}. The question about the ${r.after.token}: the building rules said, before the edit: ${resultText(r.before)}; after it: ${resultText(r.after)}. Do you accept the edit?`,
+    instructions: `You review this edit for ${DISCIPLINE_TEXT[r.discipline]}. The question about the ${JSON.stringify(r.after.token)}: the building rules said, before the edit: ${resultText(r.before)}; after it: ${resultText(r.after)}. Do you accept the edit?`,
     criteria: { ...VOTE_TEXT },
   };
 }
@@ -58,7 +62,7 @@ function question(r: JevVoteRequest) {
 export async function vote(requests: readonly JevVoteRequest[], config: DeciderConfig): Promise<{ votes: JevVote[]; voter: Voter }> {
   const rules = () => ({ votes: requests.map(ruleVote), voter: 'rules' as const });
   const asked = requests.filter(changed);
-  if (config.decider !== 'strands' || asked.length === 0) return rules();
+  if (config.decider !== 'strands' || asked.length === 0 || asked.length > MAX_MODEL_QUESTIONS) return rules();
   if (config.strands === undefined) throw new Error('DECIDER=strands needs a Strands config');
   const body = {
     state: `An edit was made to a building: ${JSON.stringify(editText(asked[0]!.edit))}. Each question is one discipline's review of that edit.`,

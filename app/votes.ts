@@ -12,7 +12,7 @@ export const VOTES_URL = '/votes'; // same origin; vite.config.ts proxies it to 
 export const VOTES_TIMEOUT_MS = 2500; // the latency budget; the server gives the model 2 s of it
 // A no-break space between a number and its unit, so "1.2 s" never wraps (as in strip.ts).
 const NBSP = '\u00a0';
-const MODEL_BUDGET_S = `2.0${NBSP}s`; // server/votes.ts VOTE_TIMEOUT_MS
+const MAX_MODEL_QUESTIONS = 2; // server/votes.ts: more changed answers than this go to the rules
 
 // One request per discipline in the data, in building order. When two tokens share a discipline
 // (glass and sofa are both logistics), the first one whose answer this edit changed speaks for it,
@@ -100,8 +100,8 @@ export interface Bubble {
   vote: 'Accept' | 'Object' | 'Review';
   confidence: string; // "0.72"
   sure: boolean; // confidence at JEV_ACCEPT_CONFIDENCE (0.8) or more; else the bubble says "not sure"
-  reason: string; // what this discipline's question did: "Load was Yes, now No: nothing holds it up at beam B2"
-  rules: string; // the rules' answer, and whether this vote agrees with it
+  reason: string; // what the rules found for this discipline's question: "Rules: Load was Yes, now No, stuck at beam B2 (nothing holds it up)"
+  rules: string; // whether this vote agrees with the rules; '' for a review or an unchanged answer
   clash: boolean; // the vote says the opposite of the rules
 }
 
@@ -114,14 +114,16 @@ export interface PanelModel {
 
 const yesNo = (r: SolverResult): 'Yes' | 'No' => (r.status === 'pass' ? 'Yes' : 'No');
 
-// The one-line reason: what the rules found for this discipline's question, before and after.
+// The one-line reason: what the rules found for this discipline's question, before and after. It
+// starts with "Rules:", because it is the rules' finding, not the voter's own words.
 function reasonLine(building: Building, r: JevVoteRequest): string {
   const name = tokenName(r.after.token);
   const plural = questionOf(r.after.token)?.plural ?? false;
-  const why = r.after.status === 'pass' ? ''
-    : `: ${REASON_TEXT[r.after.reason ?? 'no_route']}${r.after.blocked_at ? ` at ${placeName(building, r.after.blocked_at)}` : ''}`;
-  if (r.before.status === r.after.status) return `${name} ${plural ? 'are' : 'is'} still ${yesNo(r.after)}${why}`;
-  return `${name} ${plural ? 'were' : 'was'} ${yesNo(r.before)}, now ${yesNo(r.after)}${why}`;
+  const why = REASON_TEXT[r.after.reason ?? 'no_route'];
+  const stuck = r.after.status === 'pass' ? ''
+    : r.after.blocked_at ? `, stuck at ${placeName(building, r.after.blocked_at)} (${why})` : ` (${why})`;
+  if (r.before.status === r.after.status) return `Rules: ${name} ${plural ? 'are' : 'is'} still ${yesNo(r.after)}${stuck}`;
+  return `Rules: ${name} ${plural ? 'were' : 'was'} ${yesNo(r.before)}, now ${yesNo(r.after)}${stuck}`;
 }
 
 // The server asks the model only about these (server/votes.ts `changed`); the rules vote the rest.
@@ -138,9 +140,13 @@ function sourceText(r: PanelReading): string {
   switch (r.why) {
     case 'pending': return 'Asking each discipline...';
     case 'strands': return `x-voter: strands - on this computer, ${seconds(r.ms)}`;
-    case 'rules': return r.decider !== 'strands' ? 'x-voter: rules - the server runs keywords, so the rules vote'
-      : r.requests.some(changed) ? `x-voter: rules - the model did not answer in ${MODEL_BUDGET_S} (off, busy or slow), so the rules vote`
-      : 'x-voter: rules - this edit changed no answer, so the rules vote';
+    case 'rules': {
+      const n = r.requests.filter(changed).length;
+      return r.decider !== 'strands' ? 'x-voter: rules - the server runs keywords, so the rules vote'
+        : n === 0 ? 'x-voter: rules - this edit changed no answer, so the rules vote'
+        : n > MAX_MODEL_QUESTIONS ? `x-voter: rules - this edit changed ${n} answers, more than the model can vote on in time, so the rules vote`
+        : 'x-voter: rules - the model gave no usable vote (off, busy, slow or unclear), so the rules vote';
+    }
     case 'down': return 'No votes - the server is not reachable';
     case 'slow': return `No votes - no answer in ${seconds(VOTES_TIMEOUT_MS)}`;
     case 'refused': return 'No votes - the server answer could not be used';
@@ -152,16 +158,16 @@ export function panelModel(r: PanelReading, building: Building): PanelModel {
   const bubbles: Bubble[] = !voted ? [] : r.votes.map((v, i) => {
     const req = r.requests[i]!;
     const clash = clashes(v.vote, req);
-    const rules = clash ? `Rules disagree: ${yesNo(req.after)}`
-      : changed(req) && v.vote !== 'review' ? `Rules agree: ${yesNo(req.after)}` : `Rules: ${yesNo(req.after)}`;
+    const rules = clash ? 'This vote disagrees with the rules' : changed(req) && v.vote !== 'review' ? 'This vote agrees with the rules' : '';
     const who = r.why === 'rules' ? 'Rules' : changed(req) ? 'Strands Decider' : 'Rules, no change';
-    return { discipline: DISCIPLINE_LABEL[v.discipline], who, vote: VOTE_WORD[v.vote], confidence: v.confidence.toFixed(2), sure: v.confidence >= JEV_ACCEPT_CONFIDENCE, reason: reasonLine(building, req), rules, clash };
+    return { discipline: DISCIPLINE_LABEL[v.discipline], who, vote: VOTE_WORD[v.vote], confidence: v.confidence.toFixed(2), sure: Number(v.confidence.toFixed(2)) >= JEV_ACCEPT_CONFIDENCE, reason: reasonLine(building, req), rules, clash };
   });
   const n = bubbles.filter((b) => b.clash).length;
   const title = r.why === 'pending' ? 'Review panel'
     : r.why === 'strands' ? 'Review panel: Strands Decider'
     : r.why === 'rules' ? 'Review panel: rules only'
-    : 'Review panel is off';
+    : r.why === 'down' ? 'Review panel is off'
+    : 'Review panel: no votes';
   const summary = !voted ? (r.why === 'pending' ? 'Votes only. They never change an answer: the rules decide.' : 'The rules still decide every answer.')
     : n > 0 ? `${n} vote${n === 1 ? '' : 's'} ${n === 1 ? 'disagrees' : 'disagree'} with the rules. The rules decide every answer.`
     : 'Votes only. They never change an answer: the rules decide.';

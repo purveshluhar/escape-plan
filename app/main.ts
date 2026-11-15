@@ -212,6 +212,7 @@ function escape(from?: { before: readonly Answer[] | null; label: string }): voi
 
 function place(id: Id): void {
   if (S.phase === 'running') return;
+  closePanel(); // its before and after were solved with the old starts
   S.placed = togglePlaced(building, S.placed, id);
   if (S.placed.includes(id)) S.selected = id;
   else {
@@ -234,6 +235,7 @@ function moveTo(id: Id, node: Id): void {
     S.note = stayText(building, id)!;
     return render();
   }
+  closePanel(); // its before and after were solved with the old starts
   S.starts.set(id, node);
   S.placed = dropPlaced(building, S.placed, id);
   S.selected = id;
@@ -292,6 +294,7 @@ function reset(): void {
 
 function clear(): void {
   if (S.phase === 'running') return;
+  closePanel(); // its before and after were solved with the old starts
   S.placed = [];
   S.starts.clear();
   S.selected = null;
