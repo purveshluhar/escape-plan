@@ -135,3 +135,59 @@ test('parse() uses the keyword parser by default', () => {
   assert.deepEqual(parse(r), keywordParse(r));
   assert.deepEqual(parse(r, 'keywords'), keywordParse(r));
 });
+
+// ---------- Adversarial review, round 1 ----------
+
+test('review: 255 targets and a 1000-character sentence parse in well under a second', () => {
+  const short = Array.from({ length: 255 }, (_, i) => ({ id: `t${i}`, name: i % 2 ? '1' : 'x' }));
+  const long = Array.from({ length: 255 }, (_, i) => ({ id: `t${i}`, name: 'w '.repeat(100).trim() }));
+  for (const [list, text] of [[short, 'x1'.repeat(500)], [long, 'w '.repeat(500)]] as const) {
+    const t0 = performance.now();
+    run(text, { targets: [...list] });
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1000, `${ms} ms`);
+  }
+});
+
+test('review: a number with punctuation around it, or a relative change, stays below 0.8', () => {
+  for (const tail of ['1,5 m', '1/2 m', '-2 m', '1e3 m', '2.5.3 m', '2 m 50', '2 m, wait, 3', '2 constructor']) {
+    const p = run(`widen the plant shaft to ${tail}`);
+    assert.ok(p.value !== null && p.value.confidence < JEV_ACCEPT_CONFIDENCE, tail);
+  }
+  const by = run('widen the plant shaft by 2 m');
+  assert.ok(by.value !== null && by.value.confidence < JEV_ACCEPT_CONFIDENCE);
+  // Sentence-end punctuation is fine.
+  sure('widen the plant shaft to 2 m.', 'widen', 'plant-shaft', 2);
+});
+
+test('review: a near word for a second op makes the op unclear', () => {
+  for (const text of ['widen the plant shaft to 2 m and shut the door', 'undo the plant shaft and widen it to 2 m']) {
+    assert.ok(run(text).op.confidence < JEV_ACCEPT_CONFIDENCE, text);
+  }
+  sure('add a transfer beam at beam B2', 'add_transfer_beam', 'beam-b2', null); // its own near words do not count
+});
+
+test('review: a reset nobody typed keeps the target it read', () => {
+  const a = run('the plant shaft to 2 m', { ops: ['reset', 'widen'] });
+  assert.equal(a.op.choice, 'widen');
+  assert.equal(a.target.choice, 'plant-shaft');
+  assert.ok(!accepted(a));
+  const b = run('widen the plant shaft to 2 m', { ops: ['reset', 'add_ramp'] });
+  assert.ok(!accepted(b));
+  assert.equal(b.target.choice, 'plant-shaft');
+  const undo = run('undo the lobby door');
+  assert.equal(undo.op.choice, 'reset');
+  assert.equal(undo.target.choice, 'lobby-door');
+  assert.ok(!accepted(undo));
+});
+
+test('review: a target named only with stop words never matches by name', () => {
+  const p = run('close a door', { targets: [{ id: 'grid-a', name: 'A' }, ...targets] });
+  assert.ok(!(p.target.choice === 'grid-a' && p.target.confidence >= JEV_ACCEPT_CONFIDENCE));
+});
+
+test('review: a negated order stays below 0.8', () => {
+  for (const text of ["don't widen the plant shaft to 2 m", 'do not close the lobby door', 'never add a ramp at the terrace door']) {
+    assert.ok(run(text).op.confidence < JEV_ACCEPT_CONFIDENCE, text);
+  }
+});

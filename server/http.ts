@@ -24,7 +24,6 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(
 );
 
 export interface ServerConfig {
-  host: typeof HOST;
   port: number;
   decider: DeciderName;
 }
@@ -44,7 +43,7 @@ export function readConfig(env: Record<string, string | undefined>): ServerConfi
     }
     port = Number(rawPort);
   }
-  return { host: HOST, port, decider: deciderFromEnv(env.DECIDER) };
+  return { port, decider: deciderFromEnv(env.DECIDER) };
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -129,10 +128,19 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
     return fail(res, 413, `body over ${MAX_BODY_BYTES} bytes`);
   }
   let data: unknown;
+  // contract/validate.ts reads inherited keys ("__proto__", "constructor", "toString") as known
+  // fields, so it would let them through. Refuse them here.
+  const inherited: string[] = [];
   try {
-    data = JSON.parse(text);
+    data = JSON.parse(text, (key: string, value: unknown) => {
+      if (key in Object.prototype) inherited.push(key);
+      return value;
+    });
   } catch {
     return fail(res, 400, 'body is not JSON');
+  }
+  if (inherited.length > 0) {
+    return fail(res, 400, 'body is not a JevParseRequest', inherited.map((k) => `field ${JSON.stringify(k)} is not allowed`));
   }
   const schemaErrors = validate('jev.schema.json#/$defs/parse_request', data);
   if (schemaErrors.length > 0) return fail(res, 400, 'body is not a JevParseRequest', schemaErrors);
@@ -150,25 +158,28 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
 }
 
 export function createParseServer(decider: DeciderName): Server {
-  const server = createServer((req, res) => {
+  // A slow sender is cut after about 10 s: Node checks the timeouts every second, not every 30 s.
+  const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000, connectionsCheckingInterval: 1_000 }, (req, res) => {
     const { port } = server.address() as AddressInfo;
     handle(req, res, decider, port).catch((e: unknown) => {
-      console.error('request failed:', e);
-      if (!res.headersSent) fail(res, 500, 'internal error');
+      // A client that hangs up mid-body is normal: one line, no stack.
+      console.error(`request failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (!res.headersSent && !res.destroyed) fail(res, 500, 'internal error');
       else res.destroy();
     });
   });
-  server.requestTimeout = 10_000; // a slow sender cannot hold a socket for minutes
-  server.headersTimeout = 5_000;
+  server.maxConnections = 64; // one game page needs a few; this stops a local flood
   return server;
 }
 
+// Binds to the HOST constant, never to a value from config, so loopback-only holds by construction.
 export function startServer(config: ServerConfig): Promise<Server> {
   const server = createParseServer(config.decider);
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(config.port, config.host, () => {
+    server.listen(config.port, HOST, () => {
       server.off('error', reject);
+      server.on('error', (e) => console.error(`server error: ${e.message}`));
       resolve(server);
     });
   });

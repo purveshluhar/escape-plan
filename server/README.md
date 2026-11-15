@@ -38,7 +38,8 @@ they go behind the same `parse()`. Jev votes and the phone relay are tier 3.
   `ops` and `targets` must not be empty, target ids must be unique, and `value_range.min <= max`.
 - Answer: `200` with a `JevParse`. Errors are `{ error, details }` with `400` (not JSON or not a
   `JevParseRequest`), `403` (Host or Origin not allowed), `404`, `405`, `413` (body too big) or
-  `415` (not `application/json`).
+  `415` (not `application/json`). A body with an inherited key name (`__proto__`, `constructor`)
+  is a `400`. A client that sends too slowly gets `408` after about 10 s.
 - Callers: the game page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
   (`npm run dev`), or port 4173 (`npm run preview`). Other browser origins get `403`.
 - Accept a parse only when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Else show
@@ -52,13 +53,16 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
 ## Plan C rules (`keywords.ts`)
 
 - Op: the op's own word gives confidence 1 (`widen`, `ramp`, `transfer beam`, `close`, `sleeve`,
-  `reset`). A near word (`wider`, `slope`, `shut`, `undo`) gives 0.6. Two different op words give
-  0.4. No op word gives 0. The op is always one of `request.ops`.
+  `reset`). A near word (`wider`, `slope`, `shut`, `undo`) gives 0.6. Words for two different
+  ops (exact or near), or a negation (`not`, `don't`, `never`, `no`), give at most 0.4. No op word
+  gives 0. The op is always one of `request.ops`.
 - Target: a target's full name or id in the sentence gives 1. A longer name beats a name inside
   it ("Lobby door" beats "Lobby"). Two different full names give 0.4. Part of a name gives at
   most 0.6. Send only the targets on screen.
-- Reset: no target and no value. The target slot is the first target at confidence 1, so a reset
-  never asks "Did you mean".
-- Value (widen only): a number with `m` or `cm` gives 1, a bare number 0.6. "from 1 m to 2 m"
-  means 2 m. The value must be inside `value_range` and inside 0 to 5 m, or its confidence is 0.
-  The score is always inside `value_range`.
+- Reset: no target and no value. A sure reset fills the target slot with the first target at
+  confidence 1, so it never asks "Did you mean". An unsure reset (`undo`) keeps the target it read.
+- Value (widen only): one number with `m` or `cm` gives 1, a bare number 0.6. "from 1 m to 2 m"
+  means 2 m. Two numbers otherwise, or a number with punctuation in it (`1,5`, `1/2`, `-2`, `1e3`),
+  give at most 0.4. "by 2 m" is a change, not a width, so it gives at most 0.6. The value must be
+  inside `value_range` and inside 0 to 5 m, or its confidence is 0. The score is always inside
+  `value_range`.

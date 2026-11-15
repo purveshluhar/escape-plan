@@ -54,7 +54,6 @@ test('listens on 127.0.0.1 only', () => {
 });
 
 test('config refuses a non-local bind, a bad port and an unknown DECIDER', () => {
-  assert.equal(readConfig({}).host, '127.0.0.1');
   assert.equal(readConfig({}).decider, 'keywords');
   assert.equal(readConfig({ HOST: '127.0.0.1', PORT: '8787' }).port, 8787);
   // An empty line in .env (HOST=) means "not set", so it takes the default.
@@ -147,4 +146,17 @@ test('only the game page origins may call it from a browser', async () => {
   assert.match(String(pre.headers['access-control-allow-headers']), /content-type/i);
   const preBad = await call({ method: 'OPTIONS', headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' } });
   assert.equal(preBad.status, 403);
+});
+
+test('review: inherited key names are refused, though the contract validator lets them through', async () => {
+  for (const body of [
+    `{"__proto__":{"x":1},${JSON.stringify(good).slice(1)}`,
+    JSON.stringify({ ...good, constructor: 'x' }),
+    JSON.stringify({ ...good, toString: 1 }),
+    JSON.stringify({ ...good, targets: [{ id: 'plant-shaft', name: 'Plant shaft', hasOwnProperty: 1 }] }),
+  ]) {
+    const r = await call({ headers: json, body });
+    assert.equal(r.status, 400, body.slice(0, 40));
+    assert.match(r.body, /is not allowed/);
+  }
 });
