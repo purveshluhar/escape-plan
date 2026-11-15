@@ -159,6 +159,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
     console.error('parse() broke the JevParse schema:', answerErrors);
     return fail(res, 500, 'internal error');
   }
+  res.setHeader('x-decider', decider.decider); // so a timing log shows which parser answered
   send(res, 200, answer);
 }
 

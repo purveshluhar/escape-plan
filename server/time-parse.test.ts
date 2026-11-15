@@ -38,3 +38,27 @@ test('a server that is not there fails the run', async () => {
   const { code, out } = await runScript({ SERVER_PORT: String(gone) });
   assert.notEqual(code, 0, out);
 });
+
+// ---------- Adversarial review, round 1 ----------
+
+test('review: with DECIDER=strands and Strands down, the run fails and says so', async () => {
+  const closed = await startServer(readConfig({ SERVER_PORT: '0' }));
+  const gone = (closed.address() as AddressInfo).port;
+  await new Promise<void>((done) => closed.close(() => done()));
+  const s = await startServer(readConfig({ SERVER_PORT: '0', DECIDER: 'strands', STRANDS_URL: `http://127.0.0.1:${gone}` }));
+  try {
+    const { code, out } = await runScript({ SERVER_PORT: String((s.address() as AddressInfo).port) });
+    assert.notEqual(code, 0, out);
+    assert.match(out, /decider strands/);
+    assert.match(out, /no answer from the decider/);
+  } finally {
+    await new Promise<void>((done) => s.close(() => done()));
+  }
+});
+
+test('review: the log names the decider and grades each answer against the expected edit', async () => {
+  const { out } = await runScript({ SERVER_PORT: String(port) });
+  assert.match(out, /decider keywords/);
+  assert.match(out, /\d\/5 right/);
+  for (const l of out.split('\n').filter((x) => /^call [1-5] /.test(x))) assert.match(l, /(right|WRONG)/, l);
+});

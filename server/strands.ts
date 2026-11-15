@@ -5,11 +5,13 @@
 // - Reset skips the target check: Strands gives a reset target 0.32-0.46.
 // - Only the on-screen targets go to the model. 14 worked; 156 gave no answer over 0.8 and 255
 //   did not fit. Over STRANDS_MAX_TARGETS the model is not asked.
-// - When Strands is down, slow or answers something unusable, parse() answers at confidence 0,
-//   so the app shows "Did you mean". It never switches to another parser silently.
+// - When Strands is down, slow, busy with another call, or answers something unusable, parse()
+//   answers at confidence 0, so the app shows "Did you mean". It never switches parser silently.
+// - Plan C's reset and negation guards cap the model's op confidence (keywordOpCap).
 // The Strands server must be on this machine: STRANDS_URL accepts only http://127.0.0.1.
 import type { EditOp, JevParse, JevParseRequest } from '../contract/types.ts';
-import { keywordValue } from './keywords.ts';
+import { request as httpRequest } from 'node:http';
+import { keywordOpCap, keywordValue } from './keywords.ts';
 
 export const DEFAULT_STRANDS_URL = 'http://127.0.0.1:8000'; // `strands-decider serve` default port
 export const DEFAULT_STRANDS_TIMEOUT_MS = 5000;
@@ -74,18 +76,51 @@ function unsure(request: JevParseRequest, why: string): JevParse {
   };
 }
 
-// The answer body as text, or null when it passed MAX_ANSWER_BYTES.
-async function readCapped(res: Response): Promise<string | null> {
-  if (res.body === null) return '';
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const c of res.body) {
-    size += c.byteLength;
-    if (size > MAX_ANSWER_BYTES) return null;
-    chunks.push(c);
-  }
-  return Buffer.concat(chunks).toString('utf8');
+class Timeout extends Error {}
+
+// One POST with a deadline. node:http with agent:false, not fetch: fetch goes through a proxy set
+// in the environment (NODE_USE_ENV_PROXY with HTTP_PROXY), which would send the sentence off this
+// machine, and node:http never follows a redirect. `text` is null when the answer passed
+// MAX_ANSWER_BYTES.
+function postJson(url: string, body: string, timeoutMs: number): Promise<{ status: number; text: string | null }> {
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const req = httpRequest(url, {
+      method: 'POST',
+      agent: false,
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+    }, (res) => {
+      const status = res.statusCode ?? 0;
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on('data', (c: Buffer) => {
+        size += c.length;
+        if (size > MAX_ANSWER_BYTES) {
+          finish(() => resolve({ status, text: null }));
+          req.destroy();
+          return;
+        }
+        chunks.push(c);
+      });
+      res.on('end', () => finish(() => resolve({ status, text: Buffer.concat(chunks).toString('utf8') })));
+      res.on('error', (e) => finish(() => reject(timedOut ? new Timeout() : e)));
+    });
+    const timer = setTimeout(() => { timedOut = true; req.destroy(new Timeout()); }, timeoutMs);
+    let done = false;
+    const finish = (settle: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      settle();
+    };
+    req.on('error', (e) => finish(() => reject(timedOut ? new Timeout() : e)));
+    req.end(body);
+  });
 }
+
+// Strands answers one call at a time. A second call while one runs would queue behind it and
+// time out, so it gets "Did you mean" at once instead.
+let busy = false;
 
 const isConfidence = (x: unknown): x is number => typeof x === 'number' && x >= 0 && x <= 1;
 
@@ -105,31 +140,26 @@ export async function strandsParse(request: JevParseRequest, config: StrandsConf
     return unsure(request, `${request.targets.length} targets is over ${STRANDS_MAX_TARGETS}; send only the targets on screen`);
   }
   const body = {
-    state: `A player typed this edit command in a building game: "${request.text}"`,
+    // JSON quoting, so a quote in the sentence cannot end the frame.
+    state: `A player typed this edit command in a building game: ${JSON.stringify(request.text)}`,
     questions: {
       op: { type: 'choice', instructions: 'Which edit does the player ask for?', criteria: Object.fromEntries(request.ops.map((o) => [o, OP_TEXT[o]])) },
       // fromEntries makes own keys, so an id such as "__proto__" stays a choice.
       target: { type: 'choice', instructions: 'Which object on screen does the player mean?', criteria: Object.fromEntries(request.targets.map((t) => [t.id, t.name])) },
     },
   };
+  if (busy) return unsure(request, 'a Strands call is still running');
+  busy = true;
   let text: string | null;
   try {
-    const res = await fetch(`${config.url}/v1/systemone`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      redirect: 'error', // a redirect could send the sentence off this machine
-      signal: AbortSignal.timeout(config.timeoutMs),
-    });
-    if (res.status !== 200) {
-      await res.body?.cancel();
-      return unsure(request, `Strands answered HTTP ${res.status}`);
-    }
-    text = await readCapped(res);
+    const reply = await postJson(`${config.url}/v1/systemone`, JSON.stringify(body), config.timeoutMs);
+    if (reply.status !== 200) return unsure(request, `Strands answered HTTP ${reply.status}`);
+    text = reply.text;
   } catch (e) {
-    if (e instanceof Error && e.name === 'TimeoutError') return unsure(request, `no answer in ${config.timeoutMs} ms`);
-    const cause = e instanceof Error && e.cause instanceof Error ? e.cause.message : String(e);
-    return unsure(request, `no answer from ${config.url} (${cause})`);
+    if (e instanceof Timeout) return unsure(request, `no answer in ${config.timeoutMs} ms`);
+    return unsure(request, `no answer from ${config.url} (${e instanceof Error ? e.message : String(e)})`);
+  } finally {
+    busy = false;
   }
   if (text === null) return unsure(request, `answer over ${MAX_ANSWER_BYTES} bytes`);
   let answers: unknown;
@@ -141,7 +171,9 @@ export async function strandsParse(request: JevParseRequest, config: StrandsConf
   const op = readChoice(answers, 'op', request.ops);
   const target = readChoice(answers, 'target', request.targets.map((t) => t.id));
   if (op === null || target === null) return unsure(request, 'answer has no usable op or target');
-  const opChoice = { choice: op.choice as EditOp, confidence: op.confidence };
+  // Plan C's guards still hold: a reset that names a target or a number, or a negated op word,
+  // stays below 0.8 whatever the model says.
+  const opChoice = { choice: op.choice as EditOp, confidence: Math.min(op.confidence, keywordOpCap(request, op.choice as EditOp)) };
   // Reset has no target: the slot is the first target and is not in doubt (as in plan C, D1).
   if (opChoice.choice === 'reset') return { op: opChoice, target: { choice: request.targets[0]!.id, confidence: 1 }, value: null };
   return { op: opChoice, target, value: opChoice.choice === 'widen' ? keywordValue(request) : null };

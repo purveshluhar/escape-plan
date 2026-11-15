@@ -185,6 +185,22 @@ export function keywordValue(request: JevParseRequest): JevScore {
   return pickValue(tokens, clean, request, used);
 }
 
+// The highest op confidence plan C allows for `op` in this sentence, for a decider that picks the
+// op itself (server/strands.ts): MIXED for a reset that also names a target or a number, or for
+// an op word with a negation in the 3 words before it; else SURE.
+export function keywordOpCap(request: JevParseRequest, op: EditOp): number {
+  const { tokens } = tokenizeSentence(request.text);
+  const used = tokens.map(() => false);
+  if (request.targets.length > 0) pickTarget(tokens, request, used);
+  if (op === 'reset' && (used.some(Boolean) || tokens.some((w, i) => !used[i] && isNumber(w)))) return MIXED;
+  const at = [...OP_WORDS[op].exact, ...OP_WORDS[op].near].flatMap((p) => find(tokens, p, used));
+  const negated = at.some((a) => {
+    for (let i = Math.max(0, a - NEGATION_REACH); i < a; i++) if (!used[i] && isNegation(tokens, i)) return true;
+    return false;
+  });
+  return negated ? MIXED : SURE;
+}
+
 // One op from request.ops, one target from request.targets, and for widen a value in range.
 // The caller checks that ops and targets are not empty (server/http.ts answers 400 first).
 export function keywordParse(request: JevParseRequest): JevParse {

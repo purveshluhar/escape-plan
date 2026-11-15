@@ -87,14 +87,19 @@ these rules:
 - The value comes from the plan C number parser, with the same rules and the 0-5 m check as above.
 - Reset skips the target check: the target slot is the first target at confidence 1, and the value
   is `null`.
-- Send only the targets on screen. Over 50 targets, the model is not asked (the spike: 14 worked,
-  156 gave no answer at 0.8 or more, 255 did not fit).
+- Plan C's guards cap the op confidence at 0.4: a reset that also names a target or a number, and
+  an op word with a negation in the 3 words before it ("don't widen").
+- Send only the targets on screen. Over 50 targets, the model is not asked. 50 is not measured: the
+  spike found that 14 worked, 156 gave no answer at 0.8 or more, and 255 did not fit. Long names fill
+  the model's window sooner; Strands then answers an error, and the rule below applies.
+- One Strands call runs at a time. A call that comes while one is running gets confidence 0 at once.
 - When Strands is down, takes longer than `STRANDS_TIMEOUT_MS`, answers with an error, or answers an
   op or target that was not offered, `POST /parse` still answers `200` with a valid `JevParse` at
   confidence 0. The app shows "Did you mean". The server logs one line with the reason. It never
   switches to plan C on its own.
-- Strands runs on this machine only. The server sends the typed sentence to `STRANDS_URL` and
-  follows no redirect.
+- Strands runs on this machine only. The server sends the typed sentence to `STRANDS_URL` over
+  `node:http`, so it follows no redirect and uses no proxy from the environment. Any program that
+  listens on that port gets the sentences, so check the port is Strands' own (`/health`).
 
 Use it only if the warm op + target call is under 2 s on the demo laptop. On this team's CPU
 Cloud Desktop it is slower (see the P1-12 timing log).
@@ -105,11 +110,12 @@ Cloud Desktop it is slower (see the P1-12 timing log).
 
    ```bash
    mkdir -p ~/strands-spike && cd ~/strands-spike
-   python3.11 -m venv venv && source venv/bin/activate
+   python3.11 -m venv venv && source venv/bin/activate   # any Python 3.10 or later
    pip install strands-decider
    ```
 
-2. Start Strands in its own terminal, and wait for `warmed up in ... s`:
+2. Start Strands in its own terminal. Wait for `warmed up in ... s`, or until
+   `curl -s http://127.0.0.1:8000/health` prints `"status":"ok"`:
 
    ```bash
    cd ~/strands-spike && source venv/bin/activate
@@ -127,12 +133,13 @@ Cloud Desktop it is slower (see the P1-12 timing log).
 4. In a third terminal, in the repo, time 5 calls:
 
    ```bash
-   npm run time-parse | tee parse-timing.log
+   set -o pipefail; npm run time-parse | tee parse-timing.log; echo "exit $?"
    ```
 
-   Each line shows the time, the answer and whether it passed the `JevParse` schema. The last line
-   shows the median. If the median is under 2000 ms, `DECIDER=strands` can go in `.env`. If not,
-   keep `keywords`. If a call shows `confidence 0`, read the server terminal for the reason; a
-   first call can pass 5 s, so run step 4 twice.
+   Each call line shows the time, the answer, whether it passed the `JevParse` schema, and whether
+   it is the right edit. The last line names the decider (it must say `strands`) and shows the
+   median. If the median is under 2000 ms and all 5 are right, `DECIDER=strands` can go in `.env`.
+   If not, keep `keywords`. `exit 1` or "no answer from the decider" means Strands did not answer;
+   the server terminal says why. A first call can pass 5 s, so run step 4 twice.
 
 5. Stop each terminal with Ctrl+C. Delete `~/strands-spike` to remove Strands.
