@@ -37,6 +37,9 @@ import { renderHint, stackAbove } from './hint-view.ts';
 import { answerLines } from './strip.ts';
 import { renderStrip } from './strip-view.ts';
 import { RACE, answerRows, helpfulCloseButtons, drawnResults, raceSpread, raceText, racePlaced } from './smoke.ts';
+import { readVotes, voteRequests } from './votes.ts';
+import type { PanelReading } from './votes.ts';
+import { renderVotes } from './votes-view.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
@@ -113,6 +116,10 @@ viewer.setCovered(coveredNodes(building));
 const insetFor = (results: readonly Answer[]): number =>
   innerWidth > 700 && results.length > 0 ? SIDE_PANEL : 0;
 let runTimer = 0;
+// The review panel's votes on the last edit (votes.ts). Never changes an answer. `panelAsk` drops an
+// answer that comes back after a newer edit.
+let panel: PanelReading | null = null;
+let panelAsk = 0;
 
 // ---------- Small DOM helper (textContent only, never innerHTML) ----------
 
@@ -243,7 +250,10 @@ function moveTo(id: Id, node: Id): void {
 function applyFix(edit: Edit, label: string): void {
   if (S.phase === 'running' || S.reading !== null) return;
   const before = S.results;
+  const priorGame = S.game;
   S.game = applyEdit(S.game, edit);
+  if (S.game !== priorGame && edit.op !== 'reset') void askPanel(priorGame, edit);
+  else if (edit.op === 'reset') closePanel();
   S.editOpen = false;
   S.read = null;
   ($('editInput') as HTMLInputElement).value = '';
@@ -270,6 +280,7 @@ function askHint(token: Id): void {
 function reset(): void {
   if (S.phase === 'running' || S.reading !== null || S.game.edits.length === 0) return;
   S.game = initialState();
+  closePanel();
   S.read = null; // the strip described an edit that is now undone
   S.note = 'Checked again with the original building';
   if (S.results && S.placed.length) escape();
@@ -318,6 +329,25 @@ async function submitText(text: string): Promise<void> {
   if (r.out.edit) applyFix(r.out.edit, editLabel(building, r.out.edit));
   S.read = r;
   render();
+}
+
+// The review panel votes on one edit, one vote per discipline, with the rules' answers before and
+// after it. The answers on screen come from the rules alone, whatever the votes say.
+async function askPanel(before: GameState, edit: Edit): Promise<void> {
+  const ask = ++panelAsk;
+  const start = played();
+  const requests = voteRequests(start, edit, run(start, before).results, run(start, S.game).results);
+  panel = { requests, votes: [], why: 'pending', voter: null, decider: null, ms: 0 };
+  render();
+  const r = await readVotes(requests);
+  if (ask !== panelAsk) return;
+  panel = r;
+  render();
+}
+
+function closePanel(): void {
+  panelAsk++;
+  panel = null;
 }
 
 // ---------- Render ----------
@@ -403,6 +433,7 @@ function render(): void {
   renderSheet(b);
   renderEdit();
   renderHintPanel();
+  renderVotes($('votes'), building, panel, () => { closePanel(); render(); });
   const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
   viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel), running));
 }

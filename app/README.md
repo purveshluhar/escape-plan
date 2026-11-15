@@ -40,3 +40,14 @@ first one the rules say turns the answer to Yes, with what it breaks and how man
 at 100 fixes or 250 ms. It works from the solver's own answers, so it covers every question the data has.
 `app/hint-view.ts` draws the Hint panel above the "who decided" strip. Apply uses the same path as a typed
 edit (`applyFix` in `main.ts`); Undo edits removes it.
+
+## Review panel (votes)
+
+After each edit (a button or a typed edit, not Undo edits), `app/main.ts` asks `/votes` for one
+vote per discipline in the data (`app/votes.ts voteRequests`), with the rules' answers before and
+after the edit. `app/votes-view.ts` draws one bubble per discipline in `#votes`: the vote, its
+confidence, a one-line reason (what the rules found for that discipline's question) and the rules'
+answer. A vote that says the opposite of the rules (accept while the rules say No, object while
+they say Yes) is marked "Rules disagree". Votes never change a colour or an answer. The budget is
+2.5 s; when the server is down, slow or answers something unusable, the panel says so and shows no
+votes. A newer edit drops an older answer.
