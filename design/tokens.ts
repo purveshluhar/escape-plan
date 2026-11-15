@@ -57,7 +57,7 @@ export const DISCIPLINE_STYLE: Record<Discipline, { color: string; glyph: string
   mep: { color: '#0ea5c6', glyph: 'C', label: 'Chiller', glyphInk: TEXT }, // `id-chiller` teal
   logistics: { color: '#e0479e', glyph: 'G', label: 'Glass', glyphInk: TEXT }, // `id-glass` magenta
   accessibility: { color: '#ef7d1a', glyph: 'W', label: 'Wheelchair', glyphInk: TEXT }, // `id-wheelchair` orange
-  structure: { color: '#7c5cf0', glyph: 'L', label: 'Load', glyphInk: '#ffffff' }, // `id-structure` violet
+  structure: { color: '#7452ea', glyph: 'L', label: 'Load', glyphInk: '#ffffff' }, // `id-structure` violet, a step darker so the white L keeps 4.5:1 on screen
   life_safety: { color: '#334155', glyph: 'P', label: 'People', glyphInk: '#ffffff' }, // T2: slate
   fire: { color: '#94a3b8', glyph: 'S', label: 'Smoke', glyphInk: TEXT }, // T2: smoke grey
   plumbing: { color: '#0369a1', glyph: 'D', label: 'Water', glyphInk: '#ffffff' }, // T2: deep water blue
