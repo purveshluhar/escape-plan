@@ -12,15 +12,10 @@ const res = (token: string, status: 'pass' | 'fail'): SolverResult => ({
   token, status, path: [], blocked_at: null, reason: status === 'fail' ? 'no_route' : null, needed: null, available: null,
 });
 
-test('picker: every token is placeable with a key, missing disciplines come after as later', () => {
+test('picker: the dock offers every token in data order with keys 1..n, and no Later chips', () => {
   const items = pickerItems(building);
-  const placeable = items.filter((i) => i.token !== null);
-  assert.deepEqual(placeable.map((i) => i.token), building.tokens.map((t) => t.id));
-  assert.deepEqual(placeable.map((i) => i.key), building.tokens.map((_, i) => i + 1));
-  const later = items.filter((i) => i.token === null);
-  assert.ok(later.length > 0);
-  assert.ok(later.every((i) => i.key === null && !building.tokens.some((t) => t.discipline === i.discipline)));
-  assert.ok(items.indexOf(later[0]!) === placeable.length);
+  assert.deepEqual(items.map((i) => i.token), building.tokens.map((t) => t.id));
+  assert.deepEqual(items.map((i) => i.key), building.tokens.map((_, i) => i + 1));
 });
 
 test('togglePlaced keeps building order and takes an object off on a second click', () => {
@@ -74,4 +69,11 @@ test('parse: a vague sentence asks "Did you mean" with the closest fixes first',
   assert.equal(out.suggestions[0]?.edit.target, 'lobby-door');
   assert.ok(out.suggestions.length <= 3);
   assert.equal(parseEdit('hello there', buttons).edit, null);
+});
+
+test('the page has no Later group and no sample label', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /laterGroup|id="sample"|#sample/);
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(main, /laterGroup|\$\('sample'\)|self-made sample building/);
 });

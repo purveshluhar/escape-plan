@@ -1,12 +1,13 @@
 # viewer/
 
 **Owner:** P2 (@justinjao).
-**Purpose:** draw the building as an isometric 3D cutaway and animate each token's path.
+**Purpose:** animate each token's path over the real building in the backdrop, isometric.
 **Consumes:** `Building` and `SolverResult[]` (`contract/types.ts`), colours from `design/tokens.ts`.
 **Produces:** `createViewer(container)` returning `{ show(building, results), setBackdrop(object), setCovered(ids) }` (`viewer/index.ts`).
-`setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). `setCovered`
-takes node ids whose boxes are not drawn because the backdrop stands in for them (routes still use
-them, and the camera frames only the boxes that are drawn).
+`setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). The graph's
+rooms are self-made, so the viewer draws no box for them; only each exit gets a label. `setCovered`
+takes node ids the backdrop stands in for: the camera frames, and the grid spans, only the other
+nodes' boxes (routes still use every node).
 Mouse: the wheel zooms (0.1x close to 60x far); left-drag orbits the camera around the model; right-drag
 (or shift-drag) pans; double-click returns to the framed, isometric view.
 `onZoom(zoom)` in the options reports each change; the app uses it to lift the backdrop's 4 m cut as you
@@ -23,7 +24,7 @@ Tier 1 (#5), restyled to Liquid Glass v2 (`design/look.md`). Every `show()` re-r
 its `path`, which goes through the door between rooms. On a fail it shakes, and a blinking red
 X pops above `blocked_at` with a label: "CHILLER  TOO NARROW / Plant shaft: needs 1.6 m, has
 1.2 m". Labels go right, left or above their X, whichever overlaps least. When every token
-passes, the outline blinks and LEVEL COMPLETE shows.
+passes, LEVEL COMPLETE shows.
 
 `createViewer(container, { insetRight })`: pixels on the right covered by a floating panel.
 The model and LEVEL COMPLETE centre in the space left of it. The canvas is transparent, so the

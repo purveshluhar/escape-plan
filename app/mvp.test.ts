@@ -12,13 +12,9 @@ const base = read('../data/building.json') as Building;
 const building = mvpBuilding(base);
 const buttons = mvpButtons(building, demoButtons(base, read('../data/expected.json') as ExpectedFile));
 
-test('the MVP dock offers wheelchair, sofa and people (keys 1-3); the rest are Later', () => {
+test('the MVP dock offers exactly wheelchair, sofa and people (keys 1-3), with no Later chips', () => {
   const items = pickerItems(building, MVP_TOKENS);
-  const play = items.filter((i) => i.token !== null);
-  assert.deepEqual(play.map((i) => i.token), ['wheelchair', 'sofa', 'people']);
-  assert.deepEqual(play.map((i) => i.label), ['Wheelchair', 'Sofa', 'People']);
-  assert.deepEqual(play.map((i) => i.key), [1, 2, 3]);
-  assert.deepEqual(items.filter((i) => i.token === null).map((i) => i.label), ['Chiller', 'Glass', 'Load']);
+  assert.deepEqual(items.map((i) => [i.token, i.label, i.key]), [['wheelchair', 'Wheelchair', 1], ['sofa', 'Sofa', 2], ['people', 'People', 3]]);
 });
 
 test('each MVP token fails at first and one MVP button lets it out', () => {

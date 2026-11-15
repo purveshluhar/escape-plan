@@ -8,7 +8,7 @@ import { WIDEN_FIXTURE_OFFICE_DOOR, withMvpFixture } from '../solver/mvp-fixture
 import { editLabel } from './state.ts';
 import type { DemoButton } from './state.ts';
 
-// Placeable in this order (keys 1, 2, 3); every other token is a Later chip.
+// Placeable in this order (keys 1, 2, 3); the dock offers no other token.
 export const MVP_TOKENS: readonly Id[] = ['wheelchair', 'sofa', 'people'];
 
 export function mvpBuilding(base: Building): Building {
