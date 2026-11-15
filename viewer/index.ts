@@ -16,6 +16,7 @@ import { disposeTree, figureLights, loadFigureModels, makeFigure } from './figur
 import type { Figure } from './figures.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
 import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
+import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
@@ -47,6 +48,10 @@ export interface Viewer {
   // A ring that grows and fades where an edit landed: a door, a shaft or a member by id. Nothing for
   // an id the building does not have.
   flash(target: Id): void;
+  // The smoke's spread as a tint on each node of the slice it has reached: `steps` is the step the
+  // smoke reaches each node, and a node shows `secondsPerStep` seconds per step after `delaySeconds` (when the people start) from show(). All at
+  // once on reduced motion. null clears it. Tower floors the backdrop stands in for get no tint.
+  setSmoke(spread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null): void;
 }
 
 export interface ViewerOptions {
@@ -84,6 +89,7 @@ const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px cap
 const UP = new THREE.Vector3(0, 1, 0);
 const HIT_PIXELS = 36; // a press this close to a figure's middle picks it up
 const SNAP_PIXELS = 56; // a drop this close to a room's token spot lands on that room
+const SMOKE_COLOR = '#6b7686'; // the smoke figure's grey (figures.ts), a little deeper so it reads on the daylight model
 const REFUSED = 'Not placed: drop it on a floor of the tower';
 
 interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
@@ -162,6 +168,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let toastAt: { x: number; y: number; until: number; w: number; h: number } | null = null; // until its fade ends
   let pickCeiling = Infinity; // dropCeiling at the current cut
   let chromeStale = false; // floor labels moved since the last panel check
+  let smokeSpread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null = null;
+  let haze: { group: THREE.Group; blocks: { mesh: THREE.Mesh; step: number; floor: number }[] } | null = null;
 
   const dimMat = new THREE.MeshBasicMaterial({ color: TEXT_MUTED, transparent: true, opacity: 0.3 });
   const geo = {
@@ -348,6 +356,33 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     });
     markSelected();
     allDone = Math.max(0, runs.length - 1) * MOTION.staggerSeconds + MOTION.secondsPerToken;
+  }
+
+  // The smoke tint (smoke.ts): one translucent block per reached node of the slice, drawn with the
+  // routes. Rebuilt whenever the building, the covered set or the spread changes.
+  function drawSmoke(): void {
+    if (haze) {
+      disposeTree(haze.group, shared);
+      fx.remove(haze.group);
+      haze = null;
+    }
+    if (!smokeSpread || !shown) return;
+    const group = new THREE.Group();
+    const blocks = smokeTints(shown.building, covered, smokeSpread.steps).map((t) => {
+      const material = new THREE.MeshBasicMaterial({ color: SMOKE_COLOR, transparent: true, opacity: t.opacity, depthWrite: false });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...t.size), material);
+      mesh.position.set(...t.center);
+      mesh.renderOrder = 1;
+      group.add(mesh);
+      return { mesh, step: t.step, floor: t.floor };
+    });
+    fx.add(group);
+    haze = { group, blocks };
+  }
+
+  function setSmoke(spread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null): void {
+    smokeSpread = spread;
+    drawSmoke();
   }
 
   function fit(): void {
@@ -580,6 +615,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const dt = reduced || !lastFrame ? 0 : Math.min(0.1, (now - lastFrame) / 1000); // clips hold still on reduced motion
     lastFrame = now;
     for (const run of runs) update(run, t - run.delay);
+    if (haze && smokeSpread) for (const b of haze.blocks) {
+      // On when its step has come and its floor is not one the open facade hides.
+      b.mesh.visible = tintVisible(b.step, smokeSpread.secondsPerStep, t, reduced, smokeSpread.delaySeconds) && tintOnShownFloor(b.floor, opened > 0, pickCeiling);
+    }
     for (const run of runs) run.figure.tick(dt);
     carried?.figure.tick(dt);
     scaleFigures();
@@ -884,6 +923,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     shown = { building, results };
     drawBuilding(building);
     buildRuns(building, results);
+    drawSmoke();
     win = results.length > 0 && results.every((r) => r.status === 'pass');
     banner.classList.remove('on', 'small');
     fit();
@@ -944,7 +984,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash };
+  return { show, setBackdrop, setFloors, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements

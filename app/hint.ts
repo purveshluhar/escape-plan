@@ -4,6 +4,7 @@
 // The search is bounded by a count and a clock, so it never holds the page. Owner: P3.
 import type { Building, Edit, Id, Reason, SolverResult } from '../contract/types.ts';
 import { applyEdits } from '../solver/index.ts';
+import { SPREAD_KINDS } from '../solver/spread.ts';
 import { placeName, stuckLine } from './scoreboard.ts';
 import { yesLine } from './questions.ts';
 import { editLabel } from './state.ts';
@@ -44,7 +45,8 @@ function edgeCandidates(edited: Building, id: Id, reason: Reason | null): Edit[]
   };
   const ramp = (): Edit[] => (edge.kind === 'ramp' && edge.step_height === 0 ? [] : [button('add_ramp', id)]);
   const sleeve = (): Edit[] => (edge.sleeved ? [] : [button('add_sleeve', id)]);
-  const close = (): Edit[] => (edge.open === true ? [button('close_door', id)] : []); // only a smoke path can be closed
+  // Only a way the smoke can use is closed: an edge with no `open` is open (contract), a closed one is not, and a drain or supply run is no smoke path.
+  const close = (): Edit[] => (edge.open !== false && (SPREAD_KINDS as readonly string[]).includes(edge.kind) ? [button('close_door', id)] : []);
   switch (reason) {
     case 'too_narrow': case 'cannot_turn': return widen();
     case 'step': return ramp();

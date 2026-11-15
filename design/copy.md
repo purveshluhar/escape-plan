@@ -56,7 +56,7 @@ Each question opens the scenario. Numbers are LIVE from the solver on `data/buil
 | Chiller | Building owner | Can I widen this shaft for a new chiller? | The chiller fits through the shaft | Chiller is stuck at Plant shaft: too narrow, needs 1.6 m, has 1.2 m | Widen plant shaft to 2.0 m | tier 1 later |
 | Load | Building owner (same scene) | Does the structure still hold? | The structure still holds | After the shaft edit: Load is stuck at beam B2: nothing holds it up, no path down to a foundation | Add transfer beam at beam B2 | tier 1 later |
 | Glass | Building owner | Can a 4 m glass panel get into the lobby? | The glass panel gets into the lobby | Glass is stuck at Lobby door: cannot turn the corner, needs 4.0 m, has 3.71 m | Widen lobby door to 1.6 m | tier 1 later |
-| People and smoke | Building manager | Do people beat the smoke if the lobby door is closed? | Everyone gets out before the smoke | People are stuck at {Place}: smoke gets there first, needs {n} steps, has {m} steps | from data (T2) | tier 2 |
+| People and smoke | Building manager | Do people get out before the smoke? | Everyone gets out before the smoke | People are stuck at North service corridor: smoke gets there first, needs 1 step, has 1 step | Close lobby door | now (key 6) |
 
 Where the question shows:
 
@@ -73,6 +73,21 @@ scroll at 1366 px (the tools scroller exists). A gate screen would hide the othe
 questions, and the pitch is that one building answers everyone at once. Phase 2 adds one small
 map, not a new control: `app/questions.ts` (P3), `token id -> { person, question, yes }`, with a
 test that every `MVP_TOKENS` id has an entry. No contract change.
+
+### The smoke question (applied on branch `smoke-race`)
+
+- The smoke starts in the lobby and spreads one open edge per step. The answer is the people's
+  answer on the same clock, so it is Yes only when people get out and the smoke is not there first.
+  A tie goes to the smoke.
+- The sheet says it in steps. No: "People reach North service corridor at step 1. Smoke gets there
+  at step 1. A tie goes to the smoke." Yes: "People reach North service corridor at step 1 and Street at step 2. Smoke reaches North
+  service corridor at step 2, 1 step after them." (One place for both, where the smoke is closest behind.) Never "race", "win" or "lose".
+- The fix is `Close lobby door`. Type "close the lobby door" for the same edit. It is offered only
+  on the smoke answer; the sofa stuck at that door is never told to close it.
+- On the model the smoke is a grey tint on each room of the slice it has reached, one step at a time
+  on the people's clock, and the smoke figure waits in the lobby. With reduced motion the tint shows at once.
+- Dock: from 1501 px to 2199 px the chips show short names and the asked question shows as a
+  sentence. Six questions do not fit as sentences at 1920 px.
 
 ## 3. Outcome lines (calm and factual)
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { validate, checkBuildingRefs } from '../contract/validate.ts';
 import type { Building, ExpectedFile } from '../contract/types.ts';
+import { caseBuilding } from './smoke.ts';
 
 const dir = new URL('./', import.meta.url);
 const read = (name: string): unknown => JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
@@ -28,10 +29,10 @@ test('building.json ids all point at something real', () => {
 
 test('expected.json names only tokens and edit targets that exist', () => {
   const b = read('building.json') as Building;
-  const tokens = new Set(b.tokens.map((t) => t.id));
   const targets = new Set([...b.edges.map((e) => e.id), ...b.members.map((m) => m.id)]);
   const errors: string[] = [];
   for (const c of (read('expected.json') as ExpectedFile).cases) {
+    const tokens = new Set(caseBuilding(b, c).tokens.map((t) => t.id)); // a smoke- case has the smoke too
     for (const r of c.expect) if (!tokens.has(r.token)) errors.push(`${c.id}: unknown token ${r.token}`);
     for (const e of c.edits) if (e.target !== null && !targets.has(e.target)) errors.push(`${c.id}: unknown target ${e.target}`);
   }

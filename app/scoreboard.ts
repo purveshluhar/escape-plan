@@ -50,7 +50,7 @@ export function metres(v: number): string {
 
 function amount(r: SolverResult, v: number): string {
   // People and smoke count time steps; every other rule measures metres.
-  return r.reason === 'smoke_first' ? `${v} steps` : metres(v);
+  return r.reason === 'smoke_first' ? `${v} step${v === 1 ? '' : 's'}` : metres(v);
 }
 
 export function numbersText(r: SolverResult): string {
@@ -68,7 +68,7 @@ export function stuckLine(building: Building, r: SolverResult): string {
   const where = r.blocked_at ? ` at ${placeName(building, r.blocked_at)}` : '';
   const why = REASON_TEXT[r.reason ?? 'no_route'];
   const nums = numbersText(r);
-  return `${tokenName(r.token)} ${verb} stuck${where}: ${why}${nums ? `, ${nums}` : ''}`;
+  return `${questionOf(r.token)?.subject ?? tokenName(r.token)} ${verb} stuck${where}: ${why}${nums ? `, ${nums}` : ''}`;
 }
 
 export function scoreRows(building: Building, results: SolverResult[]): ScoreRow[] {

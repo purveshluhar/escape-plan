@@ -6,7 +6,10 @@ import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { tokenName } from '../viewer/labels.ts';
 import type { Reading } from './parse-client.ts';
 import { PARSE_TIMEOUT_MS } from './parse-client.ts';
+import { questionOf } from './questions.ts';
 import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
+
+const nameOf = (token: string): string => questionOf(token)?.subject ?? tokenName(token);
 
 export interface StripRow {
   name: 'Edit' | 'Where' | 'Size';
@@ -79,9 +82,9 @@ export interface AnswerLine {
 // One line per answer from the building rules.
 export function answerLines(results: readonly SolverResult[], building: Building): AnswerLine[] {
   return results.map((r) => {
-    if (r.status === 'pass') return { name: tokenName(r.token), answer: 'Yes', detail: '' };
+    if (r.status === 'pass') return { name: nameOf(r.token), answer: 'Yes', detail: '' };
     const where = r.blocked_at ? ` at ${placeName(building, r.blocked_at)}` : '';
     const nums = numbersText(r);
-    return { name: tokenName(r.token), answer: 'No', detail: keepUnits(`Stuck${where}: ${REASON_TEXT[r.reason ?? 'no_route']}${nums ? `, ${nums}` : ''}`) };
+    return { name: nameOf(r.token), answer: 'No', detail: keepUnits(`Stuck${where}: ${REASON_TEXT[r.reason ?? 'no_route']}${nums ? `, ${nums}` : ''}`) };
   });
 }

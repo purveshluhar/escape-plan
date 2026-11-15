@@ -107,7 +107,7 @@ test('parse: hedges, other units, signs and two numbers never apply (review roun
 
 test('typed edits are read against every demo fix, so the shaft and the beam are known', () => {
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
-  assert.match(main, /const typedFixes = demoButtons\(building, expected\)/);
+  assert.match(main, /const typedFixes = demoButtons\(base, expected\)/);
   assert.match(main, /readEdit\(text, typedFixes, building/);
 });
 

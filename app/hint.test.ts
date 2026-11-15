@@ -5,6 +5,10 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, Edit, Id, SolverResult } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
+import { withSmoke } from '../data/smoke.ts';
+import { withStarts } from './shell.ts';
+import { answerRows } from './smoke.ts';
+import type { Answer } from './answers.ts';
 import { findHint, hintModel } from './hint.ts';
 
 const building = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -169,7 +173,7 @@ test('only a beam becomes a transfer beam, never a column or a foundation', () =
 test('smoke: close_door is tried only on edges that are open, never on a stair or a closed door', () => {
   const b = structuredClone(building);
   const edgesAt = b.edges.filter((e) => e.from === 'lobby' || e.to === 'lobby');
-  edgesAt.forEach((e, i) => { if (i === 0) e.open = true; else delete e.open; }); // the others have no smoke path
+  edgesAt.forEach((e, i) => { if (i === 0) e.open = true; else e.open = false; }); // the others are closed already
   const r: SolverResult = { token: 'people', status: 'fail', path: [], blocked_at: 'lobby', reason: 'smoke_first', needed: 4, available: 6 };
   const tried: string[] = [];
   const h = findHint(b, [], 'people', (edits) => { const last = edits.at(-1); if (last) tried.push(`${last.op} ${last.target}`); return [r]; });
@@ -184,4 +188,41 @@ test('a bad width in the data cannot make candidate building run away', () => {
   const h = findHint(b, [], 'people', over(['people'], b));
   assert.ok(performance.now() - t0 < 1500);
   assert.ok(h.tried <= 30);
+});
+
+// ---- smoke race (people and smoke) ----
+
+// What the page does when the smoke is asked: the smoke question's answer is the people's.
+const race = (b: Building) => (edits: readonly Edit[]) => answerRows(solve(withSmoke(b), edits) as Answer[], ['smoke']);
+const wide = [btn('widen', 'office-door', 0.9)];
+
+test('smoke: Hint on the No offers closing the lobby door, which the rules say turns it to Yes', () => {
+  const h = findHint(withSmoke(building), wide, 'smoke', race(building));
+  assert.equal(h.stop, 'found');
+  assert.equal(key(h.fix), 'close_door lobby-door null');
+  assert.equal(h.fix?.source, 'button');
+  assert.deepEqual(h.breaks, []);
+  const m = hintModel(building, h, 'smoke');
+  assert.equal(m.fixLabel, 'Close lobby door');
+  assert.equal(m.then, 'Then: Everyone gets out before the smoke.');
+});
+
+test('smoke: an edge with no `open` field is open (contract), so it can be closed', () => {
+  assert.equal(building.edges.find((e) => e.id === 'lobby-door')!.open, undefined);
+  const h = findHint(withSmoke(building), wide, 'people', (e) => solve(withSmoke(building), e).filter((r) => r.token === 'people'));
+  assert.equal(key(h.fix), 'close_door lobby-door null');
+});
+
+test('smoke: people who start in the smoke start room are caught there; nothing is offered and nothing breaks', () => {
+  const inLobby = withStarts(withSmoke(building), new Map([['people', 'lobby']]));
+  const h = findHint(inLobby, wide, 'people', (e) => solve(inLobby, e).filter((r) => r.token === 'people'));
+  assert.equal(h.at, 'lobby');
+  assert.equal(h.fix, null);
+  assert.equal(h.stop, 'exhausted');
+  assert.match(hintModel(inLobby, h, 'people').note ?? '', /^No single edit at Lobby makes this Yes/);
+});
+
+test('smoke: once the lobby door is closed the answer is Yes and Hint has nothing to fix', () => {
+  const h = findHint(withSmoke(building), [...wide, btn('close_door', 'lobby-door')], 'smoke', race(building));
+  assert.equal(h.stop, 'yes');
 });

@@ -42,7 +42,7 @@ test('the request carries the sentence, the fixes on screen by name, and the ops
   assert.equal(r.text, 'widen the plant shaft');
   assert.deepEqual(r.targets.map((t) => t.id), ['plant-shaft', 'beam-b2', 'terrace-door', 'lobby-door', 'office-door']);
   assert.equal(r.targets.find((t) => t.id === 'lobby-door')?.name, 'Lobby door');
-  assert.deepEqual([...r.ops].sort(), ['add_ramp', 'add_transfer_beam', 'widen']);
+  assert.deepEqual([...r.ops].sort(), ['add_ramp', 'add_transfer_beam', 'close_door', 'widen']);
   assert.ok(r.value_range.min <= r.value_range.max);
 });
 

@@ -134,12 +134,13 @@ export function runSeconds(count: number, perToken: number, stagger: number): nu
 const OP_WORDS: [EditOp, RegExp, boolean][] = [
   ['add_transfer_beam', /\btransfer\b|\bbeam\b/, false],
   ['add_ramp', /\bramps?\b|\bslope\b|\bstep\b/, false],
+  ['close_door', /\bclose\b|\bshut\b/, false],
   ['widen', /\bwide[nr]?\b|\bwidth\b/, false],
   ['widen', /\bbigger\b|\blarger\b|\benlarge\b|\bopen up\b/, true],
 ];
 
 const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9.]+/).filter((w) => w.length > 1);
-const STOP = new Set(['the', 'to', 'at', 'add', 'a', 'an', 'of', 'in', 'and', 'make', 'it', 'please', 'by', 'widen', 'wider', 'ramp', 'beam', 'transfer']);
+const STOP = new Set(['the', 'to', 'at', 'add', 'a', 'an', 'of', 'in', 'and', 'make', 'it', 'please', 'by', 'widen', 'wider', 'ramp', 'beam', 'transfer', 'close', 'shut']);
 
 export interface ParseOutcome {
   parse: JevParse;
@@ -162,7 +163,9 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
   const nameOf = (b: DemoButton): string[] => words(b.label).filter((w) => !STOP.has(w) && !/^\d/.test(w) && w !== 'm');
   // A word in only one fix's name ("terrace", "shaft") points at that fix; "door" is in three.
   const uses = new Map<string, number>();
-  for (const b of buttons) for (const w of new Set(nameOf(b))) uses.set(w, (uses.get(w) ?? 0) + 1);
+  // Only fixes of the op said count: "lobby" is in two fixes (widen, close), and "widen lobby" still means the one that widens.
+  const opMatches = (b: DemoButton): boolean => !opHit || b.edit.op === op;
+  for (const b of buttons) if (opMatches(b)) for (const w of new Set(nameOf(b))) uses.set(w, (uses.get(w) ?? 0) + 1);
   const scored = buttons.map((b) => {
     const name = nameOf(b);
     const hits = name.filter((w) => said.has(w)).length;
@@ -183,13 +186,25 @@ export function parseEdit(text: string, buttons: readonly DemoButton[], range = 
     || /\d\s*(cm|mm|ft|feet|foot|in|inch|inches|")(?![a-z])/.test(t);
   // Audit gap 8, for short phrases only when nothing else is in doubt: a firm op word, a number (if
   // any) in range, and only one fix named at all.
-  const named = scored.filter((x) => x.match > 0).length;
+  // Fixes the sentence names. A fix of another op that matches only words the best fix has too ("lobby" for
+  // "widen lobby", with Close lobby door next to Widen lobby door) is the same place, not another fix.
+  const hit = (b: DemoButton): string[] => nameOf(b).filter((w) => said.has(w));
+  const bestHit = new Set(best ? hit(best.b) : []);
+  const everyUse = (w: string): number => buttons.filter((x) => nameOf(x).includes(w)).length;
+  const samePlace = (x: DemoButton): boolean => hit(x).every((w) => bestHit.has(w) && everyUse(w) <= 2); // "lobby", not "door"
+  const named = scored.filter((x) => x.match > 0 && (opMatches(x.b) || !samePlace(x.b))).length;
   if (firm && (raw === null || (inRange && !doubtful))) {
     // "ramp terrace", "widen shaft 2.0": a word only this fix has.
     if (best?.own && named === 1) targetConf = Math.max(targetConf, 0.9);
     // "transfer beam", "add a ramp": no part named, the op said in full, and only one fix does it.
     const fullOp = op === 'add_transfer_beam' ? /\btransfer\s+beam\b/.test(t) : op === 'add_ramp' && /\bramps?\b/.test(t);
     if (named === 0 && fullOp && buttons.filter((b) => b.edit.op === op).length === 1) targetConf = Math.max(targetConf, 0.85);
+  }
+  // A close sentence that names another fix's own word ("office", "terrace", "shaft") or a size is not sure:
+  // "Close lobby door" must not stand in for it.
+  if (op === 'close_door' && best) {
+    const otherOwn = buttons.some((x) => x.edit.target !== best.b.edit.target && nameOf(x).some((w) => said.has(w) && everyUse(w) === 1));
+    if (otherOwn || raw !== null) targetConf = Math.min(targetConf, 0.5);
   }
   const value = op === 'widen'
     ? { score: inRange ? raw! : best?.b.edit.value ?? range.min, confidence: doubtful ? 0.4 : inRange ? 0.95 : best?.b.edit.value != null ? 0.85 : 0.2 }

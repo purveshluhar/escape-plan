@@ -26,6 +26,7 @@ test('the MVP questions are the people questions of copy.md', () => {
     ['Building manager', 'Can everyone get out?'],
     ['Building owner', 'Can I widen this shaft for a new chiller?'],
     ['Building owner', 'Does the structure still hold?'],
+    ['Building manager', 'Do people get out before the smoke?'],
   ]);
 });
 

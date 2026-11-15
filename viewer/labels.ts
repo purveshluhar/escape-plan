@@ -63,7 +63,7 @@ export function failText(b: Building, r: SolverResult): FailText | null {
   else if (reason === 'no_support') numbers = 'no path down to a foundation';
   else if (r.needed !== null && r.available !== null) {
     // Metres show one decimal; people and smoke count steps, as app/scoreboard.ts amount().
-    const show = (v: number): string => (METRES.has(reason) ? `${num(v)} m` : reason === 'smoke_first' ? `${v} steps` : String(v));
+    const show = (v: number): string => (METRES.has(reason) ? `${num(v)} m` : reason === 'smoke_first' ? `${v} step${v === 1 ? '' : 's'}` : String(v));
     numbers = `needs ${show(r.needed)}, has ${show(r.available)}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');

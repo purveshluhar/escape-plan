@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
+import { withSmoke } from '../data/smoke.ts';
 import { coveredNodes, drawnLevels } from '../data/typical-floors.ts';
 import { loadTypicalFloor, type TypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
@@ -35,15 +36,19 @@ import type { HintResult } from './hint.ts';
 import { renderHint, stackAbove } from './hint-view.ts';
 import { answerLines } from './strip.ts';
 import { renderStrip } from './strip-view.ts';
+import { RACE, answerRows, helpfulCloseButtons, drawnResults, raceSpread, raceText, racePlaced } from './smoke.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
 // The MVP questions: wheelchair, sofa, people, chiller and load (mvp.ts). The dock offers only these.
-const building = buildingJson as Building;
+const base = buildingJson as Building;
+// The building with the smoke in it, for the dock, names and routes. Only a run with the smoke question
+// asked is solved on it (data/smoke.ts says why); every other run is solved on `base`.
+const building = withSmoke(base);
 const expected = expectedJson as ExpectedFile;
-const buttons = mvpButtons(building, demoButtons(building, expected));
+const buttons = mvpButtons(base, demoButtons(base, expected));
 // Typed edits are read against every demo fix, so "widen shaft 2.0" and "transfer beam" are known.
-const typedFixes = demoButtons(building, expected);
+const typedFixes = demoButtons(base, expected);
 const items = pickerItems(building, MVP_TOKENS);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -143,45 +148,51 @@ const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}
 
 // The building as played: each dropped object starts in the node it was dropped on.
 function played(): Building {
-  return withStarts(building, S.starts);
+  return withStarts(S.placed.includes(RACE) ? building : base, S.starts);
 }
 
 function edited(): Building {
   return run(played(), S.game).building;
 }
 
-function solvePlaced(edits: readonly Edit[] = S.game.edits): { edited: Building; results: Answer[] } {
+function solvePlaced(edits: readonly Edit[] = S.game.edits): { edited: Building; results: Answer[]; drawn: Answer[]; spread: ReturnType<typeof raceSpread> } {
   const start = played();
   const { building: b, results } = run(start, { edits: [...edits] });
   const all = answers(start, b, edits, results, expected, IMPLEMENTED_RULES);
-  return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
+  // The smoke question is answered by the people's answer; the viewer also draws the people and the smoke parked.
+  const drawn = drawnResults(all, S.placed);
+  // The tint clock starts when the people do: each drawn token starts one stagger after the one before.
+  const delay = Math.max(0, drawn.findIndex((r) => r.token === 'people')) * MOTION.staggerSeconds;
+  return { edited: b, results: answerRows(all, S.placed), drawn, spread: raceSpread(b, all, MOTION.secondsPerToken, delay) };
 }
 
 // Show the building as it is now, with no run on it: placed objects wait in their start rooms.
 function idle(): void {
   window.clearTimeout(runTimer);
   viewer.setInsetRight(0);
-  viewer.show(edited(), parkedResults(S.placed));
+  viewer.show(edited(), parkedResults(racePlaced(building, S.placed)));
+  viewer.setSmoke(null);
 }
 
 // `from` is the last edit and the answers before it: an edit that turns a Yes into a No is said so.
 function escape(from?: { before: readonly Answer[] | null; label: string }): void {
   if (S.placed.length === 0 || S.phase === 'running' || S.reading !== null) return;
   const t0 = performance.now();
-  const { edited: b, results } = solvePlaced();
+  const { edited: b, results, drawn, spread } = solvePlaced();
   S.solveMs = performance.now() - t0;
   S.results = results;
   S.conflict = from ? conflictOf(from.before, results, from.label, b) : null;
   if (S.conflict) S.note = [S.conflict.title, ...S.conflict.lines].join('. ');
   S.scoreOpen = false;
   viewer.setInsetRight(insetFor(results));
-  viewer.show(b, results);
+  viewer.show(b, drawn);
+  viewer.setSmoke(spread);
   window.clearTimeout(runTimer);
   if (REDUCE) {
     S.phase = phaseAfterRun(results);
   } else {
     S.phase = 'running';
-    const ms = runSeconds(results.length, MOTION.secondsPerToken, MOTION.staggerSeconds) * 1000;
+    const ms = runSeconds(drawn.length, MOTION.secondsPerToken, MOTION.staggerSeconds) * 1000;
     runTimer = window.setTimeout(() => {
       S.phase = phaseAfterRun(results);
       render();
@@ -374,9 +385,10 @@ function render(): void {
   sp.replaceChildren(...S.placed.map((id) => {
     const r = resOf(id);
     const token = b.tokens.find((t) => t.id === id)!;
+    const race = id === RACE && r ? raceText(b, r) : '';
     const det = !r ? `Starts in ${placeName(b, token.start)}`
-      : r.status === 'pass' ? `${yesLine(id)}. Route: ${routeShown(id, r.path).map((p) => placeName(b, p)).join(', ')}`
-      : stuckLine(b, r);
+      : r.status === 'pass' ? `${yesLine(id)}. ${race || `Route: ${routeShown(id, r.path).map((p) => placeName(b, p)).join(', ')}`}`
+      : race || stuckLine(b, r);
     return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, askOf(id)), word(r), h('span', { class: 'det num' }, det));
   }), h('div', { class: 'snote' }, 'A quick check of sizes and routes, not a code review.'));
 
@@ -398,7 +410,9 @@ function render(): void {
 // One card per No answer: who asks, the question, the reason, the numbers and the fixes that matter.
 function renderSheet(b: Building): void {
   const sheet = $('sheet');
-  const fails = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
+  const noes = S.phase === 'result' && S.results ? S.results.filter((r) => r.status === 'fail') : [];
+  // The smoke answer is the people's: when their own card is up, one card says it.
+  const fails = noes.filter((r) => r.token !== RACE || !noes.some((o) => o.token === 'people'));
   sheet.classList.toggle('on', fails.length > 0 && !S.editOpen);
   if (fails.length === 0) return sheet.replaceChildren();
   const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
@@ -419,9 +433,12 @@ function fixCard(r: Answer, b: Building): HTMLElement {
   const moved = played().tokens.find((t) => t.id === r.token)?.start !== building.tokens.find((t) => t.id === r.token)?.start;
   const targets = moved ? new Set<Id>() : relevantTargets(building, expected, r.token);
   if (r.blocked_at) targets.add(r.blocked_at);
-  const fixes = fixesFor(buttons, targets, S.game.edits);
+  // Against the smoke only a door the rules say lets people win is offered (not one the smoke does not come through).
+  const fixes = r.reason === 'smoke_first'
+    ? helpfulCloseButtons(buttons, r.token, S.game.edits, (e) => solvePlaced(e).results)
+    : fixesFor(buttons, targets, S.game.edits);
   const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Stuck';
-  const nums = numbersText(r);
+  const nums = raceText(b, r) || numbersText(r);
   const q = questionOf(r.token);
   return h('div', { class: 'fcard', role: 'group', 'aria-label': `${askOf(r.token)} No` },
     q && h('div', { class: 'who' }, q.person),

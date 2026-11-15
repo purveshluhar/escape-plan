@@ -96,3 +96,8 @@ test('a load stays on its beam; a token that starts in a room has no such line',
   assert.equal(stayText(b, 'sofa'), null);
   assert.equal(stayText(b, 'no-such-token'), null);
 });
+
+test('one step is "1 step", on the model as on the sheet', () => {
+  const tie = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 1, available: 1 }));
+  assert.equal(tie?.detail, 'Office door: needs 1 step, has 1 step');
+});

@@ -40,3 +40,10 @@ the `1.2 < 1.6 m` callout, the fail freeze), the edit flash, and the asks in `de
 
 Go/no-go at 15:30: if a token does not read clearly moving through the cutaway, switch to 2D
 stacked plans (one SVG per level) and keep 3D on a branch.
+
+## Smoke tint
+
+`viewer.setSmoke({ steps, secondsPerStep })` tints each node of the slice the smoke has reached
+(`viewer/smoke.ts`, tested): one translucent block per node, denser near the source, shown from
+`step * secondsPerStep` seconds after `show()`, and all at once with reduced motion. Tower floors the
+backdrop stands in for get none. `setSmoke(null)` clears it.

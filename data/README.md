@@ -111,3 +111,12 @@ package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, t
 
 `building.json` v1 and `expected.json` for the four tier 1 tokens (chiller, glass, wheelchair,
 load): the base building plus every demo edit. Then expected cases for people, smoke and water.
+
+## Smoke (people and smoke)
+
+`data/smoke.ts` holds the smoke token (start `lobby`, rule `spread`). It is not in `building.json`:
+with smoke always there, people lose to it at the corridor in every case, and the hand-checked
+"people get out" cases would turn to No. A question that asks about the smoke adds it (`withSmoke`).
+Expected cases whose id starts with `smoke-` are replayed on that building (`caseBuilding`), by
+`solver/solver.test.ts`, `app/state.test.ts` and `data/data.test.ts`. `data/smoke.test.ts` also
+pins what the stairs data does from upper floors: the smoke is ahead of people there whatever door is closed.

@@ -9,6 +9,7 @@ export interface Question {
   ask: string; // the question on the chip and the card: "Can my sofa get in?"
   yes: string; // the answer line when the solver says pass: "The sofa gets in"
   plural: boolean; // "People are stuck", not "People is stuck"
+  subject?: string; // who the answer line is about when it is not the token's name: "People are stuck"
   getsIn?: boolean; // the data walks it out, the person asks about getting in: list the route reversed
 }
 
@@ -18,6 +19,7 @@ export const QUESTIONS: Readonly<Record<Id, Question>> = {
   people: { person: 'Building manager', ask: 'Can everyone get out?', yes: 'Everyone gets out', plural: true },
   chiller: { person: 'Building owner', ask: 'Can I widen this shaft for a new chiller?', yes: 'The chiller fits through the shaft', plural: false },
   load: { person: 'Building owner', ask: 'Does the structure still hold?', yes: 'The structure still holds', plural: false },
+  smoke: { person: 'Building manager', ask: 'Do people get out before the smoke?', yes: 'Everyone gets out before the smoke', plural: true, subject: 'People' },
   glass: { person: 'Building owner', ask: 'Can a 4 m glass panel get into the lobby?', yes: 'The glass panel gets into the lobby', plural: false },
 };
 

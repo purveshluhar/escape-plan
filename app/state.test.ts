@@ -1,3 +1,4 @@
+import { caseBuilding } from '../data/smoke.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -14,13 +15,15 @@ const demo = expected.cases.find((c) => c.id === DEMO_CASE);
 test('the demo buttons come from the full-demo case, in order, with readable labels', () => {
   assert.ok(demo, `expected.json has no ${DEMO_CASE} case`);
   const buttons = demoButtons(building, expected);
-  assert.deepEqual(buttons.map((b) => b.edit), demo.edits.filter((e) => e.op !== 'reset'));
+  // Then the smoke fix (the smoke case's widen is the demo's own, so it shows once).
+  assert.deepEqual(buttons.map((b) => b.edit), [...demo.edits.filter((e) => e.op !== 'reset'), { op: 'close_door', target: 'lobby-door', value: null, source: 'button' }]);
   assert.deepEqual(buttons.map((b) => b.label), [
     'Widen plant shaft to 2 m',
     'Add transfer beam at beam B2',
     'Add ramp at terrace door',
     'Widen lobby door to 1.6 m',
     'Widen office door to 0.9 m',
+    'Close lobby door',
   ]);
   assert.equal(new Set(buttons.map((b) => b.id)).size, buttons.length, 'button ids are unique');
 });
@@ -54,10 +57,10 @@ test('run hands the viewer the edited building, not the base one', () => {
 
 // Click through each expected case the way the presenter does, then check the solver's answer.
 // Like solver.test.ts, a token whose rule P1 has not implemented yet shows as "todo".
-const ruleOf = new Map(building.tokens.map((t) => [t.id, t.rule]));
+const ruleOf = new Map(caseBuilding(building, { id: 'smoke-' }).tokens.map((t) => [t.id, t.rule]));
 for (const c of expected.cases) {
   const s = c.edits.reduce(applyEdit, initialState());
-  const results = run(building, s).results;
+  const results = run(caseBuilding(building, c), s).results;
   for (const want of c.expect) {
     const rule = ruleOf.get(want.token);
     const todo = rule === undefined || !IMPLEMENTED_RULES.includes(rule);

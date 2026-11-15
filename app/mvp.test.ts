@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
+import { withSmoke } from '../data/smoke.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import { pickerItems } from './shell.ts';
 import { demoButtons } from './state.ts';
@@ -11,10 +12,10 @@ const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.m
 const building = read('../data/building.json') as Building;
 const buttons = mvpButtons(building, demoButtons(building, read('../data/expected.json') as ExpectedFile));
 
-test('the MVP dock offers wheelchair, sofa, people, chiller and load (keys 1-5), with no Later chips', () => {
-  const items = pickerItems(building, MVP_TOKENS);
+test('the MVP dock offers wheelchair, sofa, people, chiller, load and smoke (keys 1-6), with no Later chips', () => {
+  const items = pickerItems(withSmoke(building), MVP_TOKENS); // the dock reads the building with the smoke in it
   assert.deepEqual(items.map((i) => [i.token, i.label, i.key]), [
-    ['wheelchair', 'Wheelchair', 1], ['sofa', 'Sofa', 2], ['people', 'People', 3], ['chiller', 'Chiller', 4], ['load', 'Load', 5],
+    ['wheelchair', 'Wheelchair', 1], ['sofa', 'Sofa', 2], ['people', 'People', 3], ['chiller', 'Chiller', 4], ['load', 'Load', 5], ['smoke', 'Smoke', 6],
   ]);
 });
 
@@ -44,6 +45,8 @@ test('the shaft and the beam buttons are always offered, even with the load pass
   assert.ok(targets.includes('beam-b2'));
 });
 
-test('the MVP buttons are exactly one per door, the shaft and the beam', () => {
-  assert.deepEqual(buttons.map((b) => b.edit.target).sort(), ['beam-b2', 'lobby-door', 'office-door', 'plant-shaft', 'terrace-door']);
+test('the MVP buttons are exactly one per door, the shaft and the beam, plus the one that closes the lobby door', () => {
+  assert.deepEqual(buttons.map((b) => `${b.edit.op} ${b.edit.target}`).sort(), [
+    'add_ramp terrace-door', 'add_transfer_beam beam-b2', 'close_door lobby-door', 'widen lobby-door', 'widen office-door', 'widen plant-shaft',
+  ]);
 });
