@@ -17,11 +17,48 @@ imports this folder: P3's screens in `app/` call the server over HTTP or WebSock
 
 ## Status
 
-Empty until tier 2 starts, when all of tier 1 is green. When the first code lands, P1 adds
-`server/` to the test and typecheck globs (AGENTS.md).
+Tier 2: `POST /parse` with plan C (the keyword parser) works. Jev and plan B are not built yet;
+they go behind the same `parse()`. Jev votes and the phone relay are tier 3.
 
-## Tier 2 first task
+## Run it
 
-`parse(request)` for Jev, with plan B and plan C behind the same function. Accept an answer only
-when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Go/no-go (P1's call): at the first merge
-(key in hand?) and at the Jev latency check (slower than 2 s means plan B or C).
+1. Copy `.env.example` to `.env` (git-ignored). The defaults work as they are.
+2. Run `npm run server`. It prints `escape-plan server on http://127.0.0.1:8787 (DECIDER=keywords)`.
+3. Stop it with Ctrl+C.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DECIDER` | `keywords` | Which parser fills `JevParse`. Only `keywords` (plan C) is built. Any other name stops the server at start. |
+| `PORT` | `8787` | Port on 127.0.0.1. |
+| `HOST` | `127.0.0.1` | Accepted only as `127.0.0.1`. Any other value stops the server at start. |
+
+## Route: `POST /parse`
+
+- Body: a `JevParseRequest` as `application/json`, at most 64 KiB, `text` at most 1000 characters.
+  `ops` and `targets` must not be empty, target ids must be unique, and `value_range.min <= max`.
+- Answer: `200` with a `JevParse`. Errors are `{ error, details }` with `400` (not JSON or not a
+  `JevParseRequest`), `403` (Host or Origin not allowed), `404`, `405`, `413` (body too big) or
+  `415` (not `application/json`).
+- Callers: the game page on this machine, at `http://localhost:5173` or `http://127.0.0.1:5173`
+  (`npm run dev`), or port 4173 (`npm run preview`). Other browser origins get `403`.
+- Accept a parse only when every confidence is >= `JEV_ACCEPT_CONFIDENCE` (0.8). Else show
+  "Did you mean" and the buttons.
+
+```bash
+curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
+  -d '{"text":"widen the plant shaft to 2 m","ops":["widen","reset"],"targets":[{"id":"plant-shaft","name":"Plant shaft"}],"value_range":{"min":0,"max":5}}'
+```
+
+## Plan C rules (`keywords.ts`)
+
+- Op: the op's own word gives confidence 1 (`widen`, `ramp`, `transfer beam`, `close`, `sleeve`,
+  `reset`). A near word (`wider`, `slope`, `shut`, `undo`) gives 0.6. Two different op words give
+  0.4. No op word gives 0. The op is always one of `request.ops`.
+- Target: a target's full name or id in the sentence gives 1. A longer name beats a name inside
+  it ("Lobby door" beats "Lobby"). Two different full names give 0.4. Part of a name gives at
+  most 0.6. Send only the targets on screen.
+- Reset: no target and no value. The target slot is the first target at confidence 1, so a reset
+  never asks "Did you mean".
+- Value (widen only): a number with `m` or `cm` gives 1, a bare number 0.6. "from 1 m to 2 m"
+  means 2 m. The value must be inside `value_range` and inside 0 to 5 m, or its confidence is 0.
+  The score is always inside `value_range`.
