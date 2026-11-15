@@ -174,11 +174,36 @@ export function frustum({ hx, hy, width, height, insetRight, margin }: FrustumIn
   return { left, right: left + (2 * half * width) / height, top: half, bottom: -half };
 }
 
-// Mouse-wheel zoom as a view-size multiplier: 1 = framed on the model, larger = further out, to see
-// the city around it. Scrolling down (positive deltaY) zooms out; 1 is the closest.
+// The orthographic camera sits this far from the model centre, looking down the (1,1,1) diagonal.
+// Depth is linear, so a long range costs no precision. The camera must be further back than the
+// tallest thing it should show: the 425 m tower rises 245 m closer to it, and the backdrop reaches
+// about 350 m either side, so anything nearer than the camera would be cut by the near plane.
+export const CAMERA = { distance: 1500, near: 1, far: 3200 };
+
+// Mouse-wheel zoom as a view-size multiplier: 1 = framed on the model, below 1 = closer, above 1 =
+// further out to see the city. Scrolling down (positive deltaY) zooms out.
+export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 60;
 export function zoomFactor(current: number, deltaY: number): number {
-  return Math.min(MAX_ZOOM, Math.max(1, current * Math.exp(deltaY * 0.001)));
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current * Math.exp(deltaY * 0.001)));
+}
+
+export interface ViewBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+// The view moved by `pan` metres in the camera's own plane (x right, y up).
+export function panned(f: ViewBounds, pan: { x: number; y: number }): ViewBounds {
+  return { left: f.left + pan.x, right: f.right + pan.x, top: f.top + pan.y, bottom: f.bottom + pan.y };
+}
+
+// Metres to pan for a pointer drag of dx, dy pixels: the picture follows the pointer, so the camera
+// moves the other way horizontally and the same way vertically (screen y runs down).
+export function dragToPan(f: ViewBounds, widthPx: number, heightPx: number, dx: number, dy: number): { x: number; y: number } {
+  return { x: 0 - (dx * (f.right - f.left)) / widthPx, y: (dy * (f.top - f.bottom)) / heightPx };
 }
 
 export const easeInOut =(t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
