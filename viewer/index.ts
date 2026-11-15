@@ -368,7 +368,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       const b = el.getBoundingClientRect();
       return { l: b.left, r: b.right, t: b.top, b: b.bottom };
     };
-    const shown = captionObj?.visible && captionObj.element.isConnected ? box(captionObj.element) : null;
+    // The caption anchor (.ep-tag) is zero-size; its span is the box people see.
+    const face = captionObj?.visible && captionObj.element.isConnected ? captionObj.element.firstElementChild : null;
+    const shown = face ? box(face) : null;
     const tags = roomTags.filter((tag) => tag.obj.visible);
     const hidden = coveredBy(shown, tags.map((tag) => box(tag.obj.element)));
     tags.forEach((tag, i) => (tag.obj.element.style.visibility = hidden[i] ? 'hidden' : ''));
