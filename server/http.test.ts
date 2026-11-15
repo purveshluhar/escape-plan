@@ -150,7 +150,7 @@ test('only the game page origins may call it from a browser', async () => {
   assert.equal(preBad.status, 403);
 });
 
-test('review: inherited key names are refused, though the contract validator lets them through', async () => {
+test('review: inherited key names are refused by the server itself, before the contract validator', async () => {
   for (const body of [
     `{"__proto__":{"x":1},${JSON.stringify(good).slice(1)}`,
     JSON.stringify({ ...good, constructor: 'x' }),
