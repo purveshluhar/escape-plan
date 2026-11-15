@@ -10,7 +10,9 @@ import type { AddressInfo } from 'node:net';
 import type { JevParseRequest } from '../contract/types.ts';
 import { validate } from '../contract/validate.ts';
 import { deciderFromEnv, parse } from './parse.ts';
-import type { DeciderName } from './parse.ts';
+import type { DeciderConfig, DeciderName } from './parse.ts';
+import { strandsConfigFromEnv } from './strands.ts';
+import type { StrandsConfig } from './strands.ts';
 
 export const HOST = '127.0.0.1';
 export const DEFAULT_PORT = 8787;
@@ -26,9 +28,11 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(
 export interface ServerConfig {
   port: number;
   decider: DeciderName;
+  strands: StrandsConfig;
 }
 
-// Reads SERVER_HOST, SERVER_PORT and DECIDER (from .env through `npm run server`, or the shell).
+// Reads SERVER_HOST, SERVER_PORT, DECIDER, STRANDS_URL and STRANDS_TIMEOUT_MS (from .env through
+// `npm run server`, or the shell). STRANDS_* are checked whatever DECIDER is, so a typo shows at start.
 // Not HOST and PORT: shells and tools export those for other reasons. An empty value means
 // "not set". A SERVER_HOST other than 127.0.0.1 is refused, never widened.
 export function readConfig(env: Record<string, string | undefined>): ServerConfig {
@@ -44,7 +48,7 @@ export function readConfig(env: Record<string, string | undefined>): ServerConfi
     }
     port = Number(rawPort);
   }
-  return { port, decider: deciderFromEnv(env.DECIDER) };
+  return { port, decider: deciderFromEnv(env.DECIDER), strands: strandsConfigFromEnv(env) };
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -94,7 +98,7 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, decider: DeciderName, port: number): Promise<void> {
+async function handle(req: IncomingMessage, res: ServerResponse, decider: DeciderConfig, port: number): Promise<void> {
   const host = req.headers.host;
   if (host !== `${HOST}:${port}` && host !== `localhost:${port}`) return fail(res, 403, 'host not allowed');
   const origin = req.headers.origin;
@@ -129,8 +133,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
     return fail(res, 413, `body over ${MAX_BODY_BYTES} bytes`);
   }
   let data: unknown;
-  // contract/validate.ts reads inherited keys ("__proto__", "constructor", "toString") as known
-  // fields, so it would let them through. Refuse them here.
+  // Inherited key names ("__proto__", "constructor", "toString") are refused here, before the
+  // schema check. This guard stays even where contract/validate.ts also refuses them.
   const inherited: string[] = [];
   try {
     data = JSON.parse(text, (key: string, value: unknown) => {
@@ -148,17 +152,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, decider: Decide
   const request = data as JevParseRequest;
   const problems = requestProblems(request);
   if (problems.length > 0) return fail(res, 400, 'body is not a usable JevParseRequest', problems);
-  const answer = parse(request, decider);
+  const answer = await parse(request, decider);
   // Fail closed: never hand the app a shape the contract does not allow.
   const answerErrors = validate('jev.schema.json#/$defs/parse', answer);
   if (answerErrors.length > 0) {
     console.error('parse() broke the JevParse schema:', answerErrors);
     return fail(res, 500, 'internal error');
   }
+  res.setHeader('x-decider', decider.decider); // so a timing log shows which parser answered
   send(res, 200, answer);
 }
 
-export function createParseServer(decider: DeciderName): Server {
+export function createParseServer(decider: DeciderConfig): Server {
   // A slow sender is cut after about 10 s: Node checks the timeouts every second, not every 30 s.
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000, connectionsCheckingInterval: 1_000 }, (req, res) => {
     const { port } = server.address() as AddressInfo;
@@ -175,7 +180,7 @@ export function createParseServer(decider: DeciderName): Server {
 
 // Binds to the HOST constant, never to a value from config, so loopback-only holds by construction.
 export function startServer(config: ServerConfig): Promise<Server> {
-  const server = createParseServer(config.decider);
+  const server = createParseServer(config);
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, HOST, () => {

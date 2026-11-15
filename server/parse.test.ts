@@ -6,6 +6,7 @@ import type { Building, EditOp, JevParse, JevParseRequest } from '../contract/ty
 import { EDIT_OPS, JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { validate } from '../contract/validate.ts';
 import { keywordParse } from './keywords.ts';
+import { readConfig } from './http.ts';
 import { DEFAULT_DECIDER, deciderFromEnv, parse } from './parse.ts';
 
 const building = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -120,20 +121,21 @@ test('value: out of the 0-5 m range, or no unit, or no number, stays below 0.8 a
   }
 });
 
-test('DECIDER: keywords is the default; anything else refuses to start', () => {
+test('DECIDER: keywords is the default; strands is a choice; anything else refuses to start', () => {
   assert.equal(DEFAULT_DECIDER, 'keywords');
   assert.equal(deciderFromEnv(undefined), 'keywords');
   assert.equal(deciderFromEnv(''), 'keywords');
   assert.equal(deciderFromEnv('keywords'), 'keywords');
-  assert.throws(() => deciderFromEnv('strands'), /DECIDER/);
+  assert.equal(deciderFromEnv('strands'), 'strands');
   assert.throws(() => deciderFromEnv('jev'), /DECIDER/);
   assert.throws(() => deciderFromEnv('Keywords '), /DECIDER/);
+  assert.throws(() => deciderFromEnv('toString'), /DECIDER/);
 });
 
-test('parse() uses the keyword parser by default', () => {
+test('parse() uses the keyword parser by default', async () => {
   const r = req('widen the plant shaft to 2 m');
-  assert.deepEqual(parse(r), keywordParse(r));
-  assert.deepEqual(parse(r, 'keywords'), keywordParse(r));
+  assert.deepEqual(await parse(r), keywordParse(r));
+  assert.deepEqual(await parse(r, readConfig({ DECIDER: 'keywords' })), keywordParse(r));
 });
 
 // ---------- Adversarial review, round 1 ----------

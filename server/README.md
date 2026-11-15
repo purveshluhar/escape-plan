@@ -17,8 +17,9 @@ imports this folder: P3's screens in `app/` call the server over HTTP or WebSock
 
 ## Status
 
-Tier 2: `POST /parse` with plan C (the keyword parser) works. Jev and plan B are not built yet;
-they go behind the same `parse()`. Jev votes and the phone relay are tier 3.
+Tier 2: `POST /parse` works with plan C (the keyword parser, the default) and with
+`DECIDER=strands` (a local Strands Decider, see below). Jev and plan B are not built yet; they go
+behind the same `parse()`. Jev votes and the phone relay are tier 3.
 
 ## Run it
 
@@ -28,9 +29,11 @@ they go behind the same `parse()`. Jev votes and the phone relay are tier 3.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DECIDER` | `keywords` | Which parser fills `JevParse`. Only `keywords` (plan C) is built. Any other name stops the server at start. |
+| `DECIDER` | `keywords` | Which parser fills `JevParse`: `keywords` (plan C) or `strands`. Any other name stops the server at start. |
 | `SERVER_PORT` | `8787` | Port on 127.0.0.1. |
 | `SERVER_HOST` | `127.0.0.1` | Accepted only as `127.0.0.1`. Any other value stops the server at start. |
+| `STRANDS_URL` | `http://127.0.0.1:8000` | Where `strands-decider serve` listens. Only `http://127.0.0.1:<port>`; any other URL stops the server at start. |
+| `STRANDS_TIMEOUT_MS` | `5000` | Longest wait for one Strands answer, 1 to 60000 ms. |
 
 The server does not read `HOST` or `PORT`, because shells and tools export those for other reasons.
 
@@ -72,3 +75,84 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
   "from 1 m") gives at most 0.6. When unclear, the number after "to" is offered. The value must be
   inside `value_range` and inside 0 to 5 m, or its confidence is 0. The score is always inside
   `value_range`.
+
+## DECIDER=strands (`strands.ts`)
+
+A local Strands Decider (`strands-decider serve`, model
+`StrandsAgents/strands-decider-2B-qwen3.5-v1-2610`) answers op and target. The decider spike set
+these rules:
+
+- Strands is asked two questions only: which op (from `request.ops`) and which target (from
+  `request.targets`). Its confidence goes into `JevParse`, capped by the guards below. A question
+  with one option gets a "none of these" option too, because Strands needs 2; if the model picks
+  it, that slot gets confidence 0.
+- The value comes from the plan C number parser, with the same rules and the 0-5 m check as above.
+- Reset skips the target check: a sure reset fills the target slot with the first target at
+  confidence 1, and the value is `null`. An unsure reset keeps the target the model read.
+- Plan C's guards cap the op confidence at 0.4 when: a reset has no reset word (`reset`, `undo`,
+  `restart`, `start over`) or also names a target or a number; the sentence has a word of another
+  op ("reset the lobby door to 2 m" read as widen, "widen it and shut it"); a negation comes in
+  the 3 words before the op's word, or anywhere when the op has no word in the sentence ("do not
+  make the lobby door 2 m wide"). They also cap the target at 0.4 when the sentence names one
+  other target in full. They do not check an op the sentence has no word for ("make the lobby door
+  1.5 metres wide" read as add_sleeve would apply).
+- Send only the targets on screen. Over 50 targets, the model is not asked. 50 is not measured: the
+  spike found that 14 worked, 156 gave no answer at 0.8 or more, and 255 did not fit. Long names fill
+  the model's window sooner; Strands then answers an error, and the rule below applies.
+- One Strands call runs at a time. A call that comes while one is running gets confidence 0 at once.
+  A call that timed out still counts as running until Strands answers it (at most 60 s), because
+  Strands does not stop work for a caller that left.
+- When Strands is down, takes longer than `STRANDS_TIMEOUT_MS`, answers with an error, or answers an
+  op or target that was not offered, `POST /parse` still answers `200` with a valid `JevParse` at
+  confidence 0. The app shows "Did you mean". The server logs one line with the reason. It never
+  switches to plan C on its own.
+- Strands runs on this machine only. The server sends the typed sentence to `STRANDS_URL` over
+  `node:http`, so it follows no redirect and uses no proxy from the environment. Any program that
+  listens on that port gets the sentences, so check the port is Strands' own (`/health`).
+  `strands-decider serve` checks no Host or Origin, so stop it when the demo ends.
+
+Use it only if the warm op + target call is under 2 s on the demo laptop. On a 32-thread CPU
+Cloud Desktop with no other load, the 5 calls below took a median of about 1.0 s with 14 targets,
+and one call with 50 targets took 5.2 s. The spike measured 2.5 s at a high load.
+
+### Time it on the laptop (macOS, Apple silicon)
+
+1. Install it once, outside the repo (about 5 GB of downloads):
+
+   ```bash
+   mkdir -p ~/strands-spike && cd ~/strands-spike
+   python3 --version   # needs 3.10 or later; else brew install python@3.11 and use python3.11
+   python3 -m venv venv && source venv/bin/activate
+   pip install 'strands-decider==0.3.0'   # the version the spike and P1-12 measured
+   ```
+
+2. Start Strands in its own terminal. Wait for `warmed up in ... s`, or until
+   `curl -s http://127.0.0.1:8000/health` prints `"status":"ok"`:
+
+   ```bash
+   cd ~/strands-spike && source venv/bin/activate
+   export HF_HOME=~/strands-spike/hf
+   strands-decider serve StrandsAgents/strands-decider-2B-qwen3.5-v1-2610 \
+     --device mps --host 127.0.0.1 --port 8000
+   ```
+
+3. In a second terminal, in the repo, start the server with Strands:
+
+   ```bash
+   DECIDER=strands STRANDS_URL=http://127.0.0.1:8000 npm run server
+   ```
+
+4. In a third terminal, in the repo, time 5 calls:
+
+   ```bash
+   set -o pipefail; npm run time-parse | tee parse-timing.log; echo "exit $?"
+   ```
+
+   Each call line shows the time, the answer, whether it passed the `JevParse` schema, whether the
+   app would apply it, and whether it is the right edit. The last line names the decider (it must
+   say `strands`) and shows the median. If the median is under 2000 ms and the line says
+   `5/5 applied and right`, `DECIDER=strands` can go in `.env`. If not, keep `keywords`. A wrong
+   edit that would be applied also gives `exit 1`. `exit 1` or "no answer from the decider" means Strands did not answer;
+   the server terminal says why. A first call can pass 5 s, so run step 4 twice.
+
+5. Stop each terminal with Ctrl+C. Delete `~/strands-spike` to remove Strands.
