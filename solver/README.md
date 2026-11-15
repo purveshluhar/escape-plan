@@ -10,10 +10,10 @@
 
 Every tier 1 rule is done: `no_steps` (wheelchair), `corner_turn` (sofa and glass),
 `shortest_exit` (people, no smoke), `clearance` (chiller) and `downward` (load). The full-demo
-edits give LEVEL COMPLETE (`level-complete.test.ts`). The tier 2 and 3 rules are still
-placeholders, so their expected cases in `solver.test.ts` show as `todo`. Adding a rule to
-`RULE_SOLVERS` in `index.ts` puts it in `IMPLEMENTED_RULES` and turns its expected cases into
-real tests.
+edits give LEVEL COMPLETE (`level-complete.test.ts`). Tier 2 `spread` (smoke, and the people
+race with it) is done. The other tier 2 and 3 rules are still placeholders, so their expected
+cases in `solver.test.ts` show as `todo`. Adding a rule to `RULE_SOLVERS` in `index.ts` puts
+it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
 
 ## Files
 
@@ -27,6 +27,9 @@ real tests.
   `clearance.ts` (chiller) does this with width and height only, and adds `shaft`.
 - `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
   the edges walked on a pass, null on a fail.
+- `spread.ts`: smoke (T2). Smoke moves one open edge per time step (`buildGraph()` from the
+  core, no checks). People race it in `shortest-exit.ts`: smoke at a path node at the same step
+  or earlier gives `smoke_first` there. Tests use fixtures until P5 adds smoke cases.
 - `downward.ts`: the load. It walks `supported_by` to a foundation and holds `cutOf()`, the
   shaft-breaks-beam cut (also for `supply` later).
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()

@@ -8,6 +8,7 @@ import { CORNER_TURN } from './corner-turn.ts';
 import { downward } from './downward.ts';
 import { NO_STEPS } from './no-steps.ts';
 import { shortestExit } from './shortest-exit.ts';
+import { spread } from './spread.ts';
 import { walk } from './search.ts';
 
 // A Map, not an object: a rule string from the data never reaches an Object.prototype member.
@@ -17,6 +18,7 @@ const RULE_SOLVERS = new Map<Rule, (building: Building, token: Token) => SolverR
   ['no_steps', (b, t) => walk(b, t, NO_STEPS)],
   ['downward', downward],
   ['shortest_exit', shortestExit],
+  ['spread', spread],
 ]);
 
 // Rules this solver really answers. solver.test.ts checks expected.json only for these.

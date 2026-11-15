@@ -53,15 +53,15 @@ export function carCheck(node: BuildingNode, token: Token): Block | null {
 
 // Two-way neighbours of each node, in node id order. Each hop keeps every edge between the
 // same two nodes, in edge id order: one edge that passes is enough to make the hop.
-interface Hop {
+export interface Hop {
   to: Id;
   edges: Edge[];
 }
 
-const byId = (a: Id, b: Id): number => (a < b ? -1 : a > b ? 1 : 0);
+export const byId = (a: Id, b: Id): number => (a < b ? -1 : a > b ? 1 : 0);
 
-// An edge whose end is not a node is left out.
-function buildGraph(building: Building, nodes: ReadonlyMap<Id, BuildingNode>, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
+// An edge whose end is not a node is left out. Exported for `spread` (smoke), which has no checks.
+export function buildGraph(building: Building, nodes: ReadonlyMap<Id, BuildingNode>, kinds: readonly WalkKind[]): Map<Id, Hop[]> {
   const hops = new Map<Id, Map<Id, Edge[]>>();
   const add = (from: Id, to: Id, edge: Edge): void => {
     const out = hops.get(from) ?? new Map<Id, Edge[]>();
