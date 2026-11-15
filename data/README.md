@@ -57,6 +57,11 @@ plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
   4. `tower-floors.ts` (generated, do not edit) records the plan and turn per level for the viewer.
 - `typical-floors.ts` and `typical-floors-load.ts` draw the real floor plan at every apartment level
   (and the slice's level 10) in the viewer, when the package is on the machine.
+- The two package models the viewer draws are in the repo, in `data/432-park/`:
+  `432_Park_Avenue_Typical_Plans.glb` (the four floor plans) and `432_Park_Avenue_Lightweight.glb`
+  (the complete tower, used for its exterior). They are our own approximate model (a reconstruction
+  from published diagrams), 4.8 MB together. The package's metadata, CSV and plan JSON that
+  `whole-tower-build.ts` reads stay in git-ignored `private-context/432-park/`.
 - The outside is the package's complete Lightweight model (`432_Park_Avenue_Lightweight.glb`): its
   exterior concrete grid, facade and window modules and roof parapet, 28.5 m by 425.5 m, centred on
   the tower. Its own levels, interiors and ground plinth are dropped (our floors and the backdrop

@@ -155,6 +155,8 @@ private-context/
 # 3D geometry is blocked everywhere; P1 adds a narrow exception for a self-made file.
 *.3dm
 *.glb
+# The two 432 Park package models the viewer draws (our own approximate tower, not Cityweft).
+!data/432-park/*.glb
 *.gltf
 *.obj
 *.fbx

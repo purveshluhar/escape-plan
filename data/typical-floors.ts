@@ -14,7 +14,7 @@ export const TYPICAL_TURN_DEG = 270;
 // The package's three-apartment plan node, one of four laid side by side in the GLB.
 export const TYPICAL_PLAN_NODE = 'Typical_3_Apartment_Plan';
 
-export const TYPICAL_FLOORS_URL = '/private-context/432-park/432_Park_Avenue_Typical_Plans.glb';
+export const TYPICAL_FLOORS_URL = '/data/432-park/432_Park_Avenue_Typical_Plans.glb';
 
 export interface FloorPlacement {
   position: [number, number, number]; // viewer metres: slab top at the apartment level, tower centre
@@ -71,7 +71,7 @@ export function coveredNodes(b: Building): string[] {
 // grid, facade and window modules and roof parapet. Everything inside it (its own levels and
 // interiors, drawn from our floor plans instead) and its ground plinth (the backdrop has the ground)
 // is left out. The exterior is 28.5 m square and 425.5 m tall, centred on the origin like the floors.
-export const FACADE_URL = '/private-context/432-park/432_Park_Avenue_Lightweight.glb';
+export const FACADE_URL = '/data/432-park/432_Park_Avenue_Lightweight.glb';
 
 export function isInterior(name: string): boolean {
   return /^(Model_Level_|Residential_Interiors|Local_Ground_Plinth)/.test(name);
