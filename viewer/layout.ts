@@ -206,4 +206,31 @@ export function dragToPan(f: ViewBounds, widthPx: number, heightPx: number, dx: 
   return { x: 0 - (dx * (f.right - f.left)) / widthPx, y: (dy * (f.top - f.bottom)) / heightPx };
 }
 
+// Orbit: the camera circles the model at a fixed distance. Azimuth turns it around the vertical axis
+// (0 looks from +z, a quarter turn from +x); elevation is the angle above the ground. The default is
+// the isometric look down the (1,1,1) diagonal.
+export interface OrbitView {
+  azimuth: number; // radians
+  elevation: number; // radians
+}
+export const DEFAULT_VIEW: OrbitView = { azimuth: Math.PI / 4, elevation: Math.asin(1 / Math.sqrt(3)) };
+export const MIN_ELEVATION = 0.1; // never level with the ground
+export const MAX_ELEVATION = 1.5; // never straight down, so the view cannot flip over
+export const ORBIT_SPEED = 0.006; // radians per pixel dragged
+
+// The unit vector from the model centre to the camera.
+export function viewDirection(azimuth: number, elevation: number): Vec3 {
+  const c = Math.cos(elevation);
+  return [c * Math.sin(azimuth), Math.sin(elevation), c * Math.cos(azimuth)];
+}
+
+// A drag of dx, dy pixels: the picture follows the pointer, so dragging right swings the camera left
+// and dragging down lifts it.
+export function orbit(view: OrbitView, dx: number, dy: number): OrbitView {
+  return {
+    azimuth: view.azimuth - dx * ORBIT_SPEED,
+    elevation: Math.min(MAX_ELEVATION, Math.max(MIN_ELEVATION, view.elevation + dy * ORBIT_SPEED)),
+  };
+}
+
 export const easeInOut =(t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);

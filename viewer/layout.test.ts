@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
-  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan,
+  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan, DEFAULT_VIEW, MAX_ELEVATION, MIN_ELEVATION, ORBIT_SPEED, orbit, viewDirection,
 } from './layout.ts';
 import type { BoxSpec } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
@@ -161,4 +161,32 @@ test('dragging the picture right moves the camera left: pan follows the pointer 
   const f = { left: -10, right: 30, top: 20, bottom: -20 }; // 40 m across 400 px, 40 m over 400 px
   assert.deepEqual(dragToPan(f, 400, 400, 100, 0), { x: -10, y: 0 }); // 100 px right = 10 m, camera goes left
   assert.deepEqual(dragToPan(f, 400, 400, 0, 50), { x: 0, y: 5 }); // 50 px down = 5 m, camera goes up
+});
+
+test('the default view looks down the (1,1,1) diagonal, as before', () => {
+  const d = viewDirection(DEFAULT_VIEW.azimuth, DEFAULT_VIEW.elevation);
+  for (const v of d) assert.ok(Math.abs(v - 1 / Math.sqrt(3)) < 1e-9);
+});
+
+test('azimuth turns the camera around the model, elevation raises it, direction stays unit length', () => {
+  const east = viewDirection(Math.PI / 2, 0);
+  assert.ok(Math.abs(east[0] - 1) < 1e-9 && Math.abs(east[1]) < 1e-9 && Math.abs(east[2]) < 1e-9);
+  const top = viewDirection(0, Math.PI / 2);
+  assert.ok(Math.abs(top[1] - 1) < 1e-9);
+  const d = viewDirection(1.234, 0.567);
+  assert.ok(Math.abs(Math.hypot(...d) - 1) < 1e-9);
+});
+
+test('dragging right swings the camera left, dragging down lifts it', () => {
+  const right = orbit(DEFAULT_VIEW, 100, 0);
+  assert.ok(Math.abs(right.azimuth - (DEFAULT_VIEW.azimuth - 100 * ORBIT_SPEED)) < 1e-12);
+  assert.equal(right.elevation, DEFAULT_VIEW.elevation);
+  const down = orbit(DEFAULT_VIEW, 0, 20);
+  assert.ok(Math.abs(down.elevation - (DEFAULT_VIEW.elevation + 20 * ORBIT_SPEED)) < 1e-12);
+});
+
+test('elevation stays between a low angle and straight down, so the view never flips over', () => {
+  assert.equal(orbit(DEFAULT_VIEW, 0, 1e6).elevation, MAX_ELEVATION);
+  assert.equal(orbit(DEFAULT_VIEW, 0, -1e6).elevation, MIN_ELEVATION);
+  assert.ok(MIN_ELEVATION > 0 && MAX_ELEVATION < Math.PI / 2);
 });
