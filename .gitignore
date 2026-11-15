@@ -150,13 +150,16 @@ vite.config.ts.timestamp-*
 
 # Escape Plan
 # Cityweft files never enter the repo (EULA bars publishing derived geometry). See docs/adr/0004.
-data/cityweft/
+data/cityweft/*
+!data/cityweft/meta.json
 private-context/
 # 3D geometry is blocked everywhere; P1 adds a narrow exception for a self-made file.
 *.3dm
 *.glb
 # The two 432 Park package models the viewer draws (our own approximate tower, not Cityweft).
 !data/432-park/*.glb
+# The Cityweft block the backdrop draws (see docs/adr/0004 before merging).
+!data/cityweft/block.glb
 *.gltf
 *.obj
 *.fbx

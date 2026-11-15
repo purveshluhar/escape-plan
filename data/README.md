@@ -15,8 +15,10 @@ They are not real answers. Replace them with v1.
 - Every case lists the edits applied in order, and only the fields you checked by hand.
 - `npm test` validates every `data/*.json` file against its schema and checks that every id
   points at something real. A new JSON file needs a line in `SCHEMA_FOR` in `data.test.ts`.
-- Self-made and synthetic data only. No Cityweft files here: they go in git-ignored
-  `data/cityweft/` or `private-context/`.
+- Self-made and synthetic data only, with one exception: the Cityweft block (`data/cityweft/block.glb`
+  and `meta.json`) is committed so a fresh clone shows the real city around the tower. Credit:
+  Cityweft, OpenStreetMap, Overture Maps Foundation, Meta & WRI canopy heights. `instances.json` and
+  anything else Cityweft writes stays git-ignored.
 
 ## Cityweft block (tier 2)
 
