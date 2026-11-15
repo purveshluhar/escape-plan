@@ -30,6 +30,9 @@ import {
 import type { Phase, PickItem } from './shell.ts';
 import { readEdit } from './parse-client.ts';
 import type { Reading } from './parse-client.ts';
+import { findHint, hintModel } from './hint.ts';
+import type { HintResult } from './hint.ts';
+import { renderHint, stackAbove } from './hint-view.ts';
 import { answerLines } from './strip.ts';
 import { renderStrip } from './strip-view.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
@@ -58,10 +61,11 @@ interface State {
   solveMs: number | null;
   scoreOpen: boolean;
   conflict: Conflict | null; // what the last edit turned from Yes to No, shown on the fix sheet
+  hint: { token: Id; result: HintResult; run: Answer[] } | null; // good only for the run it was asked about
 }
 
 const S: State = {
-  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false, conflict: null,
+  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false, conflict: null, hint: null,
 };
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -133,10 +137,10 @@ function edited(): Building {
   return run(played(), S.game).building;
 }
 
-function solvePlaced(): { edited: Building; results: Answer[] } {
+function solvePlaced(edits: readonly Edit[] = S.game.edits): { edited: Building; results: Answer[] } {
   const start = played();
-  const { building: b, results } = run(start, S.game);
-  const all = answers(start, b, S.game.edits, results, expected, IMPLEMENTED_RULES);
+  const { building: b, results } = run(start, { edits: [...edits] });
+  const all = answers(start, b, edits, results, expected, IMPLEMENTED_RULES);
   return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
 }
 
@@ -226,6 +230,15 @@ function applyFix(edit: Edit, label: string): void {
     render();
   }
   if (edit.target !== null) viewer.flash(edit.target);
+}
+
+// Hint: the rules try edits at the stuck part and offer the first that turns this answer to Yes.
+// It applies through applyFix, like a typed edit; Undo edits removes it.
+function askHint(token: Id): void {
+  if (S.phase !== 'result' || !S.results || S.reading !== null) return;
+  const result = findHint(played(), S.game.edits, token, (e) => solvePlaced(e).results);
+  S.hint = { token, result, run: S.results };
+  render();
 }
 
 function reset(): void {
@@ -362,6 +375,7 @@ function render(): void {
 
   renderSheet(b);
   renderEdit();
+  renderHintPanel();
   const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
   viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel), running));
 }
@@ -434,6 +448,24 @@ function renderEdit(): void {
     onClose: () => {
       S.read = null;
       render();
+    },
+  });
+}
+
+// The Hint panel stacks above the "who decided" strip, so it draws after the strip does.
+function renderHintPanel(): void {
+  const show = S.hint !== null && S.hint.run === S.results && S.phase === 'result' ? S.hint : null;
+  const close = (): void => {
+    S.hint = null;
+    render();
+  };
+  renderHint($('hint'), {
+    asks: S.phase === 'result' && S.reading === null && S.results
+      ? S.results.filter((r) => r.status === 'fail').map((r) => ({ name: itemOf(r.token).label, onHint: () => askHint(r.token) }))
+      : [],
+    shown: show && {
+      name: askOf(show.token), model: hintModel(building, show.result, show.token), onClose: close,
+      onApply: () => show.result.fix && applyFix(show.result.fix, editLabel(building, show.result.fix)),
     },
   });
 }
@@ -542,6 +574,7 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
+stackAbove($('hint'), $('strip'));
 idle();
 render();
 

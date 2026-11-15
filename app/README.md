@@ -32,3 +32,11 @@ down, slow or refuses, the page's own `parseEdit` reads the sentence, because it
 wording better ("make the lobby door 1.5 metres wide"). An answer applies only as one of the
 fixes on screen with every part at 0.8 or more. `app/strip.ts` (tested) and `app/strip-view.ts`
 draw the "who decided" strip.
+
+## Hint
+
+`app/hint.ts` (tested) tries edits at the stuck part of a No answer, smallest change first, and offers the
+first one the rules say turns the answer to Yes, with what it breaks and how many fixes it tried. It stops
+at 100 fixes or 250 ms. It works from the solver's own answers, so it covers every question the data has.
+`app/hint-view.ts` draws the Hint panel above the "who decided" strip. Apply uses the same path as a typed
+edit (`applyFix` in `main.ts`); Undo edits removes it.
