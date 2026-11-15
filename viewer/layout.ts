@@ -174,4 +174,11 @@ export function frustum({ hx, hy, width, height, insetRight, margin }: FrustumIn
   return { left, right: left + (2 * half * width) / height, top: half, bottom: -half };
 }
 
+// Mouse-wheel zoom as a view-size multiplier: 1 = framed on the model, larger = further out, to see
+// the city around it. Scrolling down (positive deltaY) zooms out; 1 is the closest.
+export const MAX_ZOOM = 60;
+export function zoomFactor(current: number, deltaY: number): number {
+  return Math.min(MAX_ZOOM, Math.max(1, current * Math.exp(deltaY * 0.001)));
+}
+
 export const easeInOut =(t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);

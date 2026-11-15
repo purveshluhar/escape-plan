@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
-  routeLength, STOREY_HEIGHT, tokenRoute, uncovered,
+  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor,
 } from './layout.ts';
 import type { BoxSpec } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
@@ -132,4 +132,11 @@ test('covered nodes are left out of the drawn boxes, the rest keep their order',
   ] as BoxSpec[];
   assert.deepEqual(uncovered(boxes, new Set(['b'])).map((x) => x.id), ['a', 'c']);
   assert.deepEqual(uncovered(boxes, new Set()).map((x) => x.id), ['a', 'b', 'c']);
+});
+
+test('zoom: wheel up zooms in, wheel down out, always inside 1x (framed) to 60x', () => {
+  assert.ok(zoomFactor(1, 100) > 1);
+  assert.ok(zoomFactor(10, -100) < 10);
+  assert.equal(zoomFactor(1, -100000), 1);
+  assert.equal(zoomFactor(60, 100000), 60);
 });

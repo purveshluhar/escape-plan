@@ -11,7 +11,7 @@ import {
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, type Vec3,
+  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, type Vec3,
 } from './layout.ts';
 
 export interface Viewer {
@@ -95,6 +95,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   backdrop.add(sun);
   let backdropObject: THREE.Object3D | null = null;
   let covered: ReadonlySet<Id> = new Set();
+  let zoom = 1; // mouse wheel: 1 = framed on the model, larger = further out to see the city
   let shown: { building: Building; results: SolverResult[] } | null = null;
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
@@ -247,7 +248,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
-    Object.assign(camera, frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN }));
+    Object.assign(camera, frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }));
     camera.updateProjectionMatrix();
 
     // Room labels that would overlap on screen (stacked storeys): keep exits and start rooms first.
@@ -329,6 +330,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.render(fx, camera);
   }
 
+  renderer.domElement.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    zoom = zoomFactor(zoom, e.deltaY);
+    fit();
+  }, { passive: false });
   new ResizeObserver(fit).observe(container);
   renderer.setAnimationLoop(frame);
 
