@@ -7,7 +7,7 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import type { Building, Id, SolverResult } from '../contract/types.ts';
 import {
   BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
-  GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED,
+  GLASS_STRONG, MOTION, PATH, SCORE, TEXT, TEXT_MUTED,
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
@@ -21,7 +21,7 @@ export interface Viewer {
   setBackdrop(object: THREE.Object3D | null): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
-  // Node ids left out of the frame (and the grid), because something else (the real tower in the
+  // Node ids left out of the frame, because something else (the real tower in the
   // backdrop) stands in for them. No node is drawn as a box; routes still run through every node.
   // Redraws at once.
   setCovered(ids: Iterable<Id>): void;
@@ -83,7 +83,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   banner.style.right = `${insetRight}px`;
   container.appendChild(banner);
 
-  const world = new THREE.Scene(); // building and grid
   const rooms = new THREE.Scene(); // room name labels, under the tokens and fail cards
   const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, CAMERA.near, CAMERA.far);
@@ -117,10 +116,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let allDone = 0;
   let win = false;
 
-  // The graph's rooms are self-made, so they are not drawn: the real plans and facade in the backdrop
-  // are the building. Their extent still frames the camera and spans the grid; exits get a label.
+  // The graph's rooms are self-made, so they are not drawn, and there is no ground grid either: the
+  // real plans, facade and city in the backdrop are the building and its ground. The rooms' extent
+  // still frames the camera; exits get a label.
   function drawBuilding(b: Building): void {
-    clear(world, shared);
     clear(rooms, shared);
     roomTags = [];
     const nodes = new Map(b.nodes.map((n) => [n.id, n]));
@@ -135,17 +134,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       rooms.add(label);
       roomTags.push({ obj: label, text: el.textContent });
     }
-    if (!marks.frame) {
-      bounds.makeEmpty();
-      return;
-    }
-    bounds.set(new THREE.Vector3(...marks.frame.min), new THREE.Vector3(...marks.frame.max));
-    const centre = bounds.getCenter(new THREE.Vector3());
-    const size = bounds.getSize(new THREE.Vector3());
-    const span = 2 * Math.ceil((Math.max(size.x, size.z) + 12) / 2);
-    const grid = new THREE.GridHelper(span, span, GRID, GRID);
-    grid.position.set(Math.round(centre.x), -0.01, Math.round(centre.z));
-    world.add(grid);
+    if (marks.frame) bounds.set(new THREE.Vector3(...marks.frame.min), new THREE.Vector3(...marks.frame.max));
+    else bounds.makeEmpty();
   }
 
   function buildRuns(b: Building, results: SolverResult[]): void {
@@ -314,8 +304,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       renderer.render(backdrop, camera);
       renderer.clearDepth();
     }
-    renderer.render(world, camera);
-    renderer.clearDepth();
     renderer.render(fx, camera);
     labels.render(rooms, camera);
     labels.render(fx, camera);

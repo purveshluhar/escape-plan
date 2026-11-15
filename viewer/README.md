@@ -6,7 +6,7 @@
 **Produces:** `createViewer(container)` returning `{ show(building, results), setBackdrop(object), setCovered(ids) }` (`viewer/index.ts`).
 `setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). The graph's
 rooms are self-made, so the viewer draws no box for them; only each exit gets a label. `setCovered`
-takes node ids the backdrop stands in for: the camera frames, and the grid spans, only the other
+takes node ids the backdrop stands in for: the camera frames only the other
 nodes' boxes (routes still use every node).
 Mouse: the wheel zooms (0.1x close to 60x far); left-drag orbits the camera around the model; right-drag
 (or shift-drag) pans; double-click returns to the framed, isometric view.

@@ -204,3 +204,8 @@ test('graph marks: no slice room is drawn as a box; their extent still frames th
   assert.deepEqual(marks.labels, [{ id: 'street', at: [14.25, 0, 26.9] }]);
   assert.equal(graphMarks(b, new Set(b.nodes.map((n) => n.id))).frame, null);
 });
+
+test('the viewer draws no ground grid under the building (the real 432 Park and Cityweft ground is the floor)', () => {
+  const viewer = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(viewer, /GridHelper|\bGRID\b/);
+});

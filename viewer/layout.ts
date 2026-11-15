@@ -36,7 +36,7 @@ export function uncovered(boxes: BoxSpec[], covered: ReadonlySet<Id>): BoxSpec[]
 
 // What the viewer draws for the building graph itself. The graph's rooms are self-made, so none is
 // drawn as a box (the real 432 Park plans and facade in the backdrop are the building on screen).
-// The uncovered boxes still give the frame the camera fits and the grid spans, and each exit gets a
+// The uncovered boxes still give the frame the camera fits, and each exit gets a
 // label at its floor, so players see where the tokens are going. `frame` is null when every node is covered.
 export interface GraphMarks {
   frame: { min: Vec3; max: Vec3 } | null;
