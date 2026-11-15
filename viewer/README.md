@@ -7,8 +7,8 @@
 `setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). `setCovered`
 takes node ids whose boxes are not drawn because the backdrop stands in for them (routes still use
 them, and the camera frames only the boxes that are drawn).
-The mouse wheel zooms out from the framed view (up to 60x) to see the backdrop; scroll back to 1x to
-reframe on the building.
+Mouse: the wheel zooms (0.1x close to 60x far); left-drag orbits the camera around the model; right-drag
+(or shift-drag) pans; double-click returns to the framed, isometric view.
 `onZoom(zoom)` in the options reports each change; the app uses it to lift the backdrop's 4 m cut as you
 zoom out (`cutHeight` in `app/backdrop.ts`), so the context shows at full height.
 Pure layout math lives in `viewer/layout.ts` so it can be tested without a browser.

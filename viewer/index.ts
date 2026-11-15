@@ -11,7 +11,7 @@ import {
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, dragToPan, panned, type Vec3,
+  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, DEFAULT_VIEW, dragToPan, orbit, panned, viewDirection, type Vec3,
 } from './layout.ts';
 
 export interface Viewer {
@@ -37,7 +37,6 @@ export interface ViewerOptions {
 const FILL_OPACITY = 0.5; // pale frosted wall faces
 const FLAT_HEIGHT: Partial<Record<string, number>> = { street: 0.15, truck: 2.6 }; // not storey boxes
 const VIEW_MARGIN = 1.2;
-const CAMERA_DIR = new THREE.Vector3(1, 1, 1).normalize(); // fixed isometric angle
 const SHAKE_METRES = 0.25;
 // The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
 const X_LIFT = -48; // pixels
@@ -98,7 +97,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let backdropObject: THREE.Object3D | null = null;
   let covered: ReadonlySet<Id> = new Set();
   let zoom = 1; // mouse wheel: 1 = framed on the model, below 1 = closer, above = further out
-  const pan = { x: 0, y: 0 }; // metres, set by dragging
+  const pan = { x: 0, y: 0 }; // metres, set by right-drag
+  let view = { ...DEFAULT_VIEW }; // orbit angles, set by left-drag
   let shown: { building: Building; results: SolverResult[] } | null = null;
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
@@ -240,7 +240,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.setSize(w, h);
     if (bounds.isEmpty()) return;
     const centre = bounds.getCenter(new THREE.Vector3());
-    camera.position.copy(centre).addScaledVector(CAMERA_DIR, CAMERA.distance);
+    camera.position.copy(centre).addScaledVector(new THREE.Vector3(...viewDirection(view.azimuth, view.elevation)), CAMERA.distance);
     camera.lookAt(centre);
     camera.updateMatrixWorld();
     let hx = 0;
@@ -339,22 +339,30 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     options.onZoom?.(zoom);
     fit();
   }, { passive: false });
-  // Drag to pan; double-click to go back to the framed view.
+  // Left-drag orbits the camera around the model; right-drag (or shift-drag) pans; double-click goes
+  // back to the framed, isometric view.
   const canvas = renderer.domElement;
-  let drag: { x: number; y: number } | null = null;
+  let drag: { x: number; y: number; mode: 'rotate' | 'pan' } | null = null;
   canvas.style.cursor = 'grab';
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
-    drag = { x: e.clientX, y: e.clientY };
+    drag = { x: e.clientX, y: e.clientY, mode: e.button === 2 || e.shiftKey ? 'pan' : 'rotate' };
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor = 'grabbing';
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const view = { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom };
-    const d = dragToPan(view, canvas.clientWidth || 800, canvas.clientHeight || 600, e.clientX - drag.x, e.clientY - drag.y);
-    pan.x += d.x;
-    pan.y += d.y;
-    drag = { x: e.clientX, y: e.clientY };
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (drag.mode === 'rotate') {
+      view = orbit(view, dx, dy);
+    } else {
+      const viewBounds = { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom };
+      const d = dragToPan(viewBounds, canvas.clientWidth || 800, canvas.clientHeight || 600, dx, dy);
+      pan.x += d.x;
+      pan.y += d.y;
+    }
+    drag = { x: e.clientX, y: e.clientY, mode: drag.mode };
     fit();
   });
   const endDrag = (): void => {
@@ -367,6 +375,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     zoom = 1;
     pan.x = 0;
     pan.y = 0;
+    view = { ...DEFAULT_VIEW };
     options.onZoom?.(zoom);
     fit();
   });
