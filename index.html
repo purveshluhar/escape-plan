@@ -4,10 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Escape Plan - ask your building</title>
+<link rel="icon" href="data:," />
 <style>
 /* Design B: daylight model, spatial glass. The model fills the screen; light glass floats over it:
    the summary pill at the top, the dock at the bottom, the fix sheet and the edit box above it. */
-:root{
+:root{--dockb:104px;
   color-scheme: light;
   --ink:#14161c; --muted:#3d4250; --pass:#05592c; --fail:#9a0f19; --esc:#1b1e24; --focus:#1d3fd6;
   --g-top:rgba(250,251,253,.74); --g-bot:rgba(236,240,246,.66); --blur:16px;
@@ -62,7 +63,8 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 #dock.pop{animation:settle .6s var(--spring)}
 @keyframes settle{from{transform:translateX(-50%) scale(.94);opacity:.6}to{transform:translateX(-50%) scale(1);opacity:1}}
 .dock-full{display:flex;align-items:center;gap:var(--s2);min-width:0}
-#picker{display:flex;gap:8px;align-items:center}
+#picker{display:flex;gap:8px;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none}
+#picker::-webkit-scrollbar{display:none}
 .scrollwrap{position:relative;min-width:0;display:flex;flex:1}
 .scroller{display:flex;align-items:center;gap:var(--s2);min-width:0;overflow-x:auto;scrollbar-width:none}
 .scroller::-webkit-scrollbar{display:none}
@@ -125,7 +127,7 @@ kbd{font:600 12px/1 ui-monospace,Menlo,monospace;padding:3px 6px;border-radius:6
 
 /* ---------- All yes: a calm answer in the fix sheet slot (empty when every answer is yes) ---------- */
 /* It never sits over the Answers panel (top centre), so it stays on while that panel is open. */
-#banner{position:fixed;right:24px;bottom:104px;width:min(380px,calc(100vw - 16px));border-radius:28px;padding:18px 22px 20px;pointer-events:none;display:none}
+#banner{position:fixed;right:24px;bottom:var(--dockb);width:min(380px,calc(100vw - 16px));border-radius:28px;padding:18px 22px 20px;pointer-events:none;display:none}
 #banner.on{display:block;animation:sheetIn .5s var(--soft)}
 body.editing #banner.on{display:none}
 #banner .big{font:800 34px/1.1 var(--font);color:var(--pass)}
@@ -141,7 +143,7 @@ body.editing #banner.on{display:none}
 .fixbtn:disabled{color:#5a5f6a;border-style:dashed;background:transparent}
 
 /* ---------- Fix sheet: one card per failed object ---------- */
-#sheet{position:fixed;right:24px;bottom:104px;width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 200px);overflow-y:auto;
+#sheet{position:fixed;right:24px;bottom:var(--dockb);width:min(380px,calc(100vw - 16px));max-height:calc(100vh - 200px);overflow-y:auto;
   border-radius:28px;padding:10px 10px 8px;display:none}
 #sheet.on{display:block;animation:sheetIn .5s var(--spring)}
 #sheet .lbl{font:600 12px/1 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px}
@@ -165,10 +167,10 @@ body.editing #banner.on{display:none}
 #sheet .foot .fixbtn{flex:1;height:40px;text-align:center}
 
 /* ---------- Hint: the fix the rules found, stacked above the "who decided" strip ---------- */
-#hint{position:fixed;left:24px;bottom:calc(104px + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
+#hint{position:fixed;left:24px;bottom:calc(var(--dockb) + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
 #hint.on{display:block;animation:sheetIn .45s var(--soft)}
 #hint:not(.open){width:max-content;max-width:min(520px,calc(100vw - 48px))}
-body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
+body.editing #hint.open{width:min(520px,max(240px,calc(100vw - 592px)))}
 @media (max-width:950px){body.editing #hint{display:none}} /* the edit box takes the room */
 #hint .hbtns{display:flex;flex-wrap:wrap;gap:6px}
 #hint .hbtns .fixbtn{height:40px;font-size:15px;padding:0 14px}
@@ -183,7 +185,7 @@ body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
 #hint .hact .fixbtn{height:40px;font-size:15px;padding:0 14px}
 
 /* ---------- Edit box (typed edits) ---------- */
-#editPanel{position:fixed;right:24px;bottom:104px;width:min(520px,calc(100vw - 16px));
+#editPanel{position:fixed;right:24px;bottom:var(--dockb);width:min(520px,calc(100vw - 16px));
   border-radius:30px;padding:14px;display:none}
 #editPanel.open{display:block;animation:sheetIn .45s var(--soft)}
 #editPanel .row{display:flex;gap:8px;align-items:center}
@@ -213,7 +215,7 @@ body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
 @media (max-width:1450px) and (min-width:701px){body.scoring #votes{display:none}} /* the Answers panel takes the room */
 #votes .vsum{font:600 14px/1.3 var(--font);margin:8px 2px 2px} #votes .vsum.clash{color:#7a3306}
 /* ---------- Who decided strip: the sentence, the reading, the rules' answer ---------- */
-#strip{position:fixed;left:24px;bottom:104px;width:min(800px,calc(100vw - 48px));border-radius:26px;padding:14px 16px 12px;display:none}
+#strip{position:fixed;left:24px;bottom:var(--dockb);width:min(800px,calc(100vw - 48px));border-radius:26px;padding:14px 16px 12px;display:none}
 #strip.on{display:block;animation:sheetIn .45s var(--soft)}
 body.editing #strip{width:min(800px,calc(100vw - 592px))}
 #strip .shead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 10px}
@@ -261,8 +263,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   .chip .short{display:inline}
 }
 @media (min-width:1501px) and (max-width:2199px){
-  .chip[aria-pressed="true"] .ask{display:inline}
-  .chip[aria-pressed="true"] .short{display:none}
+  .chip.sel .ask{display:inline}
+  .chip.sel .short{display:none}
 }
 
 /* ---------- Laptop (1366 px): the dock, the tools and Show me fit in one row ---------- */
@@ -275,7 +277,7 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 
 /* ---------- Short screens (768 px): the fix sheet keeps its foot buttons in view ---------- */
 @media (max-height:820px){
-  #sheet{bottom:104px;max-height:calc(100vh - 124px);padding:8px 8px 6px}
+  #sheet{bottom:var(--dockb);max-height:calc(100vh - 124px);padding:8px 8px 6px}
   #sheet .lbl{padding:2px 8px 4px}
   .fcard{padding:6px 8px}
   .fcard .who{margin-bottom:4px}
@@ -288,14 +290,25 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
 @media (max-width:1100px){
   .chip .ask{display:none}
   .chip .short{display:inline}
+  :root{--dockb:164px}
+  #dock{border-radius:30px}
+  .dock-full{flex-wrap:wrap;justify-content:center;row-gap:6px}
+  #picker{flex-basis:100%;justify-content:center}
+  /* the floor rail would sit over the model left of a panel, so it waits while one is open */
+  body:has(#sheet.on) #floors,body:has(#banner.on) #floors,body.editing #floors{display:none}
 }
 
 /* ---------- Compact (phone) ---------- */
 @media (max-width:700px){
+  :root{--dockb:192px}
+  #floors{display:none} /* no room beside the model on a phone; drag and pinch still move the view */
+  #picker{flex-wrap:wrap;row-gap:6px}
+  #summary{max-width:calc(100vw - 16px)}
+  #summary .schips{flex-wrap:wrap;justify-content:center;row-gap:6px}
   #dock{left:8px;right:8px;bottom:8px;transform:none;padding:6px;max-width:none;width:auto;border-radius:30px}
   .dock-full{flex-wrap:wrap;row-gap:6px;width:100%}
   #picker{flex-basis:100%}
-  #picker .chip{flex:1;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
+  #picker .chip{flex:1 1 30%;min-width:0;justify-content:center;height:44px;padding:0 8px 0 5px;gap:6px;font-size:14px}
   #picker .dot{width:24px;height:24px;font-size:13px}
   .scroller{flex:1;padding:2px 22px 2px 2px;-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent 96%)}
   .scroller > .sep:first-of-type{display:none}
@@ -311,17 +324,22 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   #summary .sline{flex-basis:100%;justify-content:center;gap:8px}
   .schip .word{font-size:16px}
   #scorePanel{top:120px;max-height:calc(100vh - 440px)}
-  #sheet{left:8px;right:8px;width:auto;bottom:136px;max-height:45vh}
-  #editPanel{bottom:136px;left:8px;right:8px;width:auto}
+  #sheet{left:8px;right:8px;width:auto;bottom:var(--dockb);max-height:45vh}
+  #editPanel{bottom:var(--dockb);left:8px;right:8px;width:auto}
   #strip,body.editing #strip{top:96px;bottom:auto;left:8px;right:8px;width:auto;max-height:50vh;overflow:auto}
   #strip .boxes{grid-template-columns:1fr} #strip .arrow,#strip .caps{display:none}
   #hint:not(.open){right:auto;width:max-content}
   #hint,body.editing #hint{top:calc(114px + var(--strip-h,0px));bottom:auto;left:8px;right:8px;width:auto;max-height:max(110px,calc(55vh - 232px - var(--strip-h,0px)));overflow:auto}
-  #banner{left:8px;right:8px;width:auto;bottom:136px}
-  #votes{top:auto;bottom:136px;left:8px;right:8px;width:auto;max-height:35vh}
+  #banner{left:8px;right:8px;width:auto;bottom:var(--dockb)}
+  #votes{top:auto;bottom:var(--dockb);left:8px;right:8px;width:auto;max-height:35vh}
   body.editing #votes,body:has(#sheet.on) #votes,body:has(#banner.on) #votes{display:none}
   #banner .sub{font-size:16px}
 }
+#loading{position:fixed;left:50%;top:84px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:999px;font:600 15px/1.2 var(--font);color:var(--ink)}
+#loading.on{display:flex}
+#credit{position:fixed;right:10px;bottom:2px;display:none;padding:1px 8px;border-radius:8px;background:rgba(255,255,255,.82);font:500 12px/1.4 var(--font);color:var(--muted);pointer-events:none}
+#credit.on{display:block}
+@media (max-width:700px){#credit{bottom:auto;top:2px;right:2px;font-size:11px}}
 @keyframes sheetIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}
@@ -362,6 +380,8 @@ body.editing #strip{width:min(800px,calc(100vw - 592px))}
   <div id="strip" class="glass" role="region" aria-label="Who decided" aria-live="polite"></div>
   <div id="hint" class="glass" role="region" aria-label="Hint" aria-live="polite"></div>
   <div id="votes" class="glass" role="region" aria-label="Review panel" aria-live="polite"></div>
+  <div id="loading" class="glass" role="status"><span class="spinner" aria-hidden="true"></span>Loading the city around the tower</div>
+  <div id="credit">City block: Cityweft. Map data: OpenStreetMap contributors</div>
   <span id="escHint" hidden>Pick a question first</span>
 </div>
 <script type="module" src="/app/main.ts"></script>

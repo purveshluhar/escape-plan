@@ -18,7 +18,7 @@ test('the demo buttons come from the full-demo case, in order, with readable lab
   // Then the smoke fix (the smoke case's widen is the demo's own, so it shows once).
   assert.deepEqual(buttons.map((b) => b.edit), [...demo.edits.filter((e) => e.op !== 'reset'), { op: 'close_door', target: 'lobby-door', value: null, source: 'button' }]);
   assert.deepEqual(buttons.map((b) => b.label), [
-    'Widen plant shaft to 2 m',
+    'Widen plant shaft to 2.0 m',
     'Add transfer beam at beam B2',
     'Add ramp at terrace door',
     'Widen lobby door to 1.6 m',

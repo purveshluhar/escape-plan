@@ -24,6 +24,7 @@ import { createPerfOverlay, perfEnabled } from './perf.ts';
 import { localState, planRun, runItem, tokenClock, turnToward, walkClock, yawOf, TIMING } from './timeline.ts';
 import type { LocalState, Plan, RunItem } from './timeline.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
+import type { LabelSide } from './labels.ts';
 import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
 import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
@@ -103,6 +104,7 @@ const LABEL_GAP = 36; // pixels from the X centre to its label
 const LABEL_HEIGHT = 56; // pixels, about two lines of label
 const LABEL_HEIGHT_CALLOUT = 88; // pixels, and the measurement chip under the title
 const MEMBER_OPACITY = 0.9;
+const MEMBER_FADE = 0.7; // share of a holding member's opacity that fades out as the facade opens
 const ROOM_LABEL_HEIGHT = 16; // pixels, one line of room name
 const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px caps with 1.2 px tracking
 const UP = new THREE.Vector3(0, 1, 0);
@@ -219,14 +221,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
   // Members drawn over the building, with their height: hidden with the floors when the facade opens.
-  let memberMarks: { objs: THREE.Object3D[]; y: number }[] = [];
+  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[] }[] = [];
   let beating: THREE.MeshLambertMaterial[] = []; // members drawn red: they blink after the run, then stay red
   let roomTags: { obj: CSS2DObject; text: string }[] = [];
   // A label per level ("Level 10"), pinned left of its floor plate; shown only while the facade is open.
   interface FloorTag { obj: CSS2DObject; text: string; elevation: number; rect: ScreenRect | null; free: boolean; w?: number }
   let floorTags: FloorTag[] = []; // highest first: the open floor wins a clash
   let exitRects: ScreenRect[] = []; // exit names on screen, kept by fit()
-  let failSides: ('left' | 'right' | 'above')[] = [];
+  let failSides: LabelSide[] = [];
   let extent = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
   let chromeCheckedAt = 0;
   let avoidBoxes: ScreenRect[] = []; // options.avoid, measured with the panels
@@ -296,19 +298,26 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       if (red.has(m.id)) beating.push(mat);
       const geometry = new THREE.BoxGeometry(...m.size);
       const mesh = new THREE.Mesh(geometry, mat);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: TEXT }));
+      const line = new THREE.LineBasicMaterial({ color: TEXT, transparent: true });
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), line);
       for (const o of [mesh, edges]) {
         o.position.set(...m.center);
         o.rotation.y = m.yaw;
         fx.add(o);
       }
-      memberMarks.push({ objs: [mesh, edges], y: m.center[1] });
+      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: red.has(m.id) ? [] : [mat, line] });
     }
   }
 
   // A member on a hidden floor goes with it (tokens and their routes stay drawn, as always).
+  // Zoomed in, a member that holds (not the red one) fades back, so it does not hide the plan, the
+  // doors and the things at them; the red member stays strong.
   function cutMembers(): void {
-    for (const { objs, y } of memberMarks) for (const o of objs) o.visible = opened <= 0 || y < pickCeiling;
+    for (const { objs, y, mats } of memberMarks) {
+      for (const o of objs) o.visible = opened <= 0 || y < pickCeiling;
+      const k = 1 - MEMBER_FADE * Math.max(0, opened);
+      for (const m of mats) m.opacity = m instanceof THREE.LineBasicMaterial ? k : MEMBER_OPACITY * k;
+    }
   }
 
   function buildRuns(b: Building, results: SolverResult[]): void {
@@ -504,12 +513,17 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     exitRects = kept.map((k) => ({ left: k.x - k.w / 2, right: k.x + k.w / 2, top: k.y - ROOM_LABEL_HEIGHT / 2, bottom: k.y + ROOM_LABEL_HEIGHT / 2 }));
 
     const xs = runs.flatMap((r) => (r.x ? [r.x] : []));
-    const sides = labelSides(xs.map(({ at, width }) => {
+    // The selection caption is text too: a card keeps clear of where it was last drawn.
+    const face = captionObj?.visible && captionObj.element.isConnected ? captionObj.element.firstElementChild : null;
+    const at0 = renderer.domElement.getBoundingClientRect();
+    const cap = face?.getBoundingClientRect();
+    const avoid = cap && cap.width > 0 ? [{ l: cap.left - at0.left, r: cap.right - at0.left, t: cap.top - at0.top, b: cap.bottom - at0.top }] : [];
+    const sides = labelSides(xs.map(({ at, width, card }) => {
       const v = at.clone().project(camera);
-      return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width };
-    }), { height: xs.some((x) => x.callout) ? LABEL_HEIGHT_CALLOUT : LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8 });
+      return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width: card?.w ?? width, height: card?.h };
+    }), { height: xs.some((x) => x.callout) ? LABEL_HEIGHT_CALLOUT : LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8, avoid });
     xs.forEach(({ obj }, i) => {
-      for (const side of ['left', 'right', 'above']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
+      for (const side of ['left', 'right', 'above', 'none']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
     });
     failSides = sides;
   }
@@ -557,6 +571,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       const wd = run.x!.card?.w ?? run.x!.width;
       const ht = run.x!.card?.h ?? LABEL_HEIGHT + 8;
       const side = failSides[i] ?? 'right';
+      if (side === 'none') return void out.push({ left: x - 30, right: x + 30, top: y - 30, bottom: y + 30 }); // its card is left out
       const card = side === 'right' ? { left: x + LABEL_GAP, right: x + LABEL_GAP + wd, top: y - ht / 2, bottom: y + ht / 2 }
         : side === 'left' ? { left: x - LABEL_GAP - wd, right: x - LABEL_GAP, top: y - ht / 2, bottom: y + ht / 2 }
           : { left: x - wd / 2, right: x + wd / 2, top: y - 32 - ht, bottom: y - 32 };
@@ -820,7 +835,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const face = captionObj?.visible && captionObj.element.isConnected ? captionObj.element.firstElementChild : null;
     const shown = face ? box(face) : null;
     const tags = roomTags.filter((tag) => tag.obj.visible);
-    const hidden = coveredBy(shown, tags.map((tag) => box(tag.obj.element)));
+    const rects = tags.map((tag) => box(tag.obj.element));
+    // The fail cards and red Xs on screen cover an exit name the same way the caption does.
+    const marks = runs.flatMap((r) => (r.x && r.x.obj.visible && r.x.obj.element.isConnected ? [...r.x.obj.element.querySelectorAll('.ep-x, .ep-card')] : []))
+      .filter((el) => (el as HTMLElement).offsetWidth > 0).map(box);
+    const hidden = [shown, ...marks].reduce((acc, over) => coveredBy(over, rects).map((c, i) => c || acc[i]!), rects.map(() => false));
     tags.forEach((tag, i) => (tag.obj.element.style.visibility = hidden[i] ? 'hidden' : ''));
   }
 
@@ -1238,6 +1257,7 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
 .side-right .ep-card { left: ${LABEL_GAP}px; }
 .side-left .ep-card { right: ${LABEL_GAP}px; }
 .side-above .ep-card { left: 0; top: ${X_LIFT - 32}px; transform: translate(-50%, -100%); }
+.side-none .ep-card { display: none; }
 .ep-callout { margin-top: 6px; width: max-content; font: 700 20px/1 ${FONT_DATA}; color: ${FAIL_INK}; background: ${FAIL_TINT};
   border-radius: 8px; padding: 5px 9px; }
 .ep-flash { width: 0; height: 0; z-index: 100000 !important; }

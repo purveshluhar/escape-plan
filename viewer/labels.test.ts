@@ -101,3 +101,22 @@ test('one step is "1 step", on the model as on the sheet', () => {
   const tie = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 1, available: 1 }));
   assert.equal(tie?.detail, 'Office door: needs 1 step, has 1 step');
 });
+
+test('a card that would cover another card, another red X or the caption is left out, not drawn over it', () => {
+  // Six Xs in a tight cluster (six questions asked): no side is free for every card.
+  const spots = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 400 + (i % 3) * 20, y: 300 + Math.floor(i / 3) * 20, width: 220 }));
+  const sides = labelSides(spots, layout);
+  assert.ok(sides.includes('none'), `sides ${sides}`);
+  assert.ok(sides.some((s) => s !== 'none'), 'at least one card still shows');
+});
+
+test('a card keeps clear of a box it must avoid (the selection caption)', () => {
+  const caption = { l: 430, r: 700, t: 280, b: 320 };
+  assert.deepEqual(labelSides([{ x: 400, y: 300, width: 200 }], { ...layout, avoid: [caption] }), ['left']);
+});
+
+test('a card uses its measured height when it has one', () => {
+  // A tall card (callout) right of the X would reach the X below it; the short estimate would not.
+  const spots = [{ x: 400, y: 300, width: 200, height: 120 }, { x: 480, y: 360, width: 200 }];
+  assert.notEqual(labelSides(spots, layout)[0], 'right');
+});

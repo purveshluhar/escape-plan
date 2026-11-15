@@ -7,6 +7,7 @@ import { isMemberStart } from '../viewer/drop.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { REASON_TEXT, placeName } from './scoreboard.ts';
 import type { DemoButton } from './state.ts';
+import { questionOf } from './questions.ts';
 
 // ---------- Dock picker ----------
 
@@ -22,13 +23,17 @@ export interface PickItem {
 
 // The questions the dock offers: every token in the building in data order, or with a `roster`
 // (the MVP set) only those tokens, in roster order. Nothing else shows: no "Later" chips.
+// The glyph is the discipline's letter, unless two dock questions share a discipline: the sofa is
+// logistics like the glass ("G"), and "S" is the smoke's, so it reads "So".
+const GLYPH: Partial<Record<Id, string>> = { sofa: 'So' };
+
 export function pickerItems(building: Building, roster?: readonly Id[]): PickItem[] {
   const play = roster ? roster.flatMap((id) => building.tokens.filter((t) => t.id === id)) : building.tokens;
   return play.map((t: Token, i): PickItem => {
     const s = DISCIPLINE_STYLE[t.discipline];
     return {
       token: t.id, discipline: t.discipline, label: tokenName(t.id),
-      glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: i < 9 ? i + 1 : null,
+      glyph: GLYPH[t.id] ?? s.glyph, color: s.color, glyphInk: s.glyphInk, key: i < 9 ? i + 1 : null,
     };
   });
 }
@@ -67,7 +72,10 @@ export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Bui
 export function tokenCaption(building: Building, token: Id, result: SolverResult | null, running = false): string {
   const t = building.tokens.find((x) => x.id === token);
   const where = t ? placeName(building, t.start) : '';
+  // The smoke question's answer is the people's (questions.ts subject): "People: No, too narrow".
+  const subject = questionOf(token)?.subject;
   const state = running ? 'Checking' : !result ? 'Ready'
+    : subject ? `${subject}: ${result.status === 'pass' ? 'Yes' : `No, ${REASON_TEXT[result.reason ?? 'no_route']}`}`
     : result.status === 'pass' ? 'Yes'
     : `No: ${REASON_TEXT[result.reason ?? 'no_route']}`;
   return [tokenName(token), where, state].filter(Boolean).join(' - ');

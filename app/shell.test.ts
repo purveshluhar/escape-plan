@@ -155,7 +155,8 @@ test('a selected object says where it is and how it did', () => {
 test('the all-yes banner shows with the Answers panel open, in the empty fix sheet slot, never over the panel', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(page, /body\.scoring #banner\.on\{display:none\}/);
-  assert.match(page, /#banner\{position:fixed;right:24px;bottom:104px;/, 'the banner sits where the fix sheet sits (empty when all is yes)');
+  assert.match(page, /#banner\{position:fixed;right:24px;bottom:var\(--dockb\);/, 'the banner sits where the fix sheet sits (empty when all is yes)');
+  assert.match(page, /#sheet\{position:fixed;right:24px;bottom:var\(--dockb\);/, 'the fix sheet sits in the same slot');
   const laptop = page.slice(page.indexOf('@media (max-width:1500px)'));
   assert.doesNotMatch(laptop.slice(0, laptop.indexOf('}\n}')), /#btnEscape kbd/, 'Show me keeps its Space hint on a laptop');
 });
@@ -182,4 +183,20 @@ test('keys: Space and Enter run Show me on the page, but on a focused button the
   assert.equal(showMeKey(' ', true), false);
   assert.equal(showMeKey('Enter', true), false);
   assert.equal(showMeKey('a', false), false);
+});
+
+test('each dock question has its own glyph, led by its name (the sofa is not "G" for glass)', () => {
+  const items = pickerItems(building, ['wheelchair', 'sofa', 'people', 'chiller', 'load', 'smoke']);
+  for (const it of items) assert.equal(it.glyph.charAt(0), it.label.charAt(0), `${it.label} glyph ${it.glyph}`);
+  assert.equal(new Set(items.map((i) => i.glyph)).size, items.length, 'no two glyphs are the same');
+});
+
+test('the smoke caption gives the answer as the people\'s, not as if the smoke were stuck at a door', () => {
+  const smoke = (building as Building).tokens.some((t) => t.id === 'smoke') ? building : null;
+  const b = smoke ?? { ...building, tokens: [...building.tokens, { ...building.tokens[0]!, id: 'smoke' }] };
+  const no: SolverResult = { ...res('smoke', 'fail'), reason: 'too_narrow' };
+  const caption = tokenCaption(b, 'smoke', no);
+  assert.match(caption, /People: No, too narrow$/, caption);
+  assert.match(tokenCaption(b, 'smoke', res('smoke', 'pass')), /People: Yes$/);
+  assert.match(tokenCaption(b, 'smoke', null), /Ready$/);
 });

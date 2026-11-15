@@ -2,7 +2,7 @@
 // replay data/expected.json without a browser. Owner: P3.
 import type { Building, Edit, ExpectedFile, SolverResult } from '../contract/types.ts';
 import { applyEdits, solve } from '../solver/index.ts';
-import { placeName } from './scoreboard.ts';
+import { metres, placeName } from './scoreboard.ts';
 
 // The case whose edits become the demo buttons, in order. P5 keeps it current in expected.json.
 export const DEMO_CASE = 'full-demo';
@@ -26,9 +26,6 @@ export interface Solved {
 
 export const initialState = (): GameState => ({ edits: [] });
 
-function metres(v: number): string {
-  return `${Number(v.toFixed(2))} m`;
-}
 
 export function editLabel(building: Building, edit: Edit): string {
   const name = edit.target ? placeName(building, edit.target) : '';

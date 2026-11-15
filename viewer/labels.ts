@@ -78,6 +78,7 @@ export interface LabelSpot {
   x: number; // red X centre on screen, pixels
   y: number;
   width: number; // label box width, pixels
+  height?: number; // the card's measured height, when it has been laid out (else the layout's)
 }
 export interface LabelLayout {
   height: number; // label box height
@@ -85,22 +86,27 @@ export interface LabelLayout {
   minX: number; // free screen, left and right edges
   maxX: number;
   xSize?: number; // half the size of a red X
+  avoid?: readonly Rect[]; // boxes a card must not cover (the selection caption)
 }
 
 export interface Rect { l: number; r: number; t: number; b: number }
 const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
-export type LabelSide = 'right' | 'left' | 'above';
+// 'none': every side covers another card, another red X or a box to avoid, so the card is left out
+// and only its X shows (the fix sheet still says it). Text is never drawn over text.
+export type LabelSide = 'right' | 'left' | 'above' | 'none';
 const SIDES: LabelSide[] = ['right', 'left', 'above'];
+const offEdge = (r: Rect, minX: number, maxX: number): number => (r.l < minX || r.r > maxX ? 1 : 0);
 
 export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[] {
-  const { height, gap, minX, maxX, xSize = 26 } = layout;
+  const { gap, minX, maxX, xSize = 26, avoid = [] } = layout;
   const marks: Rect[] = spots.map((p) => ({ l: p.x - xSize, r: p.x + xSize, t: p.y - xSize, b: p.y + xSize }));
   const placed: Rect[] = [];
   const sides: LabelSide[] = new Array(spots.length).fill('right');
   const order = spots.map((_, i) => i).sort((a, b) => spots[a]!.y - spots[b]!.y);
   for (const i of order) {
     const p = spots[i]!;
+    const height = p.height ?? layout.height;
     const box = (side: LabelSide): Rect => {
       if (side === 'above') {
         const b = p.y - xSize - 6;
@@ -112,12 +118,18 @@ export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[]
     const clashes = (r: Rect): number =>
       marks.filter((m, j) => j !== i && overlaps(r, m)).length
       + placed.filter((q) => overlaps(r, q)).length
-      + (r.l < minX || r.r > maxX ? 1 : 0);
+      + avoid.filter((q) => overlaps(r, q)).length
+      + offEdge(r, minX, maxX);
     let best: { side: LabelSide; rect: Rect; n: number } | null = null;
     for (const side of SIDES) {
       const rect = box(side);
       const n = clashes(rect);
       if (!best || n < best.n) best = { side, rect, n };
+    }
+    // Off the edge alone is a lesser harm than covering text, so only a clash with something else leaves a card out.
+    if (best!.n - offEdge(best!.rect, minX, maxX) > 0) {
+      sides[i] = 'none';
+      continue;
     }
     sides[i] = best!.side;
     placed.push(best!.rect);

@@ -371,8 +371,12 @@ function render(): void {
   const resOf = resultOf;
 
   // Picker chips
+  // One asked chip shows its question as a sentence on a projector (index.html, .sel): the one picked
+  // last. Six sentences do not fit one dock.
+  const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : S.placed.at(-1) ?? null;
   for (const b of $('picker').querySelectorAll<HTMLButtonElement>('.chip')) {
     b.setAttribute('aria-pressed', String(S.placed.includes(b.dataset.token!)));
+    b.classList.toggle('sel', b.dataset.token === sel);
     b.disabled = running;
   }
   viewer.setDragEnabled(!running);
@@ -442,8 +446,8 @@ function render(): void {
   renderEdit();
   renderHintPanel();
   renderVotes($('votes'), building, panel, () => { closePanel(); render(); });
-  const sel = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
-  viewer.select(sel, sel === null ? null : tokenCaption(b, sel, resOf(sel), running));
+  const picked = S.selected !== null && S.placed.includes(S.selected) ? S.selected : null;
+  viewer.select(picked, picked === null ? null : tokenCaption(b, picked, resOf(picked), running));
 }
 
 // One card per No answer: who asks, the question, the reason, the numbers and the fixes that matter.
@@ -655,10 +659,15 @@ render();
 
 // The Cityweft block and the real 432 Park typical floor, each only when this machine has the files
 // (data/README.md). No ground otherwise; the graph's rooms are never drawn as boxes, and the viewer draws no grid.
+// The city block is about 23 MB: say so while it loads, and credit its sources once it is in.
+const loading = $('loading');
+loading.classList.add('on');
 Promise.all([
   loadBackdrop().catch((err: unknown) => (console.warn('Cityweft backdrop not loaded:', err), null)),
   loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
 ]).then(([block, floor]) => {
+  loading.classList.remove('on');
+  $('credit').classList.toggle('on', block !== null);
   if (!block && !floor) return;
   Object.assign(context3d, { block, floor, dimmed: 0 });
   const context = new THREE.Group();
