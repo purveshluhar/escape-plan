@@ -1,7 +1,7 @@
 // Cityweft backdrop: the real 432 Park Avenue block under our self-made tower, on a machine that
 // has fetched it (node --env-file=.env data/cityweft-fetch.ts). The files live in git-ignored
-// data/cityweft/ and are only served by the dev server, so a fresh clone or a build shows the
-// plain ground (docs/adr/0004). Owner: P3. The pure placement math is tested in backdrop.test.ts.
+// data/cityweft/ and are only served by the dev server, so a fresh clone or a build shows no
+// city and no ground (docs/adr/0004). Owner: P3. The pure placement math is tested in backdrop.test.ts.
 
 // Manhattan's street grid runs about 29 degrees clockwise of true north.
 export const GRID_TURN_DEG = 29;

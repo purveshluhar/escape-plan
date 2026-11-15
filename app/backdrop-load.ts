@@ -1,7 +1,7 @@
 // Loads the fetched Cityweft block (git-ignored data/cityweft/) for the viewer's backdrop. Browser
 // only; the placement math is in backdrop.ts. Resolves to null when the block is not on this
-// machine (a fresh clone, or a build: neither has data/cityweft/), so the game keeps the plain
-// ground. Owner: P3.
+// machine (a fresh clone, or a build: neither has data/cityweft/); the game then has no ground
+// under the tower. Owner: P3.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CUT_HEIGHT, backdropMatrix, coversPoint, layerColor, metaToBlock } from './backdrop.ts';

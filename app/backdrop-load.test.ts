@@ -3,7 +3,7 @@ import { afterEach, test } from 'node:test';
 import { loadBackdrop } from './backdrop-load.ts';
 
 // The Cityweft block is git-ignored (docs/adr/0004), so a fresh clone has no data/cityweft/.
-// loadBackdrop must then resolve to null and the game keeps the plain ground.
+// loadBackdrop must then resolve to null, and the game goes on without the city.
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;

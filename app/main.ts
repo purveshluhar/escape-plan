@@ -399,7 +399,7 @@ idle();
 render();
 
 // The Cityweft block and the real 432 Park typical floor, each only when this machine has the files
-// (data/README.md). Plain ground otherwise; the graph's rooms are never drawn as boxes.
+// (data/README.md). No ground otherwise; the graph's rooms are never drawn as boxes, and the viewer draws no grid.
 Promise.all([
   loadBackdrop().catch((err: unknown) => (console.warn('Cityweft backdrop not loaded:', err), null)),
   loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
