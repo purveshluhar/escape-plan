@@ -27,6 +27,11 @@ real tests.
   `clearance.ts` (chiller) does this with width and height only, and adds `shaft`.
 - `shortest-exit.ts`: people. It calls `walk()` with width and height only, and adds `time`:
   the edges walked on a pass, null on a fail.
+- `downhill.ts`: water (T2). It walks `drain_route` edges one way, from `from` to `to`. Each
+  edge must fall at least 1 % over the plan distance between the two box centres (`uphill`),
+  and must not cross a beam or transfer beam unless sleeved (`crosses_beam`). It has its own
+  one-way search, so `search.ts` stays two-way. `downhill.test.ts` uses a fixture until P5 adds
+  water data.
 - `downward.ts`: the load. It walks `supported_by` to a foundation and holds `cutOf()`, the
   shaft-breaks-beam cut (also for `supply` later).
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
