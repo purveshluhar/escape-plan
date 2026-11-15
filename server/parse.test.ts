@@ -191,3 +191,53 @@ test('review: a negated order stays below 0.8', () => {
     assert.ok(run(text).op.confidence < JEV_ACCEPT_CONFIDENCE, text);
   }
 });
+
+// ---------- Adversarial review, round 2 ----------
+
+test('review 2: plain demo sentences still apply at once', () => {
+  sure('widen the plant shaft to 2 m please', 'widen', 'plant-shaft', 2);
+  sure('widen the lobby door to 1.6m.', 'widen', 'lobby-door', 1.6);
+  sure('Widen the plant shaft to 2 m!', 'widen', 'plant-shaft', 2);
+  sure('add a ramp at the terrace door, please', 'add_ramp', 'terrace-door', null);
+  sure('add a ramp at the terrace door so there are no steps', 'add_ramp', 'terrace-door', null);
+  sure('widen the plant shaft to 2 m so it is not too narrow', 'widen', 'plant-shaft', 2);
+  sure('widen the plant shaft to "2 m"', 'widen', 'plant-shaft', 2);
+  sure('widen the plant shaft to [2 m]', 'widen', 'plant-shaft', 2);
+  sure('reset everything', 'reset', targets[0]!.id, null);
+});
+
+test('review 2: a relative width stays below 0.8', () => {
+  for (const tail of ['by another 1 m', 'an extra 1 m', 'plus 1 m', 'by up to 2 m', '2 m wider', 'to 50 cm more', 'from 1 m']) {
+    const p = run(`widen the plant shaft ${tail}`);
+    assert.ok(p.value !== null && p.value.confidence < JEV_ACCEPT_CONFIDENCE, tail);
+  }
+});
+
+test('review 2: contractions and "cancel" negate the op', () => {
+  for (const text of ["I wouldn't widen the plant shaft to 2 m", "we shouldn't widen the plant shaft to 2 m",
+    "can't close the lobby door", 'cancel: widen the plant shaft to 2 m', 'dont widen the plant shaft to 2 m']) {
+    assert.ok(run(text).op.confidence < JEV_ACCEPT_CONFIDENCE, text);
+  }
+});
+
+test('review 2: a reset that also names a target or a value is not sure', () => {
+  for (const text of ['reset the plant shaft to 2 m', 'reset the lobby door to open', 'reset to 2 m']) {
+    const p = run(text);
+    assert.equal(p.op.choice, 'reset', text);
+    assert.ok(!accepted(p), text);
+  }
+  assert.equal(run('reset the lobby door').target.choice, 'lobby-door');
+});
+
+test('review 2: a name used to say where makes the target unclear', () => {
+  for (const text of ['close the door by the lobby', 'close the door next to the lobby', 'widen the door near the plant shaft to 2 m']) {
+    assert.ok(run(text).target.confidence < JEV_ACCEPT_CONFIDENCE, text);
+  }
+});
+
+test('review 2: "Did you mean" offers the number after "to", and the value is not a name word', () => {
+  const p = run('widen the plant shaft, which is 1 m, to 2 m');
+  assert.equal(p.value?.score, 2);
+  assert.ok(p.value!.confidence < JEV_ACCEPT_CONFIDENCE);
+  assert.notEqual(run('widen the door to 2 m').target.choice, 'unit2-door');
+});

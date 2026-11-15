@@ -28,18 +28,19 @@ export interface ServerConfig {
   decider: DeciderName;
 }
 
-// Reads HOST, PORT and DECIDER (from .env through `npm run server`, or the shell). An empty value
-// means "not set". A HOST other than 127.0.0.1 is refused, never widened.
+// Reads SERVER_HOST, SERVER_PORT and DECIDER (from .env through `npm run server`, or the shell).
+// Not HOST and PORT: shells and tools export those for other reasons. An empty value means
+// "not set". A SERVER_HOST other than 127.0.0.1 is refused, never widened.
 export function readConfig(env: Record<string, string | undefined>): ServerConfig {
-  const host = env.HOST ?? '';
+  const host = env.SERVER_HOST ?? '';
   if (host !== '' && host !== HOST) {
-    throw new Error(`HOST=${JSON.stringify(host)} refused: this server listens on ${HOST} only (ADR 0008). Remove HOST or set it to ${HOST}.`);
+    throw new Error(`SERVER_HOST=${JSON.stringify(host)} refused: this server listens on ${HOST} only (ADR 0008). Remove SERVER_HOST or set it to ${HOST}.`);
   }
-  const rawPort = env.PORT ?? '';
+  const rawPort = env.SERVER_PORT ?? '';
   let port = DEFAULT_PORT;
   if (rawPort !== '') {
     if (!/^\d{1,5}$/.test(rawPort) || Number(rawPort) > 65535) {
-      throw new Error(`PORT=${JSON.stringify(rawPort)} refused: use a whole number from 0 to 65535.`);
+      throw new Error(`SERVER_PORT=${JSON.stringify(rawPort)} refused: use a whole number from 0 to 65535.`);
     }
     port = Number(rawPort);
   }

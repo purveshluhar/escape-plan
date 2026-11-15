@@ -29,8 +29,10 @@ they go behind the same `parse()`. Jev votes and the phone relay are tier 3.
 | Variable | Default | Meaning |
 |---|---|---|
 | `DECIDER` | `keywords` | Which parser fills `JevParse`. Only `keywords` (plan C) is built. Any other name stops the server at start. |
-| `PORT` | `8787` | Port on 127.0.0.1. |
-| `HOST` | `127.0.0.1` | Accepted only as `127.0.0.1`. Any other value stops the server at start. |
+| `SERVER_PORT` | `8787` | Port on 127.0.0.1. |
+| `SERVER_HOST` | `127.0.0.1` | Accepted only as `127.0.0.1`. Any other value stops the server at start. |
+
+The server does not read `HOST` or `PORT`, because shells and tools export those for other reasons.
 
 ## Route: `POST /parse`
 
@@ -54,15 +56,19 @@ curl -s http://127.0.0.1:8787/parse -H 'content-type: application/json' \
 
 - Op: the op's own word gives confidence 1 (`widen`, `ramp`, `transfer beam`, `close`, `sleeve`,
   `reset`). A near word (`wider`, `slope`, `shut`, `undo`) gives 0.6. Words for two different
-  ops (exact or near), or a negation (`not`, `don't`, `never`, `no`), give at most 0.4. No op word
-  gives 0. The op is always one of `request.ops`.
+  ops (exact or near), or a negation in the 3 words before the op word (`not`, `don't`,
+  `wouldn't`, `never`, `no`, `cancel`), give at most 0.4. No op word gives 0. The op is always one
+  of `request.ops`.
 - Target: a target's full name or id in the sentence gives 1. A longer name beats a name inside
-  it ("Lobby door" beats "Lobby"). Two different full names give 0.4. Part of a name gives at
+  it ("Lobby door" beats "Lobby"). Two different full names, or a place word in the 3 words before the name
+  (`by`, `near`, `next to`), give 0.4. Part of a name gives at
   most 0.6. Send only the targets on screen.
-- Reset: no target and no value. A sure reset fills the target slot with the first target at
-  confidence 1, so it never asks "Did you mean". An unsure reset (`undo`) keeps the target it read.
+- Reset: no target and no value. A sure reset ("reset", "reset everything") fills the target slot
+  with the first target at confidence 1, so it never asks "Did you mean". A reset that also names
+  a target or a number, or an unsure one (`undo`), gives at most 0.4 and keeps the target it read.
 - Value (widen only): one number with `m` or `cm` gives 1, a bare number 0.6. "from 1 m to 2 m"
   means 2 m. Two numbers otherwise, or a number with punctuation in it (`1,5`, `1/2`, `-2`, `1e3`),
-  give at most 0.4. "by 2 m" is a change, not a width, so it gives at most 0.6. The value must be
+  give at most 0.4. A change instead of a width ("by 2 m", "another 1 m", "50 cm more", "2 m wider",
+  "from 1 m") gives at most 0.6. When unclear, the number after "to" is offered. The value must be
   inside `value_range` and inside 0 to 5 m, or its confidence is 0. The score is always inside
   `value_range`.

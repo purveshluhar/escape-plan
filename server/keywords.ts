@@ -33,8 +33,17 @@ const PER_METRE: Record<string, number> = {
 
 // Words that never identify a target on their own.
 const STOP = new Set(['the', 'a', 'an', 'to', 'at', 'of', 'in', 'on', 'and', 'by', 'for']);
-// "don't widen" and "do not close" are not orders to apply.
-const NEGATIONS = new Set(['not', 'don', 'dont', 'never', 'no']);
+// "don't widen", "do not close" and "cancel: widen" are not orders to apply. Only the few words
+// before the op word count, so "add a ramp so there are no steps" still applies.
+const NEGATIONS = new Set(['not', 'never', 'no', 'cancel', 'dont', 'cant', 'wont', 'wouldnt', 'shouldnt', 'couldnt', 'didnt', 'isnt', 'mustnt']);
+const NEGATION_REACH = 3;
+const isNegation = (tokens: string[], i: number) =>
+  NEGATIONS.has(tokens[i]!) || (tokens[i] === 't' && (tokens[i - 1] ?? '').endsWith('n')); // n't
+// "by another 1 m", "50 cm more", "2 m wider": a change, not the new width.
+const RELATIVE = new Set(['by', 'another', 'extra', 'plus', 'more', 'additional', 'up', 'wider']);
+// "the door by the lobby": the name says where, not what.
+const LOCATION = new Set(['by', 'near', 'next', 'beside', 'behind', 'opposite', 'past', 'beyond']);
+const LOCATION_REACH = 3;
 
 const TOKEN = /\d+(?:\.\d+)?|\.\d+|[a-z]+/g;
 const isNumber = (w: string) => /^(\d|\.\d)/.test(w);
@@ -56,9 +65,9 @@ function tokenizeSentence(text: string): { tokens: string[]; clean: boolean[] } 
     const end = start + m[0].length;
     const before = t[start - 1] ?? ' ';
     const after = t[end] ?? ' ';
-    const okBefore = /[\s(]/.test(before);
+    const okBefore = /[\s("'[]/.test(before);
     const nextIsUnit = found[i + 1]?.index === end && Object.hasOwn(PER_METRE, tokens[i + 1]!);
-    const okAfter = /\s/.test(after) || nextIsUnit || (/[.,!?;:)]/.test(after) && /\s/.test(t[end + 1] ?? ' '));
+    const okAfter = /\s/.test(after) || nextIsUnit || (/[.,!?;:)"'\]]/.test(after) && /\s/.test(t[end + 1] ?? ' '));
     return okBefore && okAfter;
   });
   return { tokens, clean };
@@ -95,10 +104,12 @@ function pickTarget(tokens: string[], request: JevParseRequest, used: boolean[])
   const ids = new Set(kept.map((s) => s.id));
   if (ids.size > 0) {
     const best = [...kept].sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start)[0]!;
-    return { choice: best.id, confidence: ids.size === 1 ? SURE : MIXED };
+    const located = kept.some((k) => tokens.slice(Math.max(0, k.start - LOCATION_REACH), k.start).some((w) => LOCATION.has(w)));
+    return { choice: best.id, confidence: ids.size === 1 && !located ? SURE : MIXED };
   }
-  // No full name: score each target by the share of its name words the sentence has.
-  const said = new Set(tokens.filter((w) => !STOP.has(w)));
+  // No full name: score each target by the share of its name words the sentence has. The value
+  // ("2 m") is not a name word, so "widen the door to 2 m" does not point at "Unit 2 door".
+  const said = new Set(tokens.filter((w, i) => !STOP.has(w) && !(isNumber(w) && Object.hasOwn(PER_METRE, tokens[i + 1] ?? ''))));
   let bestId = first;
   let bestShare = 0;
   let tie = false;
@@ -129,7 +140,9 @@ function pickOp(tokens: string[], request: JevParseRequest, used: boolean[]): Je
   const offered = lead.find((h) => request.ops.includes(h.op));
   if (!offered) return fallback;
   let confidence = seen.size > 1 ? MIXED : exact.length > 0 ? SURE : NEAR;
-  if (tokens.some((w, i) => !used[i] && NEGATIONS.has(w))) confidence = Math.min(confidence, MIXED);
+  for (let i = Math.max(0, offered.at - NEGATION_REACH); i < offered.at; i++) {
+    if (!used[i] && isNegation(tokens, i)) confidence = Math.min(confidence, MIXED);
+  }
   return { choice: offered.op, confidence };
 }
 
@@ -152,10 +165,12 @@ function pickValue(tokens: string[], clean: boolean[], request: JevParseRequest,
   const to = readings.filter((r) => r.before === 'to');
   const fromTo = to.length === 1 && readings.every((r) => r.before === 'to' || r.before === 'from');
   const one = readings.length === 1 ? readings[0]! : fromTo ? to[0]! : null;
-  const pick = one ?? readings.find((r) => r.unit) ?? readings[0]!;
+  // When unclear, "Did you mean" offers the number after "to" first.
+  const pick = one ?? (to.length === 1 ? to[0]! : null) ?? readings.find((r) => r.unit) ?? readings[0]!;
   let conf = one === null ? MIXED : pick.unit ? SURE : NEAR;
   if (!readings.every((r) => r.clean)) conf = Math.min(conf, MIXED);
-  if (pick.before === 'by') conf = Math.min(conf, NEAR); // "widen by 2 m" is a change, not a width
+  const relative = pick.before === 'from' || tokens.some((w, i) => !used[i] && RELATIVE.has(w));
+  if (relative) conf = Math.min(conf, NEAR);
   if (!(pick.metres >= lo && pick.metres <= hi)) conf = NONE;
   return { score: clamp(pick.metres), confidence: conf };
 }
@@ -170,7 +185,12 @@ export function keywordParse(request: JevParseRequest): JevParse {
   const target = pickTarget(tokens, request, used);
   const op = pickOp(tokens, request, used);
   // A sure reset has no target: the slot is filled from the list and is not in doubt (decider
-  // spike). An unsure reset keeps the target it read, so "Did you mean" shows the right one.
-  if (op.choice === 'reset' && op.confidence === SURE) return { op, target: { choice: request.targets[0]!.id, confidence: SURE }, value: null };
+  // spike). "reset the plant shaft to 2 m" names a target or a value too, so it is not sure. An
+  // unsure reset keeps the target it read, so "Did you mean" shows the right one.
+  if (op.choice === 'reset' && op.confidence === SURE) {
+    const more = used.some(Boolean) || tokens.some((w, i) => !used[i] && isNumber(w));
+    if (!more) return { op, target: { choice: request.targets[0]!.id, confidence: SURE }, value: null };
+    return { op: { choice: 'reset', confidence: MIXED }, target, value: null };
+  }
   return { op, target, value: op.choice === 'widen' ? pickValue(tokens, clean, request, used) : null };
 }

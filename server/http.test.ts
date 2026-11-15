@@ -13,7 +13,7 @@ let server: Server;
 let port = 0;
 
 before(async () => {
-  server = await startServer(readConfig({ PORT: '0' }));
+  server = await startServer(readConfig({ SERVER_PORT: '0' }));
   port = (server.address() as AddressInfo).port;
 });
 after(() => new Promise<void>((done) => server.close(() => done())));
@@ -55,14 +55,16 @@ test('listens on 127.0.0.1 only', () => {
 
 test('config refuses a non-local bind, a bad port and an unknown DECIDER', () => {
   assert.equal(readConfig({}).decider, 'keywords');
-  assert.equal(readConfig({ HOST: '127.0.0.1', PORT: '8787' }).port, 8787);
-  // An empty line in .env (HOST=) means "not set", so it takes the default.
-  assert.deepEqual(readConfig({ HOST: '', PORT: '', DECIDER: '' }), readConfig({}));
-  for (const HOST of ['0.0.0.0', '::', '[::]', '::1', 'localhost', '192.168.1.20', ' 127.0.0.1']) {
-    assert.throws(() => readConfig({ HOST }), /HOST/, HOST);
+  assert.equal(readConfig({ SERVER_HOST: '127.0.0.1', SERVER_PORT: '8787' }).port, 8787);
+  // An empty line in .env (SERVER_HOST=) means "not set", so it takes the default.
+  assert.deepEqual(readConfig({ SERVER_HOST: '', SERVER_PORT: '', DECIDER: '' }), readConfig({}));
+  for (const SERVER_HOST of ['0.0.0.0', '::', '[::]', '::1', 'localhost', '192.168.1.20', ' 127.0.0.1']) {
+    assert.throws(() => readConfig({ SERVER_HOST }), /SERVER_HOST/, SERVER_HOST);
   }
-  for (const PORT of ['abc', '-1', '65536', '1.5', ' 80']) assert.throws(() => readConfig({ PORT }), /PORT/, PORT);
+  for (const SERVER_PORT of ['abc', '-1', '65536', '1.5', ' 80']) assert.throws(() => readConfig({ SERVER_PORT }), /SERVER_PORT/, SERVER_PORT);
   assert.throws(() => readConfig({ DECIDER: 'strands' }), /DECIDER/);
+  // A HOST or PORT the shell exports for something else is not read.
+  assert.deepEqual(readConfig({ HOST: 'my-laptop.local', PORT: '3000' }), readConfig({}));
 });
 
 test('POST /parse returns a JevParse that passes the contract schema', async () => {
