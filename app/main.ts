@@ -58,11 +58,14 @@ const viewer = createViewer($('viewer'), {
   onZoom: (zoom) => setCutHeight(cutHeight(zoom)),
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
-    S.note = `${itemOf(token).label} not placed: drop it on a floor of the tower`;
+    const what = S.placed.includes(token) ? 'not moved' : 'not placed';
+    S.note = `${itemOf(token).label} ${what}: drop it on a floor of the tower`;
     render();
   },
   onSelect: (token) => {
     S.selected = token;
+    // The caption on the model is inside the 3D view, which screen readers skip; say it here too.
+    if (token !== null && S.placed.includes(token)) S.note = tokenCaption(edited(), token, resultOf(token));
     render();
   },
 });
@@ -243,10 +246,15 @@ function submitText(text: string): void {
 
 // ---------- Render ----------
 
+// A placed object's answer from the last run, once its walk has finished playing.
+function resultOf(id: Id): Answer | null {
+  const done = S.phase === 'result' || S.phase === 'complete';
+  return done && S.results ? S.results.find((r) => r.token === id) ?? null : null;
+}
+
 function render(): void {
   const running = S.phase === 'running';
-  const done = S.phase === 'result' || S.phase === 'complete';
-  const resOf = (id: Id): Answer | null => (done && S.results ? S.results.find((r) => r.token === id) ?? null : null);
+  const resOf = resultOf;
 
   // Picker chips
   for (const b of $('picker').querySelectorAll<HTMLButtonElement>('.chip')) {
@@ -342,7 +350,8 @@ function fixCard(r: Answer, b: Building): HTMLElement {
   const it = itemOf(r.token);
   // The buttons for where it is stuck now, and for anything expected.json says it gets stuck at.
   // expected.json knows only the start rooms, so a dropped object gets the buttons for where it is stuck now.
-  const targets = S.starts.has(r.token) ? new Set<Id>() : relevantTargets(building, expected, r.token);
+  const moved = played().tokens.find((t) => t.id === r.token)?.start !== building.tokens.find((t) => t.id === r.token)?.start;
+  const targets = moved ? new Set<Id>() : relevantTargets(building, expected, r.token);
   if (r.blocked_at) targets.add(r.blocked_at);
   const fixes = fixesFor(buttons, targets, S.game.edits);
   const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
@@ -402,7 +411,7 @@ for (const it of items) {
     if (dragged) dragged = false;
     else place(id);
   }, {
-    'data-token': id, 'aria-pressed': 'false', title: `Click to place, or drag onto a floor`,
+    'data-token': id, 'aria-pressed': 'false', title: 'Click to place, or drag onto a floor. Arrow up or down moves the selected object a floor.',
     ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}),
   });
   b.addEventListener('pointerdown', (e) => {
@@ -418,6 +427,7 @@ window.addEventListener('pointermove', (e) => {
   dragged = true;
   chipPress = null;
 });
+window.addEventListener('pointercancel', () => (chipPress = null));
 window.addEventListener('pointerup', () => {
   chipPress = null;
   // A drag let go off its chip fires no click there, so nothing is left to swallow.
@@ -465,12 +475,18 @@ document.addEventListener('keydown', (ev) => {
     return escape();
   }
   if (ev.key === 'r' || ev.key === 'R') return reset();
-  // The keyboard way to drag: arrow up or down moves the selected object one floor.
-  if ((ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && S.selected !== null && S.placed.includes(S.selected)) {
+  // The keyboard way to drag: arrow up or down moves the selected object one floor. Only with focus
+  // on the page or the dock, so the arrows still scroll a panel or move inside one.
+  const free = ev.target === document.body || (ev.target instanceof Element && ev.target.closest('#picker') !== null);
+  if ((ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && free && S.selected !== null && S.placed.includes(S.selected)) {
     ev.preventDefault();
+    if (S.phase === 'running') return;
+    const up = ev.key === 'ArrowUp';
     const from = played().tokens.find((t) => t.id === S.selected)?.start;
-    const to = from === undefined ? null : stepLevel(building, from, ev.key === 'ArrowUp' ? 1 : -1);
-    if (to !== null) moveTo(S.selected, to);
+    const to = from === undefined ? null : stepLevel(building, from, up ? 1 : -1);
+    if (to !== null) return moveTo(S.selected, to);
+    S.note = `${itemOf(S.selected).label} is already on the ${up ? 'top' : 'bottom'} floor`;
+    render();
     return;
   }
   if (ev.key === '/') {

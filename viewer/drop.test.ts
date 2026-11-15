@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Building } from '../contract/types.ts';
+import { DEFAULT_VIEW, PATH_LIFT, viewDirection, type Vec3 } from './layout.ts';
+import type { Ray } from './drop.ts';
 import {
   CLICK_SLOP, dropTarget, droppableNodes, figureScale, movedPastSlop, pickToken, pressIntent, stepLevel,
 } from './drop.ts';
@@ -32,30 +34,46 @@ test('droppable nodes: rooms, cores and halls, never an exit, a street, a truck 
   assert.deepEqual(new Set(droppableNodes(real).map((n) => n.level)), new Set(real.levels.map((l) => l.id)));
 });
 
-test('a drop picks the level where the ray enters the building, then the nearest room on that floor', () => {
-  // Enters the west face at y = 5 (level L2), meets the L2 floor at plan (1, 1.5): inside the unit.
-  assert.deepEqual(dropTarget(b, { origin: [-2, 7, 1.5], dir: [1, -1, 0] })?.node, 'unit');
-  // Enters at y = 5, meets the floor at plan (2, 5): 1 m from the core, 2 m from the unit.
-  const core = dropTarget(b, { origin: [-4, 7, 5], dir: [1, -0.5, 0] });
-  assert.deepEqual(core, { node: 'core', level: 'L2' });
-  // A level ray at y = 2 enters L1; with no floor crossing the entry point picks the room.
-  assert.equal(dropTarget(b, { origin: [-5, 2, 5], dir: [1, 0, 0] })?.node, 'lobby');
+// A ray from the default camera through a point: the player pointing at what is drawn there.
+const VIEW = viewDirection(DEFAULT_VIEW.azimuth, DEFAULT_VIEW.elevation);
+const aimAt = (p: Vec3): Ray => ({ origin: [p[0] + VIEW[0] * 900, p[1] + VIEW[1] * 900, p[2] + VIEW[2] * 900], dir: [-VIEW[0], -VIEW[1], -VIEW[2]] });
+// Where a parked token is drawn: the room's plan centre, just over its floor.
+const anchor = (bb: Building, id: string): Vec3 => {
+  const n = bb.nodes.find((x) => x.id === id)!;
+  const y = bb.levels.find((l) => l.id === n.level)!.elevation + PATH_LIFT;
+  return [n.box.x + n.box.width / 2, y, n.box.y + n.box.depth / 2];
+};
+
+test('a drop lands on the room whose token spot is under the pointer', () => {
+  for (const id of ['lobby', 'unit', 'core']) assert.equal(dropTarget(b, aimAt(anchor(b, id)))?.node, id, id);
+  assert.deepEqual(dropTarget(b, aimAt(anchor(b, 'core'))), { node: 'core', level: 'L2' });
+  // Near a spot, not on it, still picks the nearest one.
+  const [x, y, z] = anchor(b, 'unit');
+  assert.equal(dropTarget(b, aimAt([x + 1, y, z + 0.5]))?.node, 'unit');
 });
 
-test('a drop that misses the building, or lands on a level with no room, is refused', () => {
-  assert.equal(dropTarget(b, { origin: [-5, 5, 50], dir: [1, 0, 0] }), null);
-  assert.equal(dropTarget(b, { origin: [5, 100, 5], dir: [0, -1, 0] }), null, 'enters the roof of L3: only a shaft');
-  // Over the street exit only: outside the rooms, so outside the building.
-  assert.equal(dropTarget(b, { origin: [5, 100, 12], dir: [0, -1, 0] }), null);
-});
-
-test('a drop on the real tower lands on the level the pointer is on', () => {
+test('on the real tower every room and core can be aimed at from the default view', () => {
   const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
-  const level = (y: number): string | undefined => dropTarget(real, { origin: [-10, y, 14], dir: [1, 0, 0] })?.level;
-  assert.equal(level(1), 'L1');
-  assert.equal(level(11), 'L2');
-  assert.equal(level(30), 'T04');
-  assert.equal(level(39), 'T05');
+  const missed = droppableNodes(real).filter((n) => dropTarget(real, aimAt(anchor(real, n.id)))?.node !== n.id).map((n) => n.id);
+  assert.deepEqual(missed, []);
+});
+
+test('elsewhere on the tower a drop goes to the storey the pointer is on, to its nearest room', () => {
+  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
+  // Points on the two facades the default camera sees (x = 28.5 and z = 27.55), away from any token spot.
+  assert.deepEqual(dropTarget(real, aimAt([28.5, 40, 2])), { node: 'core-T05', level: 'T05' });
+  assert.deepEqual(dropTarget(real, aimAt([28.5, 40, 14])), { node: 'core-T05', level: 'T05' });
+  assert.deepEqual(dropTarget(real, aimAt([3, 33, 27.55])), { node: 'core-T04', level: 'T04' });
+  // The fixture: the west face of L2 at y = 6, far from both L2 spots.
+  assert.equal(dropTarget(b, { origin: [-5, 6, 1.5], dir: [1, 0, 0] })?.level, 'L2');
+});
+
+test('a drop that misses every room, or lands on the street, is refused', () => {
+  assert.equal(dropTarget(b, { origin: [-5, 5, 50], dir: [1, 0, 0] }), null);
+  assert.equal(dropTarget(b, aimAt([5, 0, 12])), null, 'the street exit takes no token');
+  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
+  assert.equal(dropTarget(real, aimAt([14.25, 0, 26.9])), null, 'the STREET - EXIT label');
+  assert.equal(dropTarget(real, aimAt([60, 0, -30])), null, 'the city beside the tower on screen');
 });
 
 test('arrow keys move a token one floor up or down, to the room under the same spot', () => {
@@ -76,8 +94,9 @@ test('a press on a token drags it; anywhere else it orbits or pans as before', (
 });
 
 test('a press within the slop is a click; the nearest token under the pointer is the one hit', () => {
-  assert.equal(movedPastSlop(3, 4), false, `${CLICK_SLOP} px is still a click`);
-  assert.equal(movedPastSlop(4, 4), true);
+  assert.equal(movedPastSlop(6, 0), false, 'a small wobble is still a click');
+  assert.equal(movedPastSlop(CLICK_SLOP, 0), false);
+  assert.equal(movedPastSlop(6, 6), true);
   const spots = [{ id: 'a', x: 100, y: 100 }, { id: 'b', x: 120, y: 100 }];
   assert.equal(pickToken(spots, 115, 100, 24), 'b');
   assert.equal(pickToken(spots, 300, 300, 24), null);

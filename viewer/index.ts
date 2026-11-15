@@ -14,7 +14,7 @@ import { dropTarget, figureScale, movedPastSlop, pickToken, pressIntent } from '
 import type { DropTarget, Ray } from './drop.ts';
 import { figureLights, makeFigure } from './figures.ts';
 import type { Figure } from './figures.ts';
-import { failText, labelSides, labelWidth, roomLabel } from './labels.ts';
+import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
 } from './layout.ts';
@@ -64,6 +64,7 @@ const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px cap
 const UP = new THREE.Vector3(0, 1, 0);
 const FIGURE_PIXELS = 64; // a figure is never drawn smaller than this on screen
 const HIT_PIXELS = 36; // a press this close to a figure's middle picks it up
+const SNAP_PIXELS = 56; // a drop this close to a room's token spot lands on that room
 const REFUSED = 'Not placed: drop it on a floor of the tower';
 
 interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
@@ -220,21 +221,24 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       const figure = makeFigure(token.id, token.discipline);
       tokenGroup.add(figure.object);
       tokenGroup.position.set(...(route.points[0] ?? [0, 0, 0]));
+      tokenGroup.visible = !(carried?.moving && carried.id === token.id); // a redraw while it is carried
       fx.add(tokenGroup);
 
       let x: Run['x'] = null;
       const words = failText(b, r);
-      if (route.blocked && words) {
+      // A fail with no place in it (no route out) gets its red X where the token stands.
+      const xAt = route.blocked ?? (r.status === 'fail' ? route.points[0] ?? null : null);
+      if (xAt && words) {
         const el = document.createElement('div');
         el.className = 'ep-fail side-right';
         el.innerHTML = '<div class="ep-x"></div><div class="ep-card"><b></b><span></span></div>';
         el.querySelector('b')!.textContent = words.title;
         el.querySelector('span')!.textContent = words.detail;
         const obj = new CSS2DObject(el);
-        obj.position.set(...route.blocked);
+        obj.position.set(...xAt);
         obj.visible = false;
         fx.add(obj);
-        x = { obj, at: new THREE.Vector3(...route.blocked), width: labelWidth(words) };
+        x = { obj, at: new THREE.Vector3(...xAt), width: labelWidth(words) };
       }
 
       // A run's route stays in frame; a parked token (no path yet) never moves the camera, so a drop
@@ -425,14 +429,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!c || !shown) return;
     const b = shown.building;
     const over = overModel(clientX, clientY);
-    const target = over ? dropTarget(b, rayAt(clientX, clientY)) : null;
+    const mpp = (camera.top - camera.bottom) / (canvas.clientHeight || 600);
+    const target = over ? dropTarget(b, rayAt(clientX, clientY), SNAP_PIXELS * mpp) : null;
     const r = container.getBoundingClientRect();
     hint.style.transform = `translate(${clientX - r.left + 18}px, ${clientY - r.top + 18}px)`;
     hint.classList.add('on');
     // Red only over the model where nothing takes the token; over the dock a release just cancels.
     hint.classList.toggle('no', over && target === null);
     const node = target ? b.nodes.find((n) => n.id === target.node) : undefined;
-    hint.textContent = node ? `Drop in ${node.name}` : over ? 'Not a floor: drop it on the tower' : 'Drop it on a floor of the tower';
+    const what = tokenName(c.id);
+    hint.textContent = node ? `${what}: drop in ${node.name}` : over ? `${what}: not a floor, drop it on the tower` : `${what}: drop it on a floor of the tower`;
     if (target?.node === c.target?.node) return;
     c.target = target;
     // Free the old floor mark; the carried figure is kept and moved.
@@ -465,6 +471,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!carried) return;
     carried.moving = true;
     for (const run of runs) if (run.id === carried.id) run.token.visible = false;
+    if (captionObj) captionObj.visible = false;
     document.body.classList.add('ep-carrying');
     carryTo(e.clientX, e.clientY);
   }
@@ -472,6 +479,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function endCarry(): void {
     if (!carried) return;
     for (const run of runs) run.token.visible = true;
+    if (captionObj) captionObj.visible = true;
     carry.add(carried.figure.object); // so clear() frees it even when it was never shown
     clear(carry, shared);
     carry.add(...figureLights());
@@ -520,7 +528,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   // ---------- Camera: left-drag orbits, right-drag (or shift-drag) pans, double-click resets ----------
 
-  let drag: { x: number; y: number; x0: number; y0: number; mode: 'rotate' | 'pan' } | null = null;
+  // `token`: the token under a press that cannot pick it up (a run is playing); a click still selects it.
+  let drag: { x: number; y: number; x0: number; y0: number; mode: 'rotate' | 'pan'; token: Id | null } | null = null;
   canvas.style.cursor = 'grab';
   canvas.style.touchAction = 'none';
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -532,7 +541,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       pickUp(onToken, e, false);
       return;
     }
-    drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, mode: intent === 'pan' ? 'pan' : 'rotate' };
+    drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, mode: intent === 'pan' ? 'pan' : 'rotate', token: onToken };
     canvas.style.cursor = 'grabbing';
   });
   canvas.addEventListener('pointermove', (e) => {
@@ -555,8 +564,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     fit();
   });
   const endDrag = (e: PointerEvent): void => {
-    // A press on empty space that did not move is a click: it clears the selection.
-    if (drag && e.type === 'pointerup' && e.button === 0 && !movedPastSlop(e.clientX - drag.x0, e.clientY - drag.y0)) options.onSelect?.(null);
+    // A press that did not move is a click: it selects the token under it, or clears the selection.
+    if (drag && e.type === 'pointerup' && e.button === 0 && !movedPastSlop(e.clientX - drag.x0, e.clientY - drag.y0)) options.onSelect?.(drag.token);
     drag = null;
     canvas.style.cursor = 'grab';
   };
@@ -689,7 +698,7 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
 @keyframes ep-blink { 50% { opacity: 0; } }
 @keyframes ep-fade { from { opacity: 0; } }
 @keyframes ep-nudge { 0%, 100% { margin-left: 0; } 25% { margin-left: -8px; } 75% { margin-left: 8px; } }
-@media (prefers-reduced-motion: reduce) { .ep-x, .ep-card { animation: none; } .ep-banner { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ep-x, .ep-card, .ep-toast.on { animation: none; } .ep-banner, .ep-toast { transition: none; } }
 `;
   document.head.appendChild(style);
 }
