@@ -11,7 +11,7 @@ import {
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, type Vec3,
+  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, dragToPan, panned, type Vec3,
 } from './layout.ts';
 
 export interface Viewer {
@@ -89,7 +89,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   const world = new THREE.Scene(); // building and grid
   const rooms = new THREE.Scene(); // room name labels, under the tokens and fail cards
   const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1500); // far reaches a 500 m backdrop
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, CAMERA.near, CAMERA.far);
   const backdrop = new THREE.Scene(); // context under the model; lit, unlike the model
   backdrop.add(new THREE.HemisphereLight('#ffffff', '#d9dde3', 2.2));
   const sun = new THREE.DirectionalLight('#ffffff', 1.4);
@@ -97,7 +97,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   backdrop.add(sun);
   let backdropObject: THREE.Object3D | null = null;
   let covered: ReadonlySet<Id> = new Set();
-  let zoom = 1; // mouse wheel: 1 = framed on the model, larger = further out to see the city
+  let zoom = 1; // mouse wheel: 1 = framed on the model, below 1 = closer, above = further out
+  const pan = { x: 0, y: 0 }; // metres, set by dragging
   let shown: { building: Building; results: SolverResult[] } | null = null;
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
@@ -239,7 +240,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.setSize(w, h);
     if (bounds.isEmpty()) return;
     const centre = bounds.getCenter(new THREE.Vector3());
-    camera.position.copy(centre).addScaledVector(CAMERA_DIR, 150);
+    camera.position.copy(centre).addScaledVector(CAMERA_DIR, CAMERA.distance);
     camera.lookAt(centre);
     camera.updateMatrixWorld();
     let hx = 0;
@@ -250,7 +251,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
-    Object.assign(camera, frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }));
+    Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
     // Room labels that would overlap on screen (stacked storeys): keep exits and start rooms first.
@@ -338,6 +339,37 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     options.onZoom?.(zoom);
     fit();
   }, { passive: false });
+  // Drag to pan; double-click to go back to the framed view.
+  const canvas = renderer.domElement;
+  let drag: { x: number; y: number } | null = null;
+  canvas.style.cursor = 'grab';
+  canvas.addEventListener('pointerdown', (e) => {
+    drag = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const view = { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom };
+    const d = dragToPan(view, canvas.clientWidth || 800, canvas.clientHeight || 600, e.clientX - drag.x, e.clientY - drag.y);
+    pan.x += d.x;
+    pan.y += d.y;
+    drag = { x: e.clientX, y: e.clientY };
+    fit();
+  });
+  const endDrag = (): void => {
+    drag = null;
+    canvas.style.cursor = 'grab';
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('dblclick', () => {
+    zoom = 1;
+    pan.x = 0;
+    pan.y = 0;
+    options.onZoom?.(zoom);
+    fit();
+  });
   new ResizeObserver(fit).observe(container);
   renderer.setAnimationLoop(frame);
 

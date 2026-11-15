@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
-  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor,
+  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan,
 } from './layout.ts';
 import type { BoxSpec } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
@@ -134,9 +134,31 @@ test('covered nodes are left out of the drawn boxes, the rest keep their order',
   assert.deepEqual(uncovered(boxes, new Set()).map((x) => x.id), ['a', 'b', 'c']);
 });
 
-test('zoom: wheel up zooms in, wheel down out, always inside 1x (framed) to 60x', () => {
+test('zoom: wheel up zooms in, wheel down out, always between MIN_ZOOM (close) and MAX_ZOOM (far)', () => {
   assert.ok(zoomFactor(1, 100) > 1);
   assert.ok(zoomFactor(10, -100) < 10);
-  assert.equal(zoomFactor(1, -100000), 1);
-  assert.equal(zoomFactor(60, 100000), 60);
+  assert.ok(zoomFactor(1, -100) < 1); // closer than the framed view is allowed
+  assert.equal(zoomFactor(1, -100000), MIN_ZOOM);
+  assert.equal(zoomFactor(60, 100000), MAX_ZOOM);
+  assert.ok(MIN_ZOOM < 1 && MAX_ZOOM >= 60);
+});
+
+test('the camera sits far enough back that the whole 425 m tower and a 500 m backdrop are in depth range', () => {
+  // The view direction is (1,1,1): a point H metres above the model centre is H / sqrt(3) closer to
+  // the camera. 800 m covers the tower top (425 m up) and the backdrop corners with room to spare.
+  assert.ok(CAMERA.distance - 800 > CAMERA.near, 'nothing may be cut by the near plane');
+  assert.ok(CAMERA.distance + 800 < CAMERA.far, 'nothing may be cut by the far plane');
+  assert.ok(CAMERA.distance - 425.5 / Math.sqrt(3) > CAMERA.near);
+});
+
+test('panning shifts the whole view by the same metres on both edges, size unchanged', () => {
+  const f = { left: -10, right: 30, top: 20, bottom: -20 };
+  assert.deepEqual(panned(f, { x: 5, y: -2 }), { left: -5, right: 35, top: 18, bottom: -22 });
+  assert.deepEqual(panned(f, { x: 0, y: 0 }), f);
+});
+
+test('dragging the picture right moves the camera left: pan follows the pointer in metres per pixel', () => {
+  const f = { left: -10, right: 30, top: 20, bottom: -20 }; // 40 m across 400 px, 40 m over 400 px
+  assert.deepEqual(dragToPan(f, 400, 400, 100, 0), { x: -10, y: 0 }); // 100 px right = 10 m, camera goes left
+  assert.deepEqual(dragToPan(f, 400, 400, 0, 50), { x: 0, y: 5 }); // 50 px down = 5 m, camera goes up
 });
