@@ -30,6 +30,8 @@ export interface ViewerOptions {
   // Pixels on the right of the container covered by a floating panel. The model and LEVEL COMPLETE
   // centre in the space left of it. Default 0.
   insetRight?: number;
+  // Called with the zoom factor (1 = framed on the model) each time the mouse wheel changes it.
+  onZoom?: (zoom: number) => void;
 }
 
 const FILL_OPACITY = 0.5; // pale frosted wall faces
@@ -333,6 +335,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
     zoom = zoomFactor(zoom, e.deltaY);
+    options.onZoom?.(zoom);
     fit();
   }, { passive: false });
   new ResizeObserver(fit).observe(container);

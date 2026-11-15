@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TOWER_CENTRE, backdropMatrix, coversPoint, layerColor, metaToBlock, toViewer } from './backdrop.ts';
+import { CUT_FULL, CUT_HEIGHT, TOWER_CENTRE, backdropMatrix, coversPoint, cutHeight, layerColor, metaToBlock, toViewer } from './backdrop.ts';
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9;
 const anchor = { x: 255.5, z: -96 }; // the real tower's footprint centre in the fetched block
@@ -42,4 +42,22 @@ test('layer colours and the tower cut-out', () => {
   assert.equal(layerColor('something_new'), '#e4e7ec');
   assert.ok(coversPoint({ minX: 229, maxX: 282, minZ: -123, maxZ: -69 }, { x: 260, z: -88 }));
   assert.ok(!coversPoint({ minX: 300, maxX: 320, minZ: -123, maxZ: -69 }, { x: 260, z: -88 }));
+});
+
+test('framed on the building the context stays cut low, zoomed out it shows at full height', () => {
+  assert.equal(cutHeight(1), CUT_HEIGHT);
+  assert.equal(cutHeight(0.2), CUT_HEIGHT); // never lower than the slice cut
+  assert.equal(cutHeight(1.5), CUT_HEIGHT); // a small zoom does not change the framed view
+  assert.equal(cutHeight(4), CUT_FULL);
+  assert.equal(cutHeight(60), CUT_FULL);
+});
+
+test('between the two the cut rises smoothly and never falls as you zoom out', () => {
+  let last = 0;
+  for (let z = 0.5; z <= 8; z += 0.1) {
+    const h = cutHeight(z);
+    assert.ok(h >= last, `zoom ${z}`);
+    last = h;
+  }
+  assert.ok(cutHeight(2.75) > CUT_HEIGHT && cutHeight(2.75) < CUT_FULL);
 });
