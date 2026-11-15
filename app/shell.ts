@@ -3,6 +3,7 @@
 import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, Token } from '../contract/types.ts';
 import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
+import { isMemberStart } from '../viewer/drop.ts';
 import { tokenName } from '../viewer/labels.ts';
 import { REASON_TEXT, placeName } from './scoreboard.ts';
 import type { DemoButton } from './state.ts';
@@ -47,7 +48,8 @@ export function dropPlaced(building: Building, placed: readonly Id[], token: Id)
 }
 
 // The building with each dropped object starting in the node it was dropped on. An unknown node is
-// ignored. With no drops this is `building` itself; otherwise a copy, and `building` is not changed.
+// ignored, and so is a drop of a token that starts on a member (the load). With no drops this is
+// `building` itself; otherwise a copy, and `building` is not changed.
 export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Building {
   if (starts.size === 0) return building;
   const nodes = new Set(building.nodes.map((n) => n.id));
@@ -55,7 +57,7 @@ export function withStarts(building: Building, starts: ReadonlyMap<Id, Id>): Bui
     ...building,
     tokens: building.tokens.map((t) => {
       const at = starts.get(t.id);
-      return at !== undefined && nodes.has(at) ? { ...t, start: at } : t;
+      return at !== undefined && nodes.has(at) && !isMemberStart(building, t.id) ? { ...t, start: at } : t;
     }),
   };
 }

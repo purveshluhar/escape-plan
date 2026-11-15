@@ -171,3 +171,9 @@ test('the page puts no game words in front of people', () => {
   assert.match(body, />Show me <kbd>Space<\/kbd><\/button>/);
   assert.match(page, /<title>Escape Plan - ask your building<\/title>/);
 });
+
+test('a token that starts on a member (the load) never takes a floor start', () => {
+  const kept = withStarts(building, new Map([['load', 'plant'], ['sofa', 'office']]));
+  assert.equal(kept.tokens.find((t) => t.id === 'load')!.start, 'beam-b2');
+  assert.equal(kept.tokens.find((t) => t.id === 'sofa')!.start, 'office');
+});

@@ -11,13 +11,15 @@ const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.m
 const building = read('../data/building.json') as Building;
 const buttons = mvpButtons(building, demoButtons(building, read('../data/expected.json') as ExpectedFile));
 
-test('the MVP dock offers exactly wheelchair, sofa and people (keys 1-3), with no Later chips', () => {
+test('the MVP dock offers wheelchair, sofa, people, chiller and load (keys 1-5), with no Later chips', () => {
   const items = pickerItems(building, MVP_TOKENS);
-  assert.deepEqual(items.map((i) => [i.token, i.label, i.key]), [['wheelchair', 'Wheelchair', 1], ['sofa', 'Sofa', 2], ['people', 'People', 3]]);
+  assert.deepEqual(items.map((i) => [i.token, i.label, i.key]), [
+    ['wheelchair', 'Wheelchair', 1], ['sofa', 'Sofa', 2], ['people', 'People', 3], ['chiller', 'Chiller', 4], ['load', 'Load', 5],
+  ]);
 });
 
-test('each MVP token fails at first and one MVP button lets it out', () => {
-  for (const id of MVP_TOKENS) {
+test('each MVP token that fails at first has one MVP button that lets it through', () => {
+  for (const id of ['wheelchair', 'sofa', 'people', 'chiller']) {
     const before = solve(building).find((r) => r.token === id)!;
     assert.equal(before.status, 'fail', id);
     const fix = buttons.find((b) => b.edit.target === before.blocked_at);
@@ -26,6 +28,22 @@ test('each MVP token fails at first and one MVP button lets it out', () => {
   }
 });
 
-test('the MVP buttons are only the ones that matter to the MVP tokens', () => {
-  assert.equal(buttons.length, MVP_TOKENS.length);
+test('the load passes as built, fails at beam B2 once the shaft is widened, and the beam button fixes it', () => {
+  assert.equal(solve(building).find((r) => r.token === 'load')!.status, 'pass');
+  const widen = buttons.find((b) => b.edit.target === 'plant-shaft')!.edit;
+  const after = solve(building, [widen]).find((r) => r.token === 'load')!;
+  assert.deepEqual([after.status, after.reason, after.blocked_at, after.needed, after.available], ['fail', 'no_support', 'beam-b2', 1.5, 2]);
+  const beam = buttons.find((b) => b.edit.target === 'beam-b2')!.edit;
+  assert.equal(beam.op, 'add_transfer_beam');
+  assert.equal(solve(building, [widen, beam]).find((r) => r.token === 'load')!.status, 'pass');
+});
+
+test('the shaft and the beam buttons are always offered, even with the load passing and no one stuck at the beam', () => {
+  const targets = buttons.map((b) => b.edit.target);
+  assert.ok(targets.includes('plant-shaft'));
+  assert.ok(targets.includes('beam-b2'));
+});
+
+test('the MVP buttons are exactly one per door, the shaft and the beam', () => {
+  assert.deepEqual(buttons.map((b) => b.edit.target).sort(), ['beam-b2', 'lobby-door', 'office-door', 'plant-shaft', 'terrace-door']);
 });

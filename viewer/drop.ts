@@ -12,6 +12,13 @@ export function droppableNodes(b: Building): BuildingNode[] {
   return b.nodes.filter((n) => !n.is_exit && DROP_TYPES.has(n.type));
 }
 
+// True when the token starts on a structural member, not in a room (the load starts on beam B2). It
+// holds the building up where it is, so it is never dropped on a floor.
+export function isMemberStart(b: Building, token: Id): boolean {
+  const start = b.tokens.find((t) => t.id === token)?.start;
+  return start !== undefined && b.members.some((m) => m.id === start);
+}
+
 export interface Ray {
   origin: Vec3; // viewer metres: x = plan x, y = up, z = plan y
   dir: Vec3;

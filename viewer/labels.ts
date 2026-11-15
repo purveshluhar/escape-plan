@@ -31,6 +31,20 @@ const memberName = (id: string): string => {
   return [...parts, last.toUpperCase()].join(' ');
 };
 
+// The measurement on the model next to the red X: what the building has, then what the token needs,
+// "1.2 < 1.6 m". Only for the reasons measured in metres, and null when the solver gave no numbers.
+export function calloutText(r: SolverResult): string | null {
+  if (r.status !== 'fail' || r.reason === null || !METRES.has(r.reason) || r.needed === null || r.available === null) return null;
+  return `${num(r.available)} < ${num(r.needed)} m`;
+}
+
+// Why a token cannot be dropped on a floor: it holds the building up where it is ("Load stays on
+// beam B2"). Null for a token that starts in a room.
+export function stayText(b: Building, token: string): string | null {
+  const start = b.tokens.find((t) => t.id === token)?.start;
+  return start !== undefined && b.members.some((m) => m.id === start) ? `${tokenName(token)} stays on ${memberName(start)}` : null;
+}
+
 export interface FailText {
   title: string; // "Chiller: too narrow"
   detail: string; // "Plant shaft: needs 1.6 m, has 1.2 m"

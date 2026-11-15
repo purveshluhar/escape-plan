@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { coveredBy, failText, labelSides, roomLabel } from './labels.ts';
+import { calloutText, coveredBy, failText, labelSides, roomLabel, stayText } from './labels.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
 
 const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
@@ -76,4 +76,23 @@ test('a room label under the selection caption hides, so no text sits over text'
   assert.deepEqual(coveredBy(caption, [street, clear]), [true, false]);
   assert.deepEqual(coveredBy({ l: 311, r: 471, t: 555, b: 578 }, [touching]), [true], 'within the margin counts as covered');
   assert.deepEqual(coveredBy(null, [street]), [false], 'no caption hides nothing');
+});
+
+test('the callout puts has before needs, in metres: 1.2 < 1.6 m', () => {
+  assert.equal(calloutText(fail({ blocked_at: 'plant-shaft', reason: 'too_narrow', needed: 1.6, available: 1.2 })), '1.2 < 1.6 m');
+  assert.equal(calloutText(fail({ token: 'sofa', blocked_at: 'lobby-door', reason: 'cannot_turn', needed: 2.2, available: 2 })), '2.0 < 2.2 m');
+  assert.equal(calloutText(fail({ token: 'people', blocked_at: 'office-door', reason: 'too_narrow', needed: 0.6, available: 0.5 })), '0.5 < 0.6 m');
+});
+
+test('no callout for a step, a lost support, a pass, or a fail with no numbers', () => {
+  assert.equal(calloutText(fail({ token: 'wheelchair', reason: 'step', needed: 0, available: 0.15 })), null);
+  assert.equal(calloutText(fail({ token: 'load', reason: 'no_support', needed: 1.5, available: 2 })), null);
+  assert.equal(calloutText(fail({ reason: 'no_route' })), null);
+  assert.equal(calloutText({ ...fail({}), status: 'pass' }), null);
+});
+
+test('a load stays on its beam; a token that starts in a room has no such line', () => {
+  assert.equal(stayText(b, 'load'), 'Load stays on beam B2');
+  assert.equal(stayText(b, 'sofa'), null);
+  assert.equal(stayText(b, 'no-such-token'), null);
 });

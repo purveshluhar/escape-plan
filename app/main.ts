@@ -11,13 +11,16 @@ import { loadTypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
 import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
-import { movedPastSlop, stepLevel } from '../viewer/drop.ts';
+import { isMemberStart, movedPastSlop, stepLevel } from '../viewer/drop.ts';
 import { createViewer } from '../viewer/index.ts';
+import { stayText } from '../viewer/labels.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
 import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
+import { conflictOf } from './conflict.ts';
+import type { Conflict } from './conflict.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
@@ -32,7 +35,7 @@ import { renderStrip } from './strip-view.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
-// The MVP game: wheelchair, sofa and people (mvp.ts). The dock offers only these.
+// The MVP questions: wheelchair, sofa, people, chiller and load (mvp.ts). The dock offers only these.
 const building = buildingJson as Building;
 const expected = expectedJson as ExpectedFile;
 const buttons = mvpButtons(building, demoButtons(building, expected));
@@ -54,10 +57,11 @@ interface State {
   reading: string | null; // a typed edit still being read
   solveMs: number | null;
   scoreOpen: boolean;
+  conflict: Conflict | null; // what the last edit turned from Yes to No, shown on the fix sheet
 }
 
 const S: State = {
-  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false,
+  phase: 'empty', placed: [], starts: new Map(), selected: null, game: initialState(), results: null, note: '', editOpen: false, read: null, reading: null, solveMs: null, scoreOpen: false, conflict: null,
 };
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -68,7 +72,7 @@ const viewer = createViewer($('viewer'), {
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
     const what = S.placed.includes(token) ? 'not moved' : 'not placed';
-    S.note = `${itemOf(token).label} ${what}: drop it on a floor of the tower`;
+    S.note = stayText(building, token) ?? `${itemOf(token).label} ${what}: drop it on a floor of the tower`;
     render();
   },
   onSelect: (token) => {
@@ -143,12 +147,15 @@ function idle(): void {
   viewer.show(edited(), parkedResults(S.placed));
 }
 
-function escape(): void {
+// `from` is the last edit and the answers before it: an edit that turns a Yes into a No is said so.
+function escape(from?: { before: readonly Answer[] | null; label: string }): void {
   if (S.placed.length === 0 || S.phase === 'running' || S.reading !== null) return;
   const t0 = performance.now();
   const { edited: b, results } = solvePlaced();
   S.solveMs = performance.now() - t0;
   S.results = results;
+  S.conflict = from ? conflictOf(from.before, results, from.label, b) : null;
+  if (S.conflict) S.note = [S.conflict.title, ...S.conflict.lines].join('. ');
   S.scoreOpen = false;
   viewer.setInsetRight(insetFor(results));
   viewer.show(b, results);
@@ -177,6 +184,7 @@ function place(id: Id): void {
     if (S.selected === id) S.selected = null;
   }
   S.results = null;
+  S.conflict = null;
   S.note = '';
   S.phase = S.placed.length ? 'placed' : 'empty';
   idle();
@@ -187,10 +195,15 @@ function place(id: Id): void {
 // like a placement from the dock. The last run's results no longer hold, so they are cleared.
 function moveTo(id: Id, node: Id): void {
   if (S.phase === 'running') return;
+  if (isMemberStart(building, id)) { // the load holds the building up where it is
+    S.note = stayText(building, id)!;
+    return render();
+  }
   S.starts.set(id, node);
   S.placed = dropPlaced(building, S.placed, id);
   S.selected = id;
   S.results = null;
+  S.conflict = null;
   S.note = `${itemOf(id).label} starts in ${placeName(building, node)}`;
   S.phase = 'placed';
   idle();
@@ -201,16 +214,18 @@ function moveTo(id: Id, node: Id): void {
 // building that changed under it.
 function applyFix(edit: Edit, label: string): void {
   if (S.phase === 'running' || S.reading !== null) return;
+  const before = S.results;
   S.game = applyEdit(S.game, edit);
   S.editOpen = false;
   S.read = null;
   ($('editInput') as HTMLInputElement).value = '';
   S.note = `Checked again after: ${label}`;
-  if (S.placed.length) escape();
+  if (S.placed.length) escape({ before, label });
   else {
     idle();
     render();
   }
+  if (edit.target !== null) viewer.flash(edit.target);
 }
 
 function reset(): void {
@@ -231,6 +246,7 @@ function clear(): void {
   S.starts.clear();
   S.selected = null;
   S.results = null;
+  S.conflict = null;
   S.note = '';
   S.phase = 'empty';
   idle();
@@ -358,6 +374,7 @@ function renderSheet(b: Building): void {
   if (fails.length === 0) return sheet.replaceChildren();
   const cards: HTMLElement[] = fails.map((r) => fixCard(r, b));
   sheet.replaceChildren(
+    ...(S.conflict ? [h('div', { class: 'conflict' }, h('b', {}, S.conflict.title), ...S.conflict.lines.map((l) => h('div', { class: 'cl' }, l)))] : []),
     h('div', { class: 'lbl' }, 'Suggested fixes'),
     ...cards,
     h('div', { class: 'foot' },
@@ -434,7 +451,7 @@ for (const it of items) {
     if (dragged) dragged = false;
     else place(id);
   }, {
-    'data-token': id, 'aria-pressed': 'false', 'aria-label': askOf(id),
+    'data-token': id, 'aria-pressed': 'false', 'aria-label': `${askOf(id)} (${it.label})`, // the name holds both the question and the short name a narrow screen shows
     title: 'Click to ask. Or drag it onto a floor to start it there. Arrow up or down moves it one floor.',
     ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}),
   });
@@ -460,7 +477,7 @@ window.addEventListener('pointerup', () => {
 
 // ---------- Controls ----------
 
-$('btnEscape').addEventListener('click', escape);
+$('btnEscape').addEventListener('click', () => escape());
 $('btnReset').addEventListener('click', reset);
 $('btnClear').addEventListener('click', clear);
 $('btnEdit').addEventListener('click', () => (S.editOpen ? closeEdit() : openEdit()));
@@ -506,6 +523,12 @@ document.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     if (S.phase === 'running') return;
     const up = ev.key === 'ArrowUp';
+    const stay = stayText(building, S.selected);
+    if (stay !== null) {
+      S.note = stay;
+      render();
+      return;
+    }
     const from = played().tokens.find((t) => t.id === S.selected)?.start;
     const to = from === undefined ? null : stepLevel(building, from, up ? 1 : -1);
     if (to !== null) return moveTo(S.selected, to);

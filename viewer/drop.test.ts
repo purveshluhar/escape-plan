@@ -5,7 +5,7 @@ import type { Building } from '../contract/types.ts';
 import { DEFAULT_VIEW, PATH_LIFT, viewDirection, type Vec3 } from './layout.ts';
 import type { Ray } from './drop.ts';
 import {
-  CLICK_SLOP, dropTarget, droppableNodes, figureScale, movedPastSlop, pickToken, pressIntent, stepLevel,
+  CLICK_SLOP, dropTarget, droppableNodes, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent, stepLevel,
 } from './drop.ts';
 
 // Three levels of our own, so these tests do not move when data/building.json does.
@@ -109,4 +109,11 @@ test('a press within the slop is a click; the nearest token under the pointer is
 test('figures grow to a readable size when zoomed out, and keep real size close up', () => {
   assert.equal(figureScale(0.05, 1.2, 44), (44 * 0.05) / 1.2);
   assert.equal(figureScale(0.01, 1.2, 44), 1);
+});
+
+test('a token whose start is a structural member (the load) cannot be dropped on a floor', () => {
+  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
+  assert.equal(isMemberStart(real, 'load'), true);
+  for (const id of ['sofa', 'wheelchair', 'people', 'chiller', 'glass']) assert.equal(isMemberStart(real, id), false, id);
+  assert.equal(isMemberStart(real, 'no-such-token'), false);
 });

@@ -7,14 +7,15 @@ import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Building, Discipline, Id, SolverResult } from '../contract/types.ts';
 import {
-  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_STYLESHEET,
-  GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED,
+  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FAIL_TINT, FONT_BODY, FONT_DATA, FONT_STYLESHEET,
+  GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED, WALL,
 } from '../design/tokens.ts';
-import { dropTarget, figureScale, movedPastSlop, pickToken, pressIntent } from './drop.ts';
+import { dropTarget, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent } from './drop.ts';
 import type { DropTarget, Ray } from './drop.ts';
 import { disposeTree, figureLights, loadFigureModels, makeFigure } from './figures.ts';
 import type { Figure } from './figures.ts';
-import { coveredBy, failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
+import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
+import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
@@ -38,6 +39,9 @@ export interface Viewer {
   setDragEnabled(on: boolean): void;
   // The selected token gets an accent rim and `caption` under it; null clears the selection.
   select(token: Id | null, caption: string | null): void;
+  // A ring that grows and fades where an edit landed: a door, a shaft or a member by id. Nothing for
+  // an id the building does not have.
+  flash(target: Id): void;
 }
 
 export interface ViewerOptions {
@@ -60,6 +64,8 @@ const SHAKE_METRES = 0.25;
 const X_LIFT = -48; // pixels
 const LABEL_GAP = 36; // pixels from the X centre to its label
 const LABEL_HEIGHT = 56; // pixels, about two lines of label
+const LABEL_HEIGHT_CALLOUT = 88; // pixels, and the measurement chip under the title
+const MEMBER_OPACITY = 0.9;
 const ROOM_LABEL_HEIGHT = 16; // pixels, one line of room name
 const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px caps with 1.2 px tracking
 const UP = new THREE.Vector3(0, 1, 0);
@@ -83,7 +89,7 @@ interface Run {
   discipline: Discipline;
   token: THREE.Group;
   figure: Figure;
-  x: { obj: CSS2DObject; at: THREE.Vector3; width: number } | null;
+  x: { obj: CSS2DObject; at: THREE.Vector3; width: number; callout: boolean } | null;
   reachedAt: number | null; // token-local seconds when it reached its stop
 }
 
@@ -118,6 +124,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   const rooms = new THREE.Scene(); // room name labels, under the tokens and fail cards
   const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
+  const marks = new THREE.Scene(); // short-lived rings (the edit flash); kept when show() redraws
   const carry = new THREE.Scene(); // the carried token and the floor it would land on, over everything
   carry.add(...figureLights());
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, CAMERA.near, CAMERA.far);
@@ -145,6 +152,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
+  let beating: THREE.MeshLambertMaterial[] = []; // members drawn red: they blink after the run, then stay red
   let roomTags: { obj: CSS2DObject; text: string }[] = [];
   let selected: { id: Id; caption: string | null } | null = null;
   let dragEnabled = true;
@@ -174,10 +182,31 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     else bounds.makeEmpty();
   }
 
+  // The structure: footing, column and beam, in slate; a transfer beam in the structure violet; a
+  // member the load has lost its support at, in red. Drawn with the routes, over the building.
+  function drawMembers(b: Building, results: SolverResult[]): void {
+    const red = new Set(flashingMembers(results));
+    beating = [];
+    for (const m of memberBoxes(b)) {
+      const color = red.has(m.id) ? FAIL : m.kind === 'transfer_beam' ? DISCIPLINE_STYLE.structure.color : WALL;
+      const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: MEMBER_OPACITY });
+      if (red.has(m.id)) beating.push(mat);
+      const geometry = new THREE.BoxGeometry(...m.size);
+      const mesh = new THREE.Mesh(geometry, mat);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: TEXT }));
+      for (const o of [mesh, edges]) {
+        o.position.set(...m.center);
+        o.rotation.y = m.yaw;
+        fx.add(o);
+      }
+    }
+  }
+
   function buildRuns(b: Building, results: SolverResult[]): void {
     for (const run of runs) run.figure.dispose();
     clear(fx, shared);
     fx.add(...figureLights());
+    drawMembers(b, results);
     runs = [];
     results.forEach((r, i) => {
       const token = b.tokens.find((t) => t.id === r.token);
@@ -233,14 +262,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       if (xAt && words) {
         const el = document.createElement('div');
         el.className = 'ep-fail side-right';
-        el.innerHTML = '<div class="ep-x"></div><div class="ep-card"><b></b><span></span></div>';
+        const callout = calloutText(r);
+        el.innerHTML = `<div class="ep-x"></div><div class="ep-card"><b></b>${callout ? '<div class="ep-callout"></div>' : ''}<span></span></div>`;
         el.querySelector('b')!.textContent = words.title;
+        if (callout) el.querySelector('.ep-callout')!.textContent = callout;
         el.querySelector('span')!.textContent = words.detail;
         const obj = new CSS2DObject(el);
         obj.position.set(...xAt);
         obj.visible = false;
         fx.add(obj);
-        x = { obj, at: new THREE.Vector3(...xAt), width: labelWidth(words) };
+        x = { obj, at: new THREE.Vector3(...xAt), width: labelWidth(words), callout: callout !== null };
       }
 
       // A run's route stays in frame; a parked token (no path yet) never moves the camera, so a drop
@@ -291,7 +322,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const sides = labelSides(xs.map(({ at, width }) => {
       const v = at.clone().project(camera);
       return { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2 + X_LIFT, width };
-    }), { height: LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8 });
+    }), { height: xs.some((x) => x.callout) ? LABEL_HEIGHT_CALLOUT : LABEL_HEIGHT, gap: LABEL_GAP, minX: 8, maxX: w - insetRight - 8 });
     xs.forEach(({ obj }, i) => {
       for (const side of ['left', 'right', 'above']) obj.element.classList.toggle(`side-${side}`, sides[i] === side);
     });
@@ -351,6 +382,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     for (const run of runs) run.figure.tick(dt);
     carried?.figure.tick(dt);
     scaleFigures();
+    if (beating.length > 0) {
+      // A member without support blinks as often as the red X (MOTION.failBlinkHz, failBlinkCount) once the run ends, then stays red.
+      const since = t - allDone;
+      const blinking = !reduced && since >= 0 && since < MOTION.failBlinkCount / MOTION.failBlinkHz;
+      const pale = blinking && Math.floor(since * MOTION.failBlinkHz * 2) % 2 === 1;
+      for (const mat of beating) mat.color.set(pale ? FAIL_TINT : FAIL);
+    }
     if (win && t >= allDone) {
       const since = t - allDone;
       banner.classList.add('on');
@@ -368,6 +406,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     labels.render(rooms, camera);
     labels.render(fx, camera);
+    labels.render(marks, camera);
     hideCoveredRooms();
   }
 
@@ -458,7 +497,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const b = shown.building;
     const over = overModel(clientX, clientY);
     const mpp = (camera.top - camera.bottom) / (canvas.clientHeight || 600);
-    const target = over ? dropTarget(b, rayAt(clientX, clientY), SNAP_PIXELS * mpp) : null;
+    // The load starts on a beam, not in a room: it is never dropped on a floor (stayText says why).
+    const stay = isMemberStart(b, c.id) ? stayText(b, c.id) : null;
+    const target = over && stay === null ? dropTarget(b, rayAt(clientX, clientY), SNAP_PIXELS * mpp) : null;
     const r = container.getBoundingClientRect();
     hint.style.transform = `translate(${clientX - r.left + 18}px, ${clientY - r.top + 18}px)`;
     hint.classList.add('on');
@@ -466,7 +507,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     hint.classList.toggle('no', over && target === null);
     const node = target ? b.nodes.find((n) => n.id === target.node) : undefined;
     const what = tokenName(c.id);
-    hint.textContent = node ? `${what}: drop in ${node.name}` : over ? `${what}: not a floor, drop it on the tower` : `${what}: drop it on a floor of the tower`;
+    hint.textContent = node ? `${what}: drop in ${node.name}` : stay ?? (over ? `${what}: not a floor, drop it on the tower` : `${what}: drop it on a floor of the tower`);
     if (target?.node === c.target?.node) return;
     c.target = target;
     // Free the old floor mark; the carried figure is kept and moved.
@@ -518,9 +559,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   }
 
   let toastTimer = 0;
-  function refuse(clientX: number, clientY: number): void {
+  function refuse(clientX: number, clientY: number, id: Id): void {
     const r = container.getBoundingClientRect();
-    toast.textContent = REFUSED;
+    toast.textContent = (shown ? stayText(shown.building, id) : null) ?? REFUSED;
     toast.style.transform = `translate(${clientX - r.left}px, ${clientY - r.top}px) translate(-50%, -140%)`;
     toast.classList.remove('on');
     void toast.offsetWidth;
@@ -546,7 +587,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (!moving) options.onSelect?.(id);
     else if (target) options.onDrop?.(id, target.node);
     else if (over) {
-      refuse(e.clientX, e.clientY);
+      refuse(e.clientX, e.clientY, id);
       options.onRefuse?.(id);
     }
     // Let go over the dock or the other panels: the token stays where it was, nothing to say.
@@ -679,7 +720,21 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     markSelected();
   }
 
-  return { show, setBackdrop, setInsetRight, setCovered, startDrag, setDragEnabled, select };
+  function flash(target: Id): void {
+    const at = shown ? flashPoint(shown.building, target) : null;
+    if (!at) return;
+    const el = document.createElement('div');
+    el.className = 'ep-flash';
+    const ring = new CSS2DObject(el);
+    ring.position.set(...at);
+    marks.add(ring);
+    window.setTimeout(() => {
+      el.remove();
+      ring.removeFromParent();
+    }, MOTION.showMs);
+  }
+
+  return { show, setBackdrop, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
@@ -737,6 +792,11 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
 .side-right .ep-card { left: ${LABEL_GAP}px; }
 .side-left .ep-card { right: ${LABEL_GAP}px; }
 .side-above .ep-card { left: 0; top: ${X_LIFT - 32}px; transform: translate(-50%, -100%); }
+.ep-callout { margin-top: 6px; width: max-content; font: 700 20px/1 ${FONT_DATA}; color: ${FAIL_INK}; background: ${FAIL_TINT};
+  border-radius: 8px; padding: 5px 9px; }
+.ep-flash { width: 0; height: 0; z-index: 100000 !important; }
+.ep-flash::before { content: ''; position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; box-sizing: border-box;
+  border-radius: 50%; border: 5px solid ${ACCENT}; animation: ep-ring ${MOTION.showMs}ms ease-out forwards; }
 .ep-card b { display: block; font: 700 14px/1.3 ${FONT_BODY}; letter-spacing: 1px; color: ${FAIL_INK}; white-space: pre; }
 .ep-card span { display: block; margin-top: 4px; font: 600 15px/1.3 ${FONT_BODY}; color: ${TEXT}; }
 .ep-banner { position: absolute; left: 0; right: 0; top: 50%; text-align: center; pointer-events: none; z-index: 100001;
@@ -747,8 +807,9 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
 @keyframes ep-pop { from { transform: scale(0); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
 @keyframes ep-blink { 50% { opacity: 0; } }
 @keyframes ep-fade { from { opacity: 0; } }
+@keyframes ep-ring { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
 @keyframes ep-nudge { 0%, 100% { margin-left: 0; } 25% { margin-left: -8px; } 75% { margin-left: 8px; } }
-@media (prefers-reduced-motion: reduce) { .ep-x, .ep-card, .ep-toast.on { animation: none; } .ep-banner, .ep-toast { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ep-x, .ep-card, .ep-toast.on { animation: none; } .ep-flash::before { animation: none; opacity: 0.8; } .ep-banner, .ep-toast { transition: none; } }
 `;
   document.head.appendChild(style);
 }
