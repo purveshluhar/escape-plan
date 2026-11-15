@@ -20,8 +20,15 @@ function button(label: string, cls: string, onClick: () => void, attrs: Record<s
   return b;
 }
 
+// What the panel last drew. A redraw with the same words is skipped, so a screen reader does not read
+// it again and a focused button is not replaced under the keyboard.
+const drawn = new WeakMap<HTMLElement, string>();
+
 export function renderHint(el: HTMLElement, v: HintView): void {
   el.classList.toggle('on', v.asks.length > 0);
+  const sig = JSON.stringify([v.asks.map((a) => a.name), v.shown && [v.shown.name, v.shown.model]]);
+  if (drawn.get(el) === sig) return;
+  drawn.set(el, sig);
   if (v.asks.length === 0) return el.replaceChildren();
   const many = v.asks.length > 1;
   const m = v.shown?.model ?? null;

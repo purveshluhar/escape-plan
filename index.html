@@ -168,6 +168,7 @@ body.editing #banner.on{display:none}
 #hint{position:fixed;left:24px;bottom:calc(104px + var(--strip-h,0px));width:min(520px,max(240px,calc(100vw - 460px)));max-height:calc(100vh - 220px - var(--strip-h,0px));overflow-y:auto;border-radius:26px;padding:12px 14px;display:none}
 #hint.on{display:block;animation:sheetIn .45s var(--soft)}
 body.editing #hint{width:min(520px,max(240px,calc(100vw - 592px)))}
+@media (max-width:950px){body.editing #hint{display:none}} /* the edit box takes the room */
 #hint .hbtns{display:flex;flex-wrap:wrap;gap:6px}
 #hint .hbtns .fixbtn{height:40px;font-size:15px;padding:0 14px}
 #hint .hbody{margin-top:10px}

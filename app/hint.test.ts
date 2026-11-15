@@ -163,3 +163,25 @@ test('only a beam becomes a transfer beam, never a column or a foundation', () =
   const h = findHint(building, [], 'load', () => [r]);
   assert.equal(h.tried, 0);
 });
+
+// ---- review round 2 ----
+
+test('smoke: close_door is tried only on edges that are open, never on a stair or a closed door', () => {
+  const b = structuredClone(building);
+  const edgesAt = b.edges.filter((e) => e.from === 'lobby' || e.to === 'lobby');
+  edgesAt.forEach((e, i) => { if (i === 0) e.open = true; else delete e.open; }); // the others have no smoke path
+  const r: SolverResult = { token: 'people', status: 'fail', path: [], blocked_at: 'lobby', reason: 'smoke_first', needed: 4, available: 6 };
+  const tried: string[] = [];
+  const h = findHint(b, [], 'people', (edits) => { const last = edits.at(-1); if (last) tried.push(`${last.op} ${last.target}`); return [r]; });
+  assert.deepEqual(tried, [`close_door ${edgesAt[0]!.id}`]);
+  assert.equal(h.tried, 1);
+});
+
+test('a bad width in the data cannot make candidate building run away', () => {
+  const b = structuredClone(building);
+  b.edges.find((e) => e.id === 'office-door')!.clear_width = -1e9;
+  const t0 = performance.now();
+  const h = findHint(b, [], 'people', over(['people'], b));
+  assert.ok(performance.now() - t0 < 1500);
+  assert.ok(h.tried <= 30);
+});

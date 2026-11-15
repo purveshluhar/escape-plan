@@ -460,6 +460,7 @@ function renderHintPanel(): void {
   const close = (): void => {
     S.hint = null;
     render();
+    $('hint').querySelector<HTMLElement>('.hbtns .fixbtn')?.focus();
   };
   renderHint($('hint'), {
     asks: S.phase === 'result' && S.reading === null && S.results
@@ -530,7 +531,10 @@ document.addEventListener('keydown', (ev) => {
   const typing = ev.target instanceof HTMLInputElement;
   if (ev.key === 'Escape') {
     if (S.editOpen) closeEdit();
-    else if (S.scoreOpen) {
+    else if (S.hint !== null) {
+      S.hint = null;
+      render();
+    } else if (S.scoreOpen) {
       S.scoreOpen = false;
       render();
     } else if (S.selected !== null) {

@@ -39,12 +39,12 @@ function edgeCandidates(edited: Building, id: Id, reason: Reason | null): Edit[]
   const widen = (): Edit[] => {
     const out: Edit[] = [];
     // the next tenth of a metre above the current width (the 1e-9 keeps 1.2 from reading as 11.999)
-    for (let t = Math.floor(edge.clear_width * 10 + 1e-9) + 1; t <= WIDEN_MAX_TENTHS; t++) out.push(button('widen', id, t / 10));
+    for (let t = Math.max(Math.floor(edge.clear_width * 10 + 1e-9) + 1, 1); t <= WIDEN_MAX_TENTHS; t++) out.push(button('widen', id, t / 10));
     return out;
   };
   const ramp = (): Edit[] => (edge.kind === 'ramp' && edge.step_height === 0 ? [] : [button('add_ramp', id)]);
   const sleeve = (): Edit[] => (edge.sleeved ? [] : [button('add_sleeve', id)]);
-  const close = (): Edit[] => (edge.open === false ? [] : [button('close_door', id)]);
+  const close = (): Edit[] => (edge.open === true ? [button('close_door', id)] : []); // only a smoke path can be closed
   switch (reason) {
     case 'too_narrow': case 'cannot_turn': return widen();
     case 'step': return ramp();
