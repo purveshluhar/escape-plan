@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   doorPoint, FOUNDATION_DEPTH, frustum, LANE_GAP, nodeBoxes, PATH_LIFT, pointAt, cumulativeLengths,
-  routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan, DEFAULT_VIEW, MAX_ELEVATION, MIN_ELEVATION, ORBIT_SPEED, orbit, viewDirection,
+  graphMarks, routeLength, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, MIN_ZOOM, MAX_ZOOM, panned, dragToPan, DEFAULT_VIEW, MAX_ELEVATION, MIN_ELEVATION, ORBIT_SPEED, orbit, viewDirection,
 } from './layout.ts';
 import type { BoxSpec } from './layout.ts';
 import type { Building, SolverResult } from '../contract/types.ts';
@@ -189,4 +189,18 @@ test('elevation stays between a low angle and straight down, so the view never f
   assert.equal(orbit(DEFAULT_VIEW, 0, 1e6).elevation, MAX_ELEVATION);
   assert.equal(orbit(DEFAULT_VIEW, 0, -1e6).elevation, MIN_ELEVATION);
   assert.ok(MIN_ELEVATION > 0 && MAX_ELEVATION < Math.PI / 2);
+});
+
+test('graph marks: no slice room is drawn as a box; their extent still frames the view; only the exit is labelled', async () => {
+  const { withMvpFixture } = await import('../solver/mvp-fixture.ts');
+  const { coveredNodes } = await import('../data/typical-floors.ts');
+  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
+  const b = withMvpFixture(real);
+  const marks = graphMarks(b, new Set(coveredNodes(b)));
+  assert.deepEqual(Object.keys(marks).sort(), ['frame', 'labels']); // nothing that draws a box
+  // The slice (L1 to L3 plus the fixture office): x 0..28.5, up to the top of the L3 plant, z 0..37.4 (truck).
+  assert.deepEqual(marks.frame, { min: [0, 0, 0], max: [28.5, 14.1732 + STOREY_HEIGHT, 37.4] });
+  // The street exit, at street level in the middle of its node.
+  assert.deepEqual(marks.labels, [{ id: 'street', at: [14.25, 0, 26.9] }]);
+  assert.equal(graphMarks(b, new Set(b.nodes.map((n) => n.id))).frame, null);
 });

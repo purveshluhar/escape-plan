@@ -1,17 +1,17 @@
 // Viewer: draws the building as an isometric cutaway and animates every token. Owner: P2.
-// The look is design/look.md (Liquid Glass v2): a pale building, route dots the token travels
-// over, a tile token with its glyph, a shake and a blinking red X on fail, LEVEL COMPLETE and an
-// outline blink on win.
+// The look is design/look.md (Liquid Glass v2): route dots the token travels over, a tile token
+// with its glyph, a shake and a blinking red X on fail, LEVEL COMPLETE on win. The building on
+// screen is the real 432 Park backdrop; the graph's own rooms are not drawn.
 import * as THREE from 'three';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Building, Id, SolverResult } from '../contract/types.ts';
 import {
-  ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
-  GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
+  BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
+  GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED,
 } from '../design/tokens.ts';
 import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, uncovered, zoomFactor, CAMERA, DEFAULT_VIEW, dragToPan, orbit, panned, viewDirection, type Vec3,
+  cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, dragToPan, orbit, panned, viewDirection, type Vec3,
 } from './layout.ts';
 
 export interface Viewer {
@@ -34,8 +34,6 @@ export interface ViewerOptions {
   onZoom?: (zoom: number) => void;
 }
 
-const FILL_OPACITY = 0.5; // pale frosted wall faces
-const FLAT_HEIGHT: Partial<Record<string, number>> = { street: 0.15, truck: 2.6 }; // not storey boxes
 const VIEW_MARGIN = 1.2;
 const SHAKE_METRES = 0.25;
 // The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
@@ -45,7 +43,6 @@ const LABEL_HEIGHT = 56; // pixels, about two lines of label
 const ROOM_LABEL_HEIGHT = 16; // pixels, one line of room name
 const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px caps with 1.2 px tracking
 const UP = new THREE.Vector3(0, 1, 0);
-const WIN_FLASH_OFF = '#ffffff'; // the outline blinks ACCENT <-> white on LEVEL COMPLETE (look.md)
 
 interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
 interface TrailPiece { from: number; len: number; core: THREE.Mesh; glow: THREE.Mesh }
@@ -101,8 +98,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let view = { ...DEFAULT_VIEW }; // orbit angles, set by left-drag
   let shown: { building: Building; results: SolverResult[] } | null = null;
 
-  const wallMat = new THREE.LineBasicMaterial({ color: WALL });
-  const fillMat = new THREE.MeshBasicMaterial({ color: WALL_INNER, transparent: true, opacity: FILL_OPACITY, depthWrite: false });
   const dimMat = new THREE.MeshBasicMaterial({ color: TEXT_MUTED, transparent: true, opacity: 0.3 });
   const geo = {
     pellet: new THREE.SphereGeometry(PATH.pelletRadius, 12, 8),
@@ -111,44 +106,39 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     trailGlow: new THREE.CylinderGeometry(PATH.trailWidth * 1.5, PATH.trailWidth * 1.5, 1, 8).translate(0, 0.5, 0),
     tokenGlow: new THREE.SphereGeometry(PATH.tokenRadius * 2, 20, 14),
   };
-  const shared = new Set<object>([wallMat, fillMat, dimMat, ...Object.values(geo)]);
+  const shared = new Set<object>([dimMat, ...Object.values(geo)]);
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
-  let roomTags: { obj: CSS2DObject; text: string; priority: number }[] = [];
+  let roomTags: { obj: CSS2DObject; text: string }[] = [];
   let t0 = performance.now();
   let allDone = 0;
   let win = false;
 
+  // The graph's rooms are self-made, so they are not drawn: the real plans and facade in the backdrop
+  // are the building. Their extent still frames the camera and spans the grid; exits get a label.
   function drawBuilding(b: Building): void {
     clear(world, shared);
     clear(rooms, shared);
     roomTags = [];
-    const starts = new Set(b.tokens.map((t) => t.start));
     const nodes = new Map(b.nodes.map((n) => [n.id, n]));
-    for (const box of uncovered(nodeBoxes(b), covered)) {
-      const flat = FLAT_HEIGHT[nodes.get(box.id)?.type ?? ''];
-      const [w, , d] = box.size;
-      const h = flat ?? STOREY_HEIGHT;
-      const y = box.center[1] - STOREY_HEIGHT / 2 + h / 2;
-      const outer = new THREE.BoxGeometry(w, h, d);
-      const fill = new THREE.Mesh(outer, fillMat);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(outer), wallMat);
-      for (const o of [fill, edges]) o.position.set(box.center[0], y, box.center[2]);
-      world.add(fill, edges);
-      const node = nodes.get(box.id);
-      if (node) {
-        const el = document.createElement('div');
-        el.className = 'ep-room';
-        el.textContent = roomLabel(node.name, node.is_exit);
-        const label = new CSS2DObject(el);
-        label.position.set(box.center[0], y + h / 2, box.center[2]); // on the roof of its box
-        rooms.add(label);
-        roomTags.push({ obj: label, text: el.textContent, priority: node.is_exit || starts.has(node.id) ? 0 : 1 });
-      }
+    const marks = graphMarks(b, covered);
+    for (const { id, at } of marks.labels) {
+      const node = nodes.get(id)!;
+      const el = document.createElement('div');
+      el.className = 'ep-room';
+      el.textContent = roomLabel(node.name, node.is_exit);
+      const label = new CSS2DObject(el);
+      label.position.set(...at);
+      rooms.add(label);
+      roomTags.push({ obj: label, text: el.textContent });
     }
-    bounds.setFromObject(world);
+    if (!marks.frame) {
+      bounds.makeEmpty();
+      return;
+    }
+    bounds.set(new THREE.Vector3(...marks.frame.min), new THREE.Vector3(...marks.frame.max));
     const centre = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     const span = 2 * Math.ceil((Math.max(size.x, size.z) + 12) / 2);
@@ -254,9 +244,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
-    // Room labels that would overlap on screen (stacked storeys): keep exits and start rooms first.
+    // Exit labels that would overlap on screen: keep the first.
     const kept: { x: number; y: number; w: number }[] = [];
-    for (const tag of [...roomTags].sort((a, b) => a.priority - b.priority)) {
+    for (const tag of roomTags) {
       const v = tag.obj.position.clone().project(camera);
       const at = { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2, w: roomLabelWidth(tag.text) };
       const clash = kept.some((k) => Math.abs(k.x - at.x) < (k.w + at.w) / 2 + 6 && Math.abs(k.y - at.y) < ROOM_LABEL_HEIGHT);
@@ -315,9 +305,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     for (const run of runs) update(run, t - run.delay);
     if (win && t >= allDone) {
       const since = t - allDone;
-      const period = 1 / MOTION.winFlashHz;
-      const flashing = !reduced && since < period * MOTION.winFlashCount;
-      wallMat.color.set(flashing ? (since % period < period / 2 ? ACCENT : WIN_FLASH_OFF) : WALL);
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
@@ -389,7 +376,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     win = results.length > 0 && results.every((r) => r.status === 'pass');
     // During and after a run the routes and fail cards lead; the room names step back.
     labels.domElement.classList.toggle('ep-run', results.some((r) => r.path.length > 0));
-    wallMat.color.set(WALL);
     banner.classList.remove('on', 'small');
     fit();
     t0 = performance.now();

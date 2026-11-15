@@ -23,12 +23,11 @@ import type { ParseOutcome, Phase, PickItem } from './shell.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
-// The MVP game: wheelchair, sofa and people (mvp.ts). Chiller, glass and load are Later chips.
+// The MVP game: wheelchair, sofa and people (mvp.ts). The dock offers only these.
 const building = mvpBuilding(buildingJson as Building);
 const expected = expectedJson as ExpectedFile;
 const buttons = mvpButtons(building, demoButtons(buildingJson as Building, expected));
 const items = pickerItems(building, MVP_TOKENS);
-const placeable = items.filter((i) => i.token !== null);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface State {
@@ -72,11 +71,10 @@ function btn(label: Child | Child[], cls: string, onClick: () => void, attrs: Re
   return b;
 }
 
-const itemOf = (id: Id): PickItem => placeable.find((i) => i.token === id)!;
-function dot(item: PickItem, small = false, off = false): HTMLElement {
+const itemOf = (id: Id): PickItem => items.find((i) => i.token === id)!;
+function dot(item: PickItem, small = false): HTMLElement {
   return h('span', {
-    class: `dot${small ? ' sm' : ''}${off ? ' off' : ''}`, 'aria-hidden': 'true',
-    style: off ? '' : `--c:${item.color};--gi:${item.glyphInk}`,
+    class: `dot${small ? ' sm' : ''}`, 'aria-hidden': 'true', style: `--c:${item.color};--gi:${item.glyphInk}`,
   }, item.glyph);
 }
 const word = (r: Answer | null | undefined, running = false): HTMLElement => r
@@ -258,11 +256,6 @@ function render(): void {
     return h('div', { class: 'srow', tabindex: '0' }, dot(itemOf(id)), h('span', { class: 'nm' }, itemOf(id).label), word(r), h('span', { class: 'det num' }, det));
   }));
 
-  // Sample label: where the numbers come from
-  const fromData = S.results?.some((r) => r.source === 'expected') ?? false;
-  $('sample').replaceChildren(h('b', {}, '432 Park Avenue slice'), ' - self-made sample building',
-    fromData ? h('span', { class: 'more' }, '. Results come from expected.json until the solver has these rules.') : '');
-
   // Live note and LEVEL COMPLETE
   $('note').textContent = S.note;
   $('banner').classList.toggle('on', S.phase === 'complete');
@@ -349,17 +342,10 @@ function renderEdit(): void {
 // ---------- Build the dock once ----------
 
 for (const it of items) {
-  if (it.token) {
-    const id = it.token;
-    const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => place(id),
-      { 'data-token': id, 'aria-pressed': 'false', ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}) });
-    $('picker').append(b);
-  } else {
-    const group = $('laterGroup');
-    if (!group.querySelector('.later')) group.append(h('span', { class: 'later' }, 'Later'));
-    group.append(btn([dot(it, false, true), h('span', {}, it.label)], 'chip', () => undefined,
-      { disabled: '', title: 'Later', 'aria-label': `${it.label} (later)` }));
-  }
+  const id = it.token;
+  const b = btn([dot(it), h('span', {}, it.label), it.key ? h('kbd', {}, String(it.key)) : null], 'chip', () => place(id),
+    { 'data-token': id, 'aria-pressed': 'false', ...(it.key ? { 'aria-keyshortcuts': String(it.key) } : {}) });
+  $('picker').append(b);
 }
 
 // ---------- Controls ----------
@@ -392,7 +378,7 @@ document.addEventListener('keydown', (ev) => {
   if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const onBtn = ev.target instanceof HTMLButtonElement;
   const k = Number(ev.key);
-  const hit = placeable.find((i) => i.key === k);
+  const hit = items.find((i) => i.key === k);
   if (hit?.token) return place(hit.token);
   // Space is always Escape! (outside the text box); Enter is Escape! unless a button has focus.
   if (ev.key === ' ' || (ev.key === 'Enter' && !onBtn)) {

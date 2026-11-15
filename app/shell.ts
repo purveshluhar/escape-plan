@@ -1,7 +1,7 @@
 // The daylight shell (design B): which objects the dock offers, what the summary pill says, and the
 // plan C keyword parser behind the "Type an edit" box. Pure, so Node tests can check it. Owner: P3.
 import type { Building, Discipline, Edit, EditOp, Id, JevParse, SolverResult, Token } from '../contract/types.ts';
-import { DISCIPLINES, JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
+import { JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
 import { DISCIPLINE_STYLE } from '../design/tokens.ts';
 import { tokenName } from '../viewer/labels.ts';
 import type { DemoButton } from './state.ts';
@@ -9,37 +9,26 @@ import type { DemoButton } from './state.ts';
 // ---------- Dock picker ----------
 
 export interface PickItem {
-  token: Id | null; // null = a Later chip: not in this game yet
+  token: Id;
   discipline: Discipline;
   label: string;
   glyph: string;
   color: string;
   glyphInk: string;
-  key: number | null; // keyboard shortcut 1..9, placeable objects only
+  key: number | null; // keyboard shortcut 1..9; null past the ninth object
 }
 
-// The objects the dock offers. With no `roster`, every token in the building can be placed, in
-// data order, and disciplines with no token yet follow as "Later" chips. With a `roster` (the MVP
-// game), only those tokens can be placed, in roster order, and the building's other tokens are the
-// "Later" chips, so the audience sees what is coming.
+// The objects the dock offers: every token in the building in data order, or with a `roster` (the
+// MVP game) only those tokens, in roster order. Nothing else shows: no "Later" chips.
 export function pickerItems(building: Building, roster?: readonly Id[]): PickItem[] {
-  // index: the token's place in the dock (its key is index + 1, for 1..9); null for a Later chip.
-  const item = (t: Token, index: number | null): PickItem => {
+  const play = roster ? roster.flatMap((id) => building.tokens.filter((t) => t.id === id)) : building.tokens;
+  return play.map((t: Token, i): PickItem => {
     const s = DISCIPLINE_STYLE[t.discipline];
     return {
-      token: index === null ? null : t.id, discipline: t.discipline, label: tokenName(t.id),
-      glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: index !== null && index < 9 ? index + 1 : null,
+      token: t.id, discipline: t.discipline, label: tokenName(t.id),
+      glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: i < 9 ? i + 1 : null,
     };
-  };
-  const play = roster ? roster.flatMap((id) => building.tokens.filter((t) => t.id === id)) : building.tokens;
-  const placeable = play.map((t, i) => item(t, i));
-  if (roster) return [...placeable, ...building.tokens.filter((t) => !roster.includes(t.id)).map((t) => item(t, null))];
-  const have = new Set(building.tokens.map((t) => t.discipline));
-  const later = DISCIPLINES.filter((d) => !have.has(d)).map((d): PickItem => {
-    const s = DISCIPLINE_STYLE[d];
-    return { token: null, discipline: d, label: s.label, glyph: s.glyph, color: s.color, glyphInk: s.glyphInk, key: null };
   });
-  return [...placeable, ...later];
 }
 
 // Placing toggles: a second click takes the object off again. Order follows the building, so

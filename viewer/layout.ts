@@ -34,6 +34,30 @@ export function uncovered(boxes: BoxSpec[], covered: ReadonlySet<Id>): BoxSpec[]
   return boxes.filter((b) => !covered.has(b.id));
 }
 
+// What the viewer draws for the building graph itself. The graph's rooms are self-made, so none is
+// drawn as a box (the real 432 Park plans and facade in the backdrop are the building on screen).
+// The uncovered boxes still give the frame the camera fits and the grid spans, and each exit gets a
+// label at its floor, so players see where the tokens are going. `frame` is null when every node is covered.
+export interface GraphMarks {
+  frame: { min: Vec3; max: Vec3 } | null;
+  labels: { id: Id; at: Vec3 }[];
+}
+
+export function graphMarks(b: Building, covered: ReadonlySet<Id>): GraphMarks {
+  const boxes = uncovered(nodeBoxes(b), covered);
+  const exits = new Set(b.nodes.filter((n) => n.is_exit).map((n) => n.id));
+  const lo = (box: BoxSpec, i: number): number => box.center[i]! - box.size[i]! / 2;
+  const hi = (box: BoxSpec, i: number): number => box.center[i]! + box.size[i]! / 2;
+  const axis = [0, 1, 2] as const;
+  const frame = boxes.length === 0 ? null : {
+    min: axis.map((i) => Math.min(...boxes.map((box) => lo(box, i)))) as Vec3,
+    max: axis.map((i) => Math.max(...boxes.map((box) => hi(box, i)))) as Vec3,
+  };
+  const labels = boxes.filter((box) => exits.has(box.id))
+    .map((box) => ({ id: box.id, at: [box.center[0], lo(box, 1), box.center[2]] as Vec3 }));
+  return { frame, labels };
+}
+
 // Where two plan boxes meet: per axis, the middle of their overlap, or of the gap between them.
 // For boxes that share a wall this is the middle of that wall, which is where the door is drawn.
 export function doorPoint(a: Box, b: Box): [number, number] {
