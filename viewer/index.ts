@@ -9,7 +9,7 @@ import {
   ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FONT_BODY, FONT_DISPLAY, FONT_STYLESHEET,
   GLASS_STRONG, GRID, MOTION, PATH, SCORE, TEXT, TEXT_MUTED, WALL, WALL_INNER,
 } from '../design/tokens.ts';
-import { failText, labelSides, labelWidth } from './labels.ts';
+import { failText, labelSides, labelWidth, roomLabel, tokenName } from './labels.ts';
 import {
   cumulativeLengths, easeInOut, frustum, nodeBoxes, pointAt, STOREY_HEIGHT, tokenRoute, type Vec3,
 } from './layout.ts';
@@ -19,6 +19,8 @@ export interface Viewer {
   // Optional context drawn under everything (for example the Cityweft block), already placed in
   // viewer metres. It never changes the framing, and the building always draws over it. null clears it.
   setBackdrop(object: THREE.Object3D | null): void;
+  // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
+  setInsetRight(pixels: number): void;
 }
 
 export interface ViewerOptions {
@@ -36,6 +38,8 @@ const SHAKE_METRES = 0.25;
 const X_LIFT = -48; // pixels
 const LABEL_GAP = 36; // pixels from the X centre to its label
 const LABEL_HEIGHT = 56; // pixels, about two lines of label
+const ROOM_LABEL_HEIGHT = 16; // pixels, one line of room name
+const roomLabelWidth = (text: string): number => text.length * 8.4; // 11 px caps with 1.2 px tracking
 const UP = new THREE.Vector3(0, 1, 0);
 const WIN_FLASH_OFF = '#ffffff'; // the outline blinks ACCENT <-> white on LEVEL COMPLETE (look.md)
 
@@ -57,7 +61,7 @@ interface Run {
 }
 
 export function createViewer(container: HTMLElement, options: ViewerOptions = {}): Viewer {
-  const insetRight = options.insetRight ?? 0;
+  let insetRight = options.insetRight ?? 0;
   injectStyles();
   if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
 
@@ -78,6 +82,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   container.appendChild(banner);
 
   const world = new THREE.Scene(); // building and grid
+  const rooms = new THREE.Scene(); // room name labels, under the tokens and fail cards
   const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1500); // far reaches a 500 m backdrop
   const backdrop = new THREE.Scene(); // context under the model; lit, unlike the model
@@ -102,12 +107,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
+  let roomTags: { obj: CSS2DObject; text: string; priority: number }[] = [];
   let t0 = performance.now();
   let allDone = 0;
   let win = false;
 
   function drawBuilding(b: Building): void {
     clear(world, shared);
+    clear(rooms, shared);
+    roomTags = [];
+    const starts = new Set(b.tokens.map((t) => t.start));
     const nodes = new Map(b.nodes.map((n) => [n.id, n]));
     for (const box of nodeBoxes(b)) {
       const flat = FLAT_HEIGHT[nodes.get(box.id)?.type ?? ''];
@@ -119,6 +128,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(outer), wallMat);
       for (const o of [fill, edges]) o.position.set(box.center[0], y, box.center[2]);
       world.add(fill, edges);
+      const node = nodes.get(box.id);
+      if (node) {
+        const el = document.createElement('div');
+        el.className = 'ep-room';
+        el.textContent = roomLabel(node.name, node.is_exit);
+        const label = new CSS2DObject(el);
+        label.position.set(box.center[0], y + h / 2, box.center[2]); // on the roof of its box
+        rooms.add(label);
+        roomTags.push({ obj: label, text: el.textContent, priority: node.is_exit || starts.has(node.id) ? 0 : 1 });
+      }
     }
     bounds.setFromObject(world);
     const centre = bounds.getCenter(new THREE.Vector3());
@@ -176,7 +195,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       tokenGroup.add(new THREE.Mesh(geo.tokenGlow, glow));
       const disc = document.createElement('div');
       disc.className = 'ep-token';
-      disc.innerHTML = `<i style="--c:${style.color};--ink:${style.glyphInk}" title="${style.label}">${style.glyph}</i>`;
+      disc.innerHTML = `<i style="--c:${style.color};--ink:${style.glyphInk}" title="${tokenName(token.id)}">${style.glyph}</i>`;
       tokenGroup.add(new CSS2DObject(disc));
       tokenGroup.position.set(...(route.points[0] ?? [0, 0, 0]));
       fx.add(tokenGroup);
@@ -225,6 +244,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     Object.assign(camera, frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN }));
     camera.updateProjectionMatrix();
+
+    // Room labels that would overlap on screen (stacked storeys): keep exits and start rooms first.
+    const kept: { x: number; y: number; w: number }[] = [];
+    for (const tag of [...roomTags].sort((a, b) => a.priority - b.priority)) {
+      const v = tag.obj.position.clone().project(camera);
+      const at = { x: (v.x + 1) * w / 2, y: (1 - v.y) * h / 2, w: roomLabelWidth(tag.text) };
+      const clash = kept.some((k) => Math.abs(k.x - at.x) < (k.w + at.w) / 2 + 6 && Math.abs(k.y - at.y) < ROOM_LABEL_HEIGHT);
+      tag.obj.visible = !clash;
+      if (!clash) kept.push(at);
+    }
 
     const xs = runs.flatMap((r) => (r.x ? [r.x] : []));
     const sides = labelSides(xs.map(({ at, width }) => {
@@ -291,6 +320,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     renderer.render(world, camera);
     renderer.clearDepth();
     renderer.render(fx, camera);
+    labels.render(rooms, camera);
     labels.render(fx, camera);
   }
 
@@ -301,6 +331,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     drawBuilding(building);
     buildRuns(building, results);
     win = results.length > 0 && results.every((r) => r.status === 'pass');
+    // During and after a run the routes and fail cards lead; the room names step back.
+    labels.domElement.classList.toggle('ep-run', results.some((r) => r.path.length > 0));
     wallMat.color.set(WALL);
     banner.classList.remove('on', 'small');
     fit();
@@ -314,7 +346,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     renderer.localClippingEnabled = object !== null; // a backdrop may cut itself with clipping planes
   }
 
-  return { show, setBackdrop };
+  function setInsetRight(pixels: number): void {
+    if (pixels === insetRight) return;
+    insetRight = pixels;
+    banner.style.right = `${insetRight}px`;
+    fit();
+  }
+
+  return { show, setBackdrop, setInsetRight };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
@@ -345,6 +384,11 @@ function injectStyles(): void {
   style.textContent = `
 .ep-labels { position: absolute; inset: 0; pointer-events: none; }
 .ep-token, .ep-fail { width: 0; height: 0; }
+/* Room names: quiet caps on each roof, always under tokens and fail cards. */
+.ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
+  letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;
+  transition: opacity 0.3s; }
+.ep-run .ep-room { opacity: 0.35; }
 /* CSS2DRenderer stacks labels by distance; a red X and its label must never hide behind a token. */
 .ep-fail { z-index: 100000 !important; }
 .ep-token i { position: absolute; transform: translate(-50%, -50%); width: 38px; height: 38px;

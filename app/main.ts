@@ -10,18 +10,20 @@ import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { loadBackdrop } from './backdrop-load.ts';
+import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
-import { PHASE_WORD, countText, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
+import { PHASE_WORD, countText, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced } from './shell.ts';
 import type { ParseOutcome, Phase, PickItem } from './shell.ts';
 import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from './state.ts';
 import type { GameState } from './state.ts';
 
-const building = buildingJson as Building;
+// The MVP game: wheelchair, sofa and people (mvp.ts). Chiller, glass and load are Later chips.
+const building = mvpBuilding(buildingJson as Building);
 const expected = expectedJson as ExpectedFile;
-const buttons = demoButtons(building, expected);
-const items = pickerItems(building);
+const buttons = mvpButtons(building, demoButtons(buildingJson as Building, expected));
+const items = pickerItems(building, MVP_TOKENS);
 const placeable = items.filter((i) => i.token !== null);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -43,7 +45,11 @@ const S: State = {
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
-const viewer = createViewer($('viewer'), { insetRight: innerWidth > 700 ? SIDE_PANEL : 0 });
+const viewer = createViewer($('viewer'));
+// The model centres in the whole view, and moves left of the fix sheet only when a run has failures
+// (the sheet floats on the right on wider screens; on phones it sits at the bottom).
+const insetFor = (results: readonly Answer[]): number =>
+  innerWidth > 700 && results.some((r) => r.status === 'fail') ? SIDE_PANEL : 0;
 let runTimer = 0;
 
 // ---------- Small DOM helper (textContent only, never innerHTML) ----------
@@ -87,10 +93,11 @@ function solvePlaced(): { edited: Building; results: Answer[] } {
   return { edited: b, results: all.filter((r) => S.placed.includes(r.token)) };
 }
 
-// Show the building as it is now, with no run on it (after a place, clear or fix with nothing placed).
+// Show the building as it is now, with no run on it: placed objects wait in their start rooms.
 function idle(): void {
   window.clearTimeout(runTimer);
-  viewer.show(edited(), []);
+  viewer.setInsetRight(0);
+  viewer.show(edited(), parkedResults(S.placed));
 }
 
 function escape(): void {
@@ -98,6 +105,7 @@ function escape(): void {
   const { edited: b, results } = solvePlaced();
   S.results = results;
   S.scoreOpen = false;
+  viewer.setInsetRight(insetFor(results));
   viewer.show(b, results);
   window.clearTimeout(runTimer);
   if (REDUCE) {
@@ -285,17 +293,22 @@ function renderSheet(b: Building): void {
 
 function fixCard(r: Answer, b: Building): HTMLElement {
   const it = itemOf(r.token);
-  const fixes = fixesFor(buttons, relevantTargets(building, expected, r.token), S.game.edits);
+  // The buttons for where it is stuck now, and for anything expected.json says it gets stuck at.
+  const targets = relevantTargets(building, expected, r.token);
+  if (r.blocked_at) targets.add(r.blocked_at);
+  const fixes = fixesFor(buttons, targets, S.game.edits);
   const why = r.reason ? cap(REASON_TEXT[r.reason]) : 'Blocked';
   const nums = numbersText(r);
   return h('div', { class: 'fcard', role: 'group', 'aria-label': `${it.label} failed` },
     h('div', { class: 'top' }, dot(it), h('span', { class: 'nm' }, it.label), h('span', { class: 'word fail' }, 'FAIL')),
     h('div', { class: 'rs' }, why, r.blocked_at && h('span', {}, ` at ${placeName(b, r.blocked_at)}`)),
     nums && h('div', { class: 'nb num' }, cap(nums)),
-    fixes.length
-      ? h('div', { class: 'fx', role: 'group', 'aria-label': `Fix for ${it.label}` },
-        ...fixes.map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))))
-      : h('div', { class: 'none' }, 'No preset fix for this object. Try typing an edit.'),
+    fixes.length === 0 && h('div', { class: 'none' }, 'No preset fix for this object.'),
+    // "More fixes" opens every preset fix and the text box: in play tests it was the first move
+    // after reading a failure, so it sits on each card, not only at the foot of the sheet.
+    h('div', { class: 'fx', role: 'group', 'aria-label': `Fix for ${it.label}` },
+      ...fixes.map((f) => btn(f.label, 'fixbtn', () => applyFix(f.edit, f.label))),
+      btn('More fixes', 'morebtn', openEdit, { 'aria-label': `More fixes for ${it.label}` })),
   );
 }
 
