@@ -4,6 +4,9 @@
 // items, minItems, maxItems, minimum, maximum, minLength, oneOf, $ref (local or sibling file).
 // Every schema is walked once at load: an unsupported keyword, or additionalProperties other
 // than false, throws at import time, so a schema rule is never skipped silently.
+// Every lookup by a key that comes from data or a ref is an own-property check: a name on
+// Object.prototype ("__proto__", "constructor", "toString") must never read as a known field,
+// a required field or a schema. A $ref must end on an object, never a leaf or an array.
 
 import building from './schema/building.schema.json' with { type: 'json' };
 import solverOutput from './schema/solver-output.schema.json' with { type: 'json' };
@@ -37,12 +40,12 @@ function walk(node: unknown, file: string): void {
   for (const key of Object.keys(s)) {
     if (!KNOWN.has(key)) throw new Error(`schema keyword not supported by validate.ts: ${key} (${file})`);
   }
-  if ('additionalProperties' in s && s.additionalProperties !== false) {
+  if (Object.hasOwn(s, 'additionalProperties') && s.additionalProperties !== false) {
     throw new Error(`validate.ts supports only additionalProperties: false (${file})`);
   }
   // A keyword with the wrong value type would switch its rule off, so it throws too.
   const bad = (key: string, ok: boolean) => {
-    if (key in s && !ok) throw new Error(`schema keyword ${key} has the wrong value type (${file})`);
+    if (Object.hasOwn(s, key) && !ok) throw new Error(`schema keyword ${key} has the wrong value type (${file})`);
   };
   for (const key of ['minItems', 'maxItems', 'minimum', 'maximum', 'minLength']) bad(key, typeof s[key] === 'number');
   for (const key of ['enum', 'required', 'oneOf']) bad(key, Array.isArray(s[key]));
@@ -67,14 +70,17 @@ export function validate(ref: string, data: unknown): string[] {
 }
 
 function resolve(ref: string, currentFile: string): { file: string; schema: Schema } {
-  const [filePart, pointer = ''] = ref.split('#');
+  const parts = ref.split('#');
+  if (parts.length > 2) throw new Error(`bad $ref: ${ref}`);
+  const [filePart = '', pointer = ''] = parts;
   const file = filePart || currentFile;
+  if (!Object.hasOwn(SCHEMAS, file)) throw new Error(`unknown schema file: ${file}`);
   let node: unknown = SCHEMAS[file];
-  if (!node) throw new Error(`unknown schema file: ${file}`);
   for (const key of pointer.split('/').filter(Boolean)) {
+    if (node === null || typeof node !== 'object' || !Object.hasOwn(node, key)) throw new Error(`bad $ref: ${ref}`);
     node = (node as Schema)[key];
-    if (node === undefined) throw new Error(`bad $ref: ${ref}`);
   }
+  if (node === null || typeof node !== 'object' || Array.isArray(node)) throw new Error(`bad $ref: ${ref}`);
   return { file, schema: node as Schema };
 }
 
@@ -111,7 +117,7 @@ function check(s: Schema, v: unknown, at: string, file: string, errors: string[]
       return;
     }
   }
-  if ('const' in s && v !== s.const) errors.push(`${at}: must be ${JSON.stringify(s.const)}`);
+  if (Object.hasOwn(s, 'const') && v !== s.const) errors.push(`${at}: must be ${JSON.stringify(s.const)}`);
   if (Array.isArray(s.enum) && !s.enum.includes(v as never)) {
     errors.push(`${at}: ${JSON.stringify(v)} is not one of ${JSON.stringify(s.enum)}`);
   }
@@ -132,10 +138,10 @@ function check(s: Schema, v: unknown, at: string, file: string, errors: string[]
     const o = v as Record<string, unknown>;
     const props = (s.properties ?? {}) as Record<string, Schema>;
     for (const key of (s.required ?? []) as string[]) {
-      if (!(key in o)) errors.push(`${at}: missing required field "${key}"`);
+      if (!Object.hasOwn(o, key)) errors.push(`${at}: missing required field "${key}"`);
     }
     for (const [key, value] of Object.entries(o)) {
-      const sub = props[key];
+      const sub = Object.hasOwn(props, key) ? props[key] : undefined;
       if (sub) check(sub, value, `${at}.${key}`, file, errors);
       else if (s.additionalProperties === false) errors.push(`${at}: unknown field "${key}"`);
     }
