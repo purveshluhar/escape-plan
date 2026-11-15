@@ -1,0 +1,221 @@
+// P1-12: DECIDER=strands. Strands answers op and target; the plan C number parser reads the value.
+// A fake Strands server on 127.0.0.1 stands in for the model, so no model is needed here.
+import { after, before, beforeEach, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { JevParse, JevParseRequest } from '../contract/types.ts';
+import { EDIT_OPS, JEV_ACCEPT_CONFIDENCE } from '../contract/types.ts';
+import { validate } from '../contract/validate.ts';
+import { readConfig, startServer } from './http.ts';
+import { parse } from './parse.ts';
+import type { DeciderConfig } from './parse.ts';
+import { DEFAULT_STRANDS_URL, STRANDS_MAX_TARGETS } from './strands.ts';
+
+// What the fake Strands server does with the next request.
+type Handler = (body: Record<string, any>, res: ServerResponse) => void;
+let handler: Handler;
+const seen: Record<string, any>[] = [];
+let fake: Server;
+let fakeUrl = '';
+
+const answer = (op: string, opConf: number, target: string, targetConf: number): Handler => (_b, res) => {
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({
+    answers: {
+      op: { type: 'choice', choice: op, confidence: opConf, probabilities: { [op]: opConf } },
+      target: { type: 'choice', choice: target, confidence: targetConf, probabilities: { [target]: targetConf } },
+    },
+    latency_ms: 12,
+  }));
+};
+
+before(async () => {
+  fake = createServer((req: IncomingMessage, res: ServerResponse) => {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (c: string) => { raw += c; });
+    req.on('end', () => {
+      const body = raw === '' ? {} : JSON.parse(raw);
+      seen.push({ path: req.url, method: req.method, body });
+      handler(body, res);
+    });
+  });
+  await new Promise<void>((done) => fake.listen(0, '127.0.0.1', done));
+  fakeUrl = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
+});
+after(() => new Promise<void>((done) => { fake.closeAllConnections(); fake.close(() => done()); }));
+beforeEach(() => { seen.length = 0; handler = answer('widen', 0.99, 'plant-shaft', 0.98); });
+
+const targets = [
+  { id: 'plant-shaft', name: 'Plant shaft' }, { id: 'lobby-door', name: 'Lobby door' },
+  { id: 'unit1-door', name: 'Unit 1 door' }, { id: 'beam-b2', name: 'Beam B2' },
+];
+const req = (text: string, more: Partial<JevParseRequest> = {}): JevParseRequest => ({
+  text, ops: [...EDIT_OPS], targets, value_range: { min: 0, max: 5 }, ...more,
+});
+const config = (env: Record<string, string> = {}): DeciderConfig =>
+  readConfig({ DECIDER: 'strands', STRANDS_URL: fakeUrl, STRANDS_TIMEOUT_MS: '500', ...env });
+const accepted = (p: JevParse): boolean =>
+  p.op.confidence >= JEV_ACCEPT_CONFIDENCE && p.target.confidence >= JEV_ACCEPT_CONFIDENCE
+  && (p.value === null || p.value.confidence >= JEV_ACCEPT_CONFIDENCE);
+const run = async (text: string, more: Partial<JevParseRequest> = {}, env: Record<string, string> = {}): Promise<JevParse> => {
+  const p = await parse(req(text, more), config(env));
+  assert.deepEqual(validate('jev.schema.json#/$defs/parse', p), [], `schema: ${text}`);
+  return p;
+};
+// Strands could not answer: a valid JevParse that nobody accepts, so the app asks "Did you mean".
+const unsure = (p: JevParse, text: string) => {
+  assert.equal(p.op.confidence, 0, text);
+  assert.equal(p.target.confidence, 0, text);
+  assert.ok(!accepted(p), text);
+};
+
+test('config: DECIDER=strands is built, with a loopback default URL and a timeout', () => {
+  const c = readConfig({ DECIDER: 'strands' });
+  assert.equal(c.decider, 'strands');
+  assert.equal(c.strands.url, DEFAULT_STRANDS_URL);
+  assert.match(DEFAULT_STRANDS_URL, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.ok(c.strands.timeoutMs > 0);
+  assert.equal(readConfig({ STRANDS_URL: 'http://127.0.0.1:18000', STRANDS_TIMEOUT_MS: '30000' }).strands.timeoutMs, 30000);
+  // Empty means "not set", as for the other variables.
+  assert.deepEqual(readConfig({ STRANDS_URL: '', STRANDS_TIMEOUT_MS: '' }), readConfig({}));
+});
+
+test('config: a Strands URL off this machine, or a bad timeout, stops the server at start', () => {
+  for (const STRANDS_URL of ['http://10.0.0.5:8000', 'http://example.com:8000', 'https://127.0.0.1:8000',
+    'http://user:pw@127.0.0.1:8000', 'http://127.0.0.1:8000/v1', 'http://127.0.0.1:8000/?x=1',
+    'http://0.0.0.0:8000', 'http://localhost.evil.example:8000', 'file:///etc/passwd', '127.0.0.1:8000', 'not a url']) {
+    assert.throws(() => readConfig({ DECIDER: 'strands', STRANDS_URL }), /STRANDS_URL/, STRANDS_URL);
+  }
+  for (const STRANDS_TIMEOUT_MS of ['0', '-1', 'abc', '1.5', '60001', ' 500']) {
+    assert.throws(() => readConfig({ DECIDER: 'strands', STRANDS_TIMEOUT_MS }), /STRANDS_TIMEOUT_MS/, STRANDS_TIMEOUT_MS);
+  }
+});
+
+test('Strands picks op and target; the number parser reads the value', async () => {
+  const p = await run('widen the plant shaft to 2 m');
+  assert.deepEqual(p, { op: { choice: 'widen', confidence: 0.99 }, target: { choice: 'plant-shaft', confidence: 0.98 }, value: { score: 2, confidence: 1 } });
+  assert.ok(accepted(p));
+  handler = answer('widen', 0.99, 'unit1-door', 0.97);
+  const unit = await run('widen unit 1 door to 180 cm'); // the 1 in the name is not the value
+  assert.deepEqual(unit.value, { score: 1.8, confidence: 1 });
+});
+
+test('Strands is asked op and target only, over the offered ops and on-screen targets', async () => {
+  await run('add a ramp at the lobby door', { ops: ['widen', 'add_ramp', 'reset'] });
+  assert.equal(seen.length, 1);
+  const { path, method, body } = seen[0]!;
+  assert.equal(method, 'POST');
+  assert.equal(path, '/v1/systemone');
+  assert.match(body.state, /add a ramp at the lobby door/);
+  assert.deepEqual(Object.keys(body.questions).sort(), ['op', 'target']);
+  assert.equal(body.questions.op.type, 'choice');
+  assert.deepEqual(Object.keys(body.questions.op.criteria), ['widen', 'add_ramp', 'reset']);
+  assert.equal(body.questions.target.type, 'choice');
+  assert.deepEqual(body.questions.target.criteria, Object.fromEntries(targets.map((t) => [t.id, t.name])));
+});
+
+test('the value range check holds: over 5 m, or outside value_range, is not accepted', async () => {
+  for (const [text, more] of [
+    ['widen the plant shaft to 8 m', {}],
+    ['widen the plant shaft to 12 metres', {}],
+    ['widen the plant shaft to 6 m', { value_range: { min: 0, max: 10 } }],
+    ['widen the plant shaft to 1 m', { value_range: { min: 1.5, max: 5 } }],
+    ['widen the plant shaft', {}],
+  ] as [string, Partial<JevParseRequest>][]) {
+    const p = await run(text, more);
+    assert.ok(p.value !== null && p.value.confidence < JEV_ACCEPT_CONFIDENCE, text);
+    assert.ok(!accepted(p), text);
+  }
+});
+
+test('reset skips the target check and has no value, whatever Strands says about the target', async () => {
+  handler = answer('reset', 0.97, 'lobby-door', 0.35);
+  const p = await run('reset');
+  assert.equal(p.op.choice, 'reset');
+  assert.equal(p.value, null);
+  assert.equal(p.target.choice, targets[0]!.id);
+  assert.ok(accepted(p));
+});
+
+test('an op other than widen has no value', async () => {
+  handler = answer('close_door', 0.95, 'lobby-door', 0.93);
+  const p = await run('close the lobby door to 2 m');
+  assert.equal(p.value, null);
+  assert.equal(p.op.choice, 'close_door');
+});
+
+test('Strands down: a valid JevParse at confidence 0, never another parser', async () => {
+  const closed = createServer();
+  await new Promise<void>((done) => closed.listen(0, '127.0.0.1', done));
+  const port = (closed.address() as AddressInfo).port;
+  await new Promise<void>((done) => closed.close(() => done()));
+  const p = await run('widen the plant shaft to 2 m', {}, { STRANDS_URL: `http://127.0.0.1:${port}` });
+  unsure(p, 'down');
+  assert.ok(EDIT_OPS.includes(p.op.choice));
+  assert.ok(targets.some((t) => t.id === p.target.choice));
+});
+
+test('Strands too slow: the call stops at STRANDS_TIMEOUT_MS and answers at confidence 0', async () => {
+  handler = (b, res) => setTimeout(() => answer('widen', 0.99, 'plant-shaft', 0.98)(b, res), 1500);
+  const t0 = performance.now();
+  const p = await run('widen the plant shaft to 2 m', {}, { STRANDS_TIMEOUT_MS: '200' });
+  const ms = performance.now() - t0;
+  unsure(p, 'timeout');
+  assert.ok(ms < 1000, `${ms} ms`);
+});
+
+test('a broken or out-of-list Strands answer is never applied', async () => {
+  const replies: Handler[] = [
+    (_b, res) => { res.writeHead(500); res.end('boom'); },
+    (_b, res) => { res.writeHead(422, { 'content-type': 'application/json' }); res.end('{"detail":[]}'); },
+    (_b, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('not json'); },
+    (_b, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"answers":{}}'); },
+    answer('explode', 0.99, 'plant-shaft', 0.99), // op not offered
+    answer('add_ramp', 0.99, 'plant-shaft', 0.99), // op not offered in this request
+    answer('widen', 0.99, 'stairwell', 0.99), // target not on screen
+    answer('widen', 0.99, '__proto__', 0.99),
+    answer('widen', 1.5, 'plant-shaft', 0.99), // confidence out of 0..1
+    answer('widen', 0.99, 'plant-shaft', -0.1),
+    (_b, res) => { res.writeHead(302, { location: 'http://example.com/' }); res.end(); }, // never followed
+    (_b, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(`{"pad":"${'x'.repeat(300 * 1024)}"}`); },
+  ];
+  for (const [i, h] of replies.entries()) {
+    handler = h;
+    unsure(await run('widen the plant shaft to 2 m', { ops: ['widen', 'reset'] }), `reply ${i}`);
+  }
+});
+
+test(`more than ${STRANDS_MAX_TARGETS} targets never go to the model`, async () => {
+  const many = Array.from({ length: STRANDS_MAX_TARGETS + 1 }, (_, i) => ({ id: `t${i}`, name: `Door ${i}` }));
+  const p = await run('widen door 3 to 2 m', { targets: many });
+  assert.equal(seen.length, 0);
+  unsure(p, 'too many targets');
+  const fits = await run('widen the plant shaft to 2 m', { targets: [...targets, ...many.slice(0, STRANDS_MAX_TARGETS - targets.length)] });
+  assert.equal(seen.length, 1);
+  assert.ok(accepted(fits));
+});
+
+test('a target id that is an inherited key name still reaches Strands as a choice', async () => {
+  await run('widen the plant shaft to 2 m', { targets: [...targets, { id: '__proto__', name: 'Odd' }] });
+  assert.equal(Object.hasOwn(seen[0]!.body.questions.target.criteria, '__proto__'), true);
+});
+
+test('POST /parse with DECIDER=strands answers from Strands', async () => {
+  const server = await startServer(readConfig({ SERVER_PORT: '0', DECIDER: 'strands', STRANDS_URL: fakeUrl }));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const r = await fetch(`http://127.0.0.1:${port}/parse`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req('widen the plant shaft to 2 m')),
+    });
+    assert.equal(r.status, 200);
+    const out = await r.json();
+    assert.deepEqual(validate('jev.schema.json#/$defs/parse', out), []);
+    assert.deepEqual(out, { op: { choice: 'widen', confidence: 0.99 }, target: { choice: 'plant-shaft', confidence: 0.98 }, value: { score: 2, confidence: 1 } });
+    assert.equal(seen.length, 1);
+  } finally {
+    await new Promise<void>((done) => server.close(() => done()));
+  }
+});

@@ -175,6 +175,16 @@ function pickValue(tokens: string[], clean: boolean[], request: JevParseRequest,
   return { score: clamp(pick.metres), confidence: conf };
 }
 
+// The widen value alone, read the same way keywordParse reads it, for a decider that answers op
+// and target only (server/strands.ts). Target names are read first, so the 1 in "Unit 1 door" is
+// never taken as 1 m.
+export function keywordValue(request: JevParseRequest): JevScore {
+  const { tokens, clean } = tokenizeSentence(request.text);
+  const used = tokens.map(() => false);
+  if (request.targets.length > 0) pickTarget(tokens, request, used);
+  return pickValue(tokens, clean, request, used);
+}
+
 // One op from request.ops, one target from request.targets, and for widen a value in range.
 // The caller checks that ops and targets are not empty (server/http.ts answers 400 first).
 export function keywordParse(request: JevParseRequest): JevParse {

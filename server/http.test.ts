@@ -62,7 +62,7 @@ test('config refuses a non-local bind, a bad port and an unknown DECIDER', () =>
     assert.throws(() => readConfig({ SERVER_HOST }), /SERVER_HOST/, SERVER_HOST);
   }
   for (const SERVER_PORT of ['abc', '-1', '65536', '1.5', ' 80']) assert.throws(() => readConfig({ SERVER_PORT }), /SERVER_PORT/, SERVER_PORT);
-  assert.throws(() => readConfig({ DECIDER: 'strands' }), /DECIDER/);
+  assert.throws(() => readConfig({ DECIDER: 'jev' }), /DECIDER/);
   // A HOST or PORT the shell exports for something else is not read.
   assert.deepEqual(readConfig({ HOST: 'my-laptop.local', PORT: '3000' }), readConfig({}));
 });
