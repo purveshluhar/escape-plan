@@ -1,7 +1,7 @@
 # viewer/
 
 **Owner:** P2 (@justinjao).
-**Purpose:** draw the building as an isometric 3D cutaway and animate each token's path.
+**Purpose:** animate each token's path over the real building in the backdrop, isometric.
 **Consumes:** `Building` and `SolverResult[]` (`contract/types.ts`), colours from `design/tokens.ts`.
 **Produces:** `createViewer(container)` returning `{ show(building, results), setBackdrop(object), setCovered(ids) }` (`viewer/index.ts`).
 `setBackdrop` adds context drawn under the model (the Cityweft block, real floor plans). The graph's
@@ -24,7 +24,7 @@ Tier 1 (#5), restyled to Liquid Glass v2 (`design/look.md`). Every `show()` re-r
 its `path`, which goes through the door between rooms. On a fail it shakes, and a blinking red
 X pops above `blocked_at` with a label: "CHILLER  TOO NARROW / Plant shaft: needs 1.6 m, has
 1.2 m". Labels go right, left or above their X, whichever overlaps least. When every token
-passes, the outline blinks and LEVEL COMPLETE shows.
+passes, LEVEL COMPLETE shows.
 
 `createViewer(container, { insetRight })`: pixels on the right covered by a floating panel.
 The model and LEVEL COMPLETE centre in the space left of it. The canvas is transparent, so the

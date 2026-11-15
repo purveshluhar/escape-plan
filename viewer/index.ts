@@ -21,8 +21,9 @@ export interface Viewer {
   setBackdrop(object: THREE.Object3D | null): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
-  // Node ids whose boxes are not drawn, because something else (a real floor plan in the backdrop)
-  // stands in for them. Routes still run through them. Redraws at once.
+  // Node ids left out of the frame (and the grid), because something else (the real tower in the
+  // backdrop) stands in for them. No node is drawn as a box; routes still run through every node.
+  // Redraws at once.
   setCovered(ids: Iterable<Id>): void;
 }
 
@@ -374,8 +375,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     drawBuilding(building);
     buildRuns(building, results);
     win = results.length > 0 && results.every((r) => r.status === 'pass');
-    // During and after a run the routes and fail cards lead; the room names step back.
-    labels.domElement.classList.toggle('ep-run', results.some((r) => r.path.length > 0));
     banner.classList.remove('on', 'small');
     fit();
     t0 = performance.now();
@@ -431,11 +430,10 @@ function injectStyles(): void {
   style.textContent = `
 .ep-labels { position: absolute; inset: 0; pointer-events: none; }
 .ep-token, .ep-fail { width: 0; height: 0; }
-/* Room names: quiet caps on each roof, always under tokens and fail cards. */
+/* Exit names: quiet caps at street level, always under tokens and fail cards. */
 .ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;
   transition: opacity 0.3s; }
-.ep-run .ep-room { opacity: 0.35; }
 /* CSS2DRenderer stacks labels by distance; a red X and its label must never hide behind a token. */
 .ep-fail { z-index: 100000 !important; }
 .ep-token i { position: absolute; transform: translate(-50%, -50%); width: 38px; height: 38px;

@@ -5,6 +5,7 @@ import buildingJson from '../data/building.json';
 import expectedJson from '../data/expected.json';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
 import { IMPLEMENTED_RULES, solve } from '../solver/index.ts';
+import { coveredNodes } from '../data/typical-floors.ts';
 import { FIXTURES } from './fixtures.ts';
 import { createViewer } from './index.ts';
 
@@ -13,6 +14,7 @@ const expected = expectedJson as ExpectedFile;
 const params = new URLSearchParams(location.search);
 // ?inset=372 mimics the app's floating side panel, to check the model centres left of it.
 const viewer = createViewer(document.getElementById('viewer')!, { insetRight: Number(params.get('inset')) || 0 });
+viewer.setCovered(coveredNodes(building)); // frame the slice; the tower's nodes are never drawn
 const source = document.getElementById('source')!;
 const buttons = document.getElementById('cases')!;
 

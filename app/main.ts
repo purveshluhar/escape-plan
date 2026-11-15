@@ -49,6 +49,9 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
 const viewer = createViewer($('viewer'), { onZoom: (zoom) => setCutHeight(cutHeight(zoom)) });
+// Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
+// so framing them shows an empty 424 m view until (or unless) the real floors load.
+viewer.setCovered(coveredNodes(building));
 // The model centres in the whole view, and moves left of the fix sheet only when a run has failures
 // (the sheet floats on the right on wider screens; on phones it sits at the bottom).
 const insetFor = (results: readonly Answer[]): number =>
@@ -396,7 +399,7 @@ idle();
 render();
 
 // The Cityweft block and the real 432 Park typical floor, each only when this machine has the files
-// (data/README.md). Plain ground and plain boxes otherwise.
+// (data/README.md). Plain ground otherwise; the graph's rooms are never drawn as boxes.
 Promise.all([
   loadBackdrop().catch((err: unknown) => (console.warn('Cityweft backdrop not loaded:', err), null)),
   loadTypicalFloor().catch((err: unknown) => (console.warn('Typical floor not loaded:', err), null)),
@@ -407,7 +410,6 @@ Promise.all([
   if (floor) {
     floor.place(building);
     context.add(floor.object);
-    viewer.setCovered(coveredNodes(building)); // the real floors replace the tower's boxes
   }
   viewer.setBackdrop(context);
 });
