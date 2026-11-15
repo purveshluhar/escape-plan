@@ -20,6 +20,7 @@ test('the demo buttons come from the full-demo case, in order, with readable lab
     'Add transfer beam at beam B2',
     'Add ramp at terrace door',
     'Widen lobby door to 1.6 m',
+    'Widen office door to 0.9 m',
   ]);
   assert.equal(new Set(buttons.map((b) => b.id)).size, buttons.length, 'button ids are unique');
 });

@@ -46,6 +46,15 @@ Overture Maps Foundation, Meta & WRI canopy heights.
 - `cityweft-request.ts` holds the pure builders that `cityweft-request.test.ts` checks.
 - Size grows fast: about 10 MB at 300 m and 63 MB at 800 m (Lower Manhattan).
 
+## The tier 1 tokens
+
+`building.json` holds all six tier 1 tokens: chiller, glass, wheelchair and load, and the sofa and
+people the dock offers with the wheelchair. The sofa (0.9 x 1.0 x 2.2 m, from the lobby), people
+(0.6 x 2.0 x 0.6 m, from the ground-floor office) and the office with its 0.5 m door used to be a
+solver test fixture. They are slice data now, and their cases are in `expected.json`: the base case,
+widening the lobby door (the sofa), widening the office door (people), and `full-demo`, which
+widens the office door too.
+
 ## The whole tower
 
 `building.json` holds the demo slice (L1 to L3, hand-written) plus the rest of 432 Park Avenue as

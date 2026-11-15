@@ -4,12 +4,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { Building, SolverResult } from '../contract/types.ts';
-import { mvpBuilding } from '../app/mvp.ts';
 import { withStarts } from '../app/shell.ts';
 import { initialState, run } from '../app/state.ts';
 import { droppableNodes } from '../viewer/drop.ts';
 
-const building = mvpBuilding(JSON.parse(readFileSync(new URL('./building.json', import.meta.url), 'utf8')) as Building);
+const building = JSON.parse(readFileSync(new URL('./building.json', import.meta.url), 'utf8')) as Building;
 const from = (token: string, node: string): SolverResult =>
   run(withStarts(building, new Map([[token, node]])), initialState()).results.find((r) => r.token === token)!;
 

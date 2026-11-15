@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
 import { countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
-import { mvpBuilding } from './mvp.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -87,7 +86,7 @@ test('a drop places the object without taking it off, and keeps building order',
 });
 
 test('a dropped start replaces the start room; the base building is not changed', () => {
-  const mvp = mvpBuilding(building);
+  const mvp = building;
   const moved = withStarts(mvp, new Map([['wheelchair', 'lobby'], ['sofa', 'no-such-node']]));
   assert.equal(moved.tokens.find((t) => t.id === 'wheelchair')?.start, 'lobby');
   assert.equal(moved.tokens.find((t) => t.id === 'sofa')?.start, 'lobby', 'an unknown node is ignored');
@@ -96,7 +95,7 @@ test('a dropped start replaces the start room; the base building is not changed'
 });
 
 test('the solver answers from the dropped start: the wheelchair off the terrace misses the step', () => {
-  const mvp = mvpBuilding(building);
+  const mvp = building;
   const at = (b: Building, id: string): SolverResult => run(b, initialState()).results.find((r) => r.token === id)!;
   assert.equal(at(mvp, 'wheelchair').reason, 'step');
   const fromLobby = at(withStarts(mvp, new Map([['wheelchair', 'lobby']])), 'wheelchair');
@@ -107,7 +106,7 @@ test('the solver answers from the dropped start: the wheelchair off the terrace 
 });
 
 test('a selected object says where it is and how it did', () => {
-  const mvp = mvpBuilding(building);
+  const mvp = building;
   assert.equal(tokenCaption(mvp, 'wheelchair', null), 'Wheelchair - Terrace - Ready');
   const fail: SolverResult = { ...res('wheelchair', 'fail'), reason: 'step', blocked_at: 'terrace-door' };
   assert.equal(tokenCaption(mvp, 'wheelchair', fail), 'Wheelchair - Terrace - FAIL: step in the way');

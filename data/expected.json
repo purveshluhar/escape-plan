@@ -89,6 +89,77 @@
       ]
     },
     {
+      "id": "sofa-and-people-base",
+      "description": "The base building, for the sofa and people (numbers from the P1-03 fixture tests): the 2.2 m sofa cannot turn at the lobby door (L_max about 2.0 m), and people (0.6 m wide) do not fit the 0.5 m office door.",
+      "edits": [],
+      "expect": [
+        {
+          "token": "sofa",
+          "status": "fail",
+          "blocked_at": "lobby-door",
+          "reason": "cannot_turn",
+          "path": [
+            "lobby"
+          ]
+        },
+        {
+          "token": "people",
+          "status": "fail",
+          "blocked_at": "office-door",
+          "reason": "too_narrow",
+          "path": [
+            "office"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "widen-lobby-door",
+      "description": "Widen the lobby door to 1.6 m: the sofa turns (L_max about 2.73 m) and gets out.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "lobby-door",
+          "value": 1.6,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "sofa",
+          "status": "pass",
+          "path": [
+            "lobby",
+            "corridor",
+            "street"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "widen-office-door",
+      "description": "Widen the office door to 0.9 m: people get out.",
+      "edits": [
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
+        }
+      ],
+      "expect": [
+        {
+          "token": "people",
+          "status": "pass",
+          "path": [
+            "office",
+            "corridor",
+            "street"
+          ]
+        }
+      ]
+    },
+    {
       "id": "full-demo",
       "description": "The 3-minute demo: widen the shaft, add a transfer beam at B2, add a ramp at the terrace door, widen the lobby corner. Every token passes: LEVEL COMPLETE.",
       "edits": [
@@ -115,6 +186,12 @@
           "target": "lobby-door",
           "value": 1.6,
           "source": "button"
+        },
+        {
+          "op": "widen",
+          "target": "office-door",
+          "value": 0.9,
+          "source": "button"
         }
       ],
       "expect": [
@@ -132,6 +209,14 @@
         },
         {
           "token": "load",
+          "status": "pass"
+        },
+        {
+          "token": "sofa",
+          "status": "pass"
+        },
+        {
+          "token": "people",
           "status": "pass"
         }
       ]

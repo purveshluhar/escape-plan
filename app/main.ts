@@ -16,7 +16,7 @@ import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
 import { loadBackdrop, setCutHeight } from './backdrop-load.ts';
-import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
+import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
@@ -28,9 +28,9 @@ import { applyEdit, demoButtons, editLabel, initialState, isApplied, run } from 
 import type { GameState } from './state.ts';
 
 // The MVP game: wheelchair, sofa and people (mvp.ts). The dock offers only these.
-const building = mvpBuilding(buildingJson as Building);
+const building = buildingJson as Building;
 const expected = expectedJson as ExpectedFile;
-const buttons = mvpButtons(building, demoButtons(buildingJson as Building, expected));
+const buttons = mvpButtons(building, demoButtons(building, expected));
 const items = pickerItems(building, MVP_TOKENS);
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 

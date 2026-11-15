@@ -39,13 +39,11 @@ it in `IMPLEMENTED_RULES` and turns its expected cases into real tests.
   water data.
 - `mvp-resolve.test.ts`: the MVP gate (P1-07). One edit changes each MVP token's result, solve()
   over every expected case stays under 100 ms, and solve() is pure and deterministic. The sofa
-  and people tokens there are fixtures until P5 adds them to `data/`.
+  and people are in `data/building.json`, with their cases in `data/expected.json`.
 - `level-complete.test.ts`: the tier 1 gate (P1-19). The glass record at `lobby-door`, every tier 1
   rule implemented, and the full-demo edits giving LEVEL COMPLETE for the tier 1 tokens in any
   order, with each fix needed. It reads the fixes from `full-demo`, so it holds when P5 adds
-  tokens. It also runs the full demo with the sofa and people fixture.
-- `mvp-fixture.ts`: the sofa and people fixture for the two test files above. Delete it when P5's
-  tokens and cases land in `data/`.
+  tokens. `full-demo` includes the office door fix that lets people out.
 
 ## Tier 1 first task
 

@@ -9,7 +9,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { IMPLEMENTED_RULES, applyEdits, solve } from './index.ts';
 import { lMax } from './corner-turn.ts';
-import { WIDEN_FIXTURE_OFFICE_DOOR, withMvpFixture } from './mvp-fixture.ts';
 import { levelComplete } from '../app/scoreboard.ts';
 import type { Building, Edit, ExpectedFile, Id, Rule, SolverResult } from '../contract/types.ts';
 
@@ -23,7 +22,7 @@ const demoEdits = (): Edit[] => {
   return structuredClone(fullDemo.edits.filter((e) => e.op !== 'reset'));
 };
 
-// Every tier 1 token and its rule (GRILL answers 4-6). Sofa and people are not in data/ yet.
+// Every tier 1 token and its rule (GRILL answers 4-6).
 const TIER1: Record<Id, Rule> = {
   chiller: 'clearance', glass: 'corner_turn', wheelchair: 'no_steps', load: 'downward',
   sofa: 'corner_turn', people: 'shortest_exit',
@@ -123,12 +122,14 @@ test('full-demo: leave out any one fix and LEVEL COMPLETE goes; every token that
   }
 });
 
-test('full-demo with the sofa and people (fixture): LEVEL COMPLETE needs the office door widened', () => {
-  const b = withMvpFixture(freshBuilding());
-  const demo = solve(b, demoEdits());
-  assert.deepEqual(failing(demo).map((r) => r.token), ['people'], 'the lobby widen also lets the sofa out; people still fail');
-  assert.equal(levelComplete(tier1(demo)), false);
-  const all = solve(b, [...demoEdits(), structuredClone(WIDEN_FIXTURE_OFFICE_DOOR)]);
-  for (const token of Object.keys(TIER1)) assert.equal(resultOf(all, token).status, 'pass', `${token} with the fixture`);
+test('full-demo with the sofa and people: the office door fix is in it, and without it people still fail', () => {
+  const b = freshBuilding();
+  const edits = demoEdits();
+  assert.ok(edits.some((e) => e.op === 'widen' && e.target === 'office-door'), 'full-demo widens the office door');
+  const without = solve(b, edits.filter((e) => e.target !== 'office-door'));
+  assert.deepEqual(failing(without).map((r) => r.token), ['people'], 'the lobby widen also lets the sofa out; people still fail');
+  assert.equal(levelComplete(tier1(without)), false);
+  const all = solve(b, edits);
+  for (const token of Object.keys(TIER1)) assert.equal(resultOf(all, token).status, 'pass', token);
   assert.equal(levelComplete(tier1(all)), true);
 });

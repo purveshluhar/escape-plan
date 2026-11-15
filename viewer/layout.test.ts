@@ -192,13 +192,11 @@ test('elevation stays between a low angle and straight down, so the view never f
 });
 
 test('graph marks: no slice room is drawn as a box; their extent still frames the view; only the exit is labelled', async () => {
-  const { withMvpFixture } = await import('../solver/mvp-fixture.ts');
   const { coveredNodes } = await import('../data/typical-floors.ts');
-  const real = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
-  const b = withMvpFixture(real);
+  const b = JSON.parse(readFileSync(new URL('../data/building.json', import.meta.url), 'utf8')) as Building;
   const marks = graphMarks(b, new Set(coveredNodes(b)));
   assert.deepEqual(Object.keys(marks).sort(), ['frame', 'labels']); // nothing that draws a box
-  // The slice (L1 to L3 plus the fixture office): x 0..28.5, up to the top of the L3 plant, z 0..37.4 (truck).
+  // The slice (L1 to L3, the office included): x 0..28.5, up to the top of the L3 plant, z 0..37.4 (truck).
   assert.deepEqual(marks.frame, { min: [0, 0, 0], max: [28.5, 14.1732 + STOREY_HEIGHT, 37.4] });
   // The street exit, at street level in the middle of its node.
   assert.deepEqual(marks.labels, [{ id: 'street', at: [14.25, 0, 26.9] }]);

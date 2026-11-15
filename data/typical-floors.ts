@@ -20,10 +20,13 @@ export interface FloorPlacement {
   rotationY: number; // radians
 }
 
-// The floor goes on the level that holds the apartment rooms (nodes of type room), so editing
-// building.json moves it along.
+// The floor goes on the slice level that holds the apartment rooms: the hand-made level (not a
+// tower level T<nn>) with the most nodes of type room, so a lone room elsewhere (the ground-floor
+// office) does not move it, and editing building.json moves it along.
 export function floorPlacement(b: Building): FloorPlacement {
-  const roomLevel = b.nodes.find((n) => n.type === 'room')?.level;
+  const count = new Map<string, number>();
+  for (const n of b.nodes) if (n.type === 'room' && !/^T\d\d$/.test(n.level)) count.set(n.level, (count.get(n.level) ?? 0) + 1);
+  const roomLevel = [...count].sort((x, y) => y[1] - x[1])[0]?.[0];
   const elevation = b.levels.find((l) => l.id === roomLevel)?.elevation ?? 0;
   return {
     position: [TOWER_CENTRE.x, elevation, TOWER_CENTRE.z],

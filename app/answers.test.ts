@@ -41,11 +41,11 @@ test('a fix only changes the object it is for, in any order', () => {
   // The ramp alone lets the wheelchair out; no case lists exactly this, but the full demo does.
   const ramp = demo.find((e) => e.op === 'add_ramp')!;
   assert.equal(expectedFor(building, expected, 'wheelchair', [ramp])?.status, 'pass');
-  assert.deepEqual(status([ramp]), { chiller: 'fail', glass: 'fail', wheelchair: 'pass', load: 'pass' });
+  assert.deepEqual(status([ramp]), { chiller: 'fail', glass: 'fail', wheelchair: 'pass', load: 'pass', sofa: 'fail', people: 'fail' });
   // Widen the shaft: the chiller escapes and the load loses its support (the CONFLICT! moment).
-  assert.deepEqual(status([demo[0]!]), { chiller: 'pass', glass: 'fail', wheelchair: 'fail', load: 'fail' });
+  assert.deepEqual(status([demo[0]!]), { chiller: 'pass', glass: 'fail', wheelchair: 'fail', load: 'fail', sofa: 'fail', people: 'fail' });
   // Every demo fix, in reverse order: level complete.
-  assert.deepEqual(status([...demo].reverse()), { chiller: 'pass', glass: 'pass', wheelchair: 'pass', load: 'pass' });
+  assert.deepEqual(status([...demo].reverse()), { chiller: 'pass', glass: 'pass', wheelchair: 'pass', load: 'pass', sofa: 'pass', people: 'pass' });
 });
 
 test('stand-in fails carry needs and has from the edited building', () => {

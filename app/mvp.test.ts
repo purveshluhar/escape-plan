@@ -3,14 +3,13 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile } from '../contract/types.ts';
 import { solve } from '../solver/index.ts';
-import { MVP_TOKENS, mvpBuilding, mvpButtons } from './mvp.ts';
+import { MVP_TOKENS, mvpButtons } from './mvp.ts';
 import { pickerItems } from './shell.ts';
 import { demoButtons } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
-const base = read('../data/building.json') as Building;
-const building = mvpBuilding(base);
-const buttons = mvpButtons(building, demoButtons(base, read('../data/expected.json') as ExpectedFile));
+const building = read('../data/building.json') as Building;
+const buttons = mvpButtons(building, demoButtons(building, read('../data/expected.json') as ExpectedFile));
 
 test('the MVP dock offers exactly wheelchair, sofa and people (keys 1-3), with no Later chips', () => {
   const items = pickerItems(building, MVP_TOKENS);
