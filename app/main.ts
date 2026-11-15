@@ -10,9 +10,9 @@ import { withSmoke } from '../data/smoke.ts';
 import { coveredNodes, drawnLevels } from '../data/typical-floors.ts';
 import { loadTypicalFloor, type TypicalFloor } from '../data/typical-floors-load.ts';
 import type { Building, Edit, ExpectedFile, Id } from '../contract/types.ts';
-import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { isMemberStart, movedPastSlop, stepLevel } from '../viewer/drop.ts';
+import { MOTION } from '../design/tokens.ts';
 import { createViewer } from '../viewer/index.ts';
 import { stayText } from '../viewer/labels.ts';
 import { answers, relevantTargets } from './answers.ts';
@@ -26,7 +26,7 @@ import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
-  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
+  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
 import type { Phase, PickItem } from './shell.ts';
 import { readEdit } from './parse-client.ts';
@@ -192,18 +192,17 @@ function escape(from?: { before: readonly Answer[] | null; label: string }): voi
   if (S.conflict) S.note = [S.conflict.title, ...S.conflict.lines].join('. ');
   S.scoreOpen = false;
   viewer.setInsetRight(insetFor(results));
-  viewer.show(b, drawn);
+  const seconds = viewer.show(b, drawn); // the viewer's run timeline decides how long it plays
   viewer.setSmoke(spread);
   window.clearTimeout(runTimer);
   if (REDUCE) {
     S.phase = phaseAfterRun(results);
   } else {
     S.phase = 'running';
-    const ms = runSeconds(drawn.length, MOTION.secondsPerToken, MOTION.staggerSeconds) * 1000;
     runTimer = window.setTimeout(() => {
       S.phase = phaseAfterRun(results);
       render();
-    }, ms);
+    }, seconds * 1000);
   }
   render();
 }

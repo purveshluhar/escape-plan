@@ -122,11 +122,6 @@ export function showMeKey(key: string, onButton: boolean): boolean {
   return (key === ' ' || key === 'Enter') && !onButton;
 }
 
-// Seconds the viewer needs to finish every placed token's walk (stagger plus one full path).
-export function runSeconds(count: number, perToken: number, stagger: number): number {
-  return count === 0 ? 0 : (count - 1) * stagger + perToken;
-}
-
 // ---------- Plan C: keyword parser for typed edits ----------
 
 // The third field is true for a loose word: "bigger" or "open up" could mean a room, not one door,

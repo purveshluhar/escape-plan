@@ -118,9 +118,22 @@ export const DIM_OPACITY = 0.6; // last run's statuses after an edit, until the 
 // ---------- Motion and moments (design/look.md) ----------
 
 export const MOTION = {
-  secondsPerToken: 2, // travel time along a full path (1.5-2.5 s)
-  staggerSeconds: 0.25, // start offset between tokens after Show me
-  failShakeMs: 150, // shake when a token hits blocked_at (3 x 3 px, stepped)
+  secondsPerToken: 2, // the unit the smoke spread counts its steps in (app/smoke.ts); the viewer maps it onto the people's walk. Travel time follows the route length (travel* below)
+  staggerSeconds: 0.4, // start offset between tokens after Show me
+  // One run timeline (viewer/timeline.ts, design/motion.md 2.1): real motion shape on compressed time.
+  travelSpeed: 5, // metres per second on the route, about 4 times walking pace
+  travelMinSeconds: 3, // a short route is never a rush
+  travelMaxSeconds: 5, // a long route is never a wait
+  rampSeconds: 0.5, // gentle start and stop
+  pivotSeconds: 2, // a sofa or glass panel turning the whole corner
+  jamSeconds: 2.6, // the turn up to the bind (jamTurnSeconds), then two contact pulses and the longest-that-fits line
+  jamTurnSeconds: 1.2,
+  stopHoldSeconds: 1.5, // a calm stop at a door that is too narrow, stepped or blocked
+  maxBeats: 3, // decisive moments per run; each plays alone while the others hold still
+  turnTau: 0.12, // seconds: figures turn to face their travel (a 90 deg turn settles in about 0.35 s)
+  rejoinSeconds: 1, // after a pivot, the object eases back onto the route line
+  contactPulseHz: 1.5, // the jam's contact dots pulse twice; under MAX_FLASH_HZ
+  failShakeMs: 150, // retired: a No stops calmly, no shake (design/motion.md 2.1)
   failFreezeMs: 400, // everything holds before the fail is shown (`dur-beat`)
   failBlinkHz: 2, // cross blink rate; must stay at or under MAX_FLASH_HZ
   failBlinkCount: 3,

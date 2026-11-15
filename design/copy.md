@@ -157,6 +157,7 @@ letter at the start of a line):
 | S34 | app/main.ts:344, 345 | foot `Type an edit`, `Reset` | `Type an edit`, `Undo edits` | Match S07 |
 | S35 | index.html:237, 238 | panel aria and label `Type an edit` | `Edit the building` | Says what it edits |
 | S36 | index.html:238, 240, 241 | `Close Esc`, placeholder `For example: widen the lobby door to 1.6 m`, `Apply` | keep | Plain |
+| S55 | new, viewer/corner-fx.ts | none | `Longest that fits: {n} m` beside the dashed line of a jam at a corner (one decimal) | Names the solver's own number; the card says the rest |
 | S37 | app/main.ts:380, 382 | `Applied: {fix}`, `Reset` | `Applied: {fix}`, `Undo edits` | Match S07 |
 | S38 | app/main.ts:389, 390, 393 | `Not sure what you meant by "x".`, `Did you mean`, `Cancel` | keep | Plain |
 | S39 | app/main.ts:398 | `Typed edits use the keyword parser until Jev is connected.` | `Matched by keywords for now. Jev is not connected yet.` | Shorter; no parser jargon |

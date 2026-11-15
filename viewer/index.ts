@@ -1,6 +1,8 @@
 // Viewer: draws the building as an isometric cutaway and animates every token. Owner: P2.
 // The look is design/look.md (Liquid Glass v2): route dots the token travels over, a figurine
-// for each token (figures.ts), a shake and a blinking red X on a No, a calm Yes to all when every answer is yes.
+// for each token (figures.ts), a calm stop and a red X on a No, a calm Yes to all when every answer is yes.
+// Motion follows one run timeline (timeline.ts, design/motion.md): figures face their travel, and a
+// sofa or glass panel pivots through a corner, or jams at it (corner.ts, corner-fx.ts).
 // The building on screen is the real 432 Park backdrop; the graph's own rooms are not drawn.
 // A press on a token picks it up: drop it on any floor (drop.ts), or click it to select it.
 import * as THREE from 'three';
@@ -8,24 +10,32 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import type { Building, Discipline, Id, SolverResult } from '../contract/types.ts';
 import {
   ACCENT, BACKGROUND, DISCIPLINE_STYLE, FAIL, FAIL_INK, FAIL_TINT, FONT_BODY, FONT_DATA, FONT_STYLESHEET,
-  GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED, WALL,
+  EASE_GLASS, GLASS_STRONG, MOTION, PASS_INK, PATH, TEXT, TEXT_MUTED, WALL,
 } from '../design/tokens.ts';
 import { dropTarget, figureScale, isMemberStart, movedPastSlop, pickToken, pressIntent } from './drop.ts';
 import type { DropTarget, Ray } from './drop.ts';
 import { disposeTree, figureLights, loadFigureModels, makeFigure } from './figures.ts';
-import type { Figure } from './figures.ts';
+import type { Figure, FigureKind } from './figures.ts';
+import { bindTurn, bodyPose, cornerFrame, toPlan } from './corner.ts';
+import type { Frame } from './corner.ts';
+import { makeCornerFx } from './corner-fx.ts';
+import type { CornerFx } from './corner-fx.ts';
+import { createPerfOverlay, perfEnabled } from './perf.ts';
+import { localState, planRun, runItem, tokenClock, turnToward, walkClock, yawOf, TIMING } from './timeline.ts';
+import type { LocalState, Plan, RunItem } from './timeline.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
 import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
 import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
-  cumulativeLengths, easeInOut, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
+  cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
   focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, FLOOR_TAG_GAP,
   type Fade, type ScreenRect,
 } from './layout.ts';
 
 export interface Viewer {
-  show(building: Building, results: SolverResult[]): void;
+  // Draws the results and plays their run; returns the run's length in seconds (0 with no route to play).
+  show(building: Building, results: SolverResult[]): number;
   // Optional context drawn under everything (for example the Cityweft block), already placed in
   // viewer metres. It never changes the framing, and the building always draws over it. null clears it.
   setBackdrop(object: THREE.Object3D | null): void;
@@ -77,7 +87,6 @@ export interface ViewerOptions {
 }
 
 const VIEW_MARGIN = 1.2;
-const SHAKE_METRES = 0.25;
 // The stopped token sits on blocked_at, so the red X floats just above it instead of hiding under it.
 const X_LIFT = -48; // pixels
 const LABEL_GAP = 36; // pixels from the X centre to its label
@@ -91,6 +100,14 @@ const HIT_PIXELS = 36; // a press this close to a figure's middle picks it up
 const SNAP_PIXELS = 56; // a drop this close to a room's token spot lands on that room
 const SMOKE_COLOR = '#6b7686'; // the smoke figure's grey (figures.ts), a little deeper so it reads on the daylight model
 const REFUSED = 'Not placed: drop it on a floor of the tower';
+// The yaw at which each figure's front (or long axis) points along +x when its heading is 0
+// (figures.ts): Kenney characters face +z, the wheelchair group turns -0.5 and each person pi / 4 for
+// the default camera; the sofa, glass panel and chiller are long along x. null: no front to face.
+const FORWARD: Record<FigureKind, number | null> = {
+  wheelchair: -Math.PI / 2 - 0.5, people: -Math.PI / 4, sofa: 0, glass: 0, chiller: 0, load: null, smoke: null, block: null,
+};
+const easeInOutCubic = (x: number): number => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+const easeOutCubic = (x: number): number => 1 - (1 - x) ** 3;
 
 interface Pellet { d: number; core: THREE.Mesh; glow: THREE.Mesh }
 interface TrailPiece { from: number; len: number; core: THREE.Mesh; glow: THREE.Mesh }
@@ -101,7 +118,12 @@ interface Run {
   total: number;
   stopAt: number;
   fail: boolean;
-  delay: number; // seconds after show() before this token starts
+  item: RunItem; // what it plays on the run timeline
+  frame: Frame | null; // the corner frame, for a pivot or a jam
+  bind: number | null; // where a jam binds, radians
+  corner: CornerFx | null; // its own corner diagram (its own width and length); see cornerOwner
+  yaw: number | null; // the figure's heading so far (null: not turned yet)
+  clock: number; // its own timeline seconds at the last frame
   pellets: Pellet[];
   trail: TrailPiece[];
   id: Id;
@@ -198,7 +220,11 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let selected: { id: Id; caption: string | null } | null = null;
   let dragEnabled = true;
   let t0 = performance.now();
-  let allDone = 0;
+  let plan: Plan = { starts: [], beats: [], end: 0 };
+  // Two objects at one corner (glass and sofa at the lobby door) each have a diagram with their own
+  // numbers, but only one shows: the object that last reached the turn owns the edge.
+  const cornerOwner = new Map<Id, Run>();
+  const perf = perfEnabled(location.search) ? createPerfOverlay(container, renderer) : null;
   let win = false;
 
   // The graph's rooms are self-made, so they are not drawn, and there is no ground grid either: the
@@ -273,12 +299,16 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   }
 
   function buildRuns(b: Building, results: SolverResult[]): void {
-    for (const run of runs) run.figure.dispose();
+    for (const run of runs) {
+      run.figure.dispose();
+      run.corner?.dispose();
+    }
     clear(fx, shared);
     fx.add(...figureLights());
     drawMembers(b, results);
     cutMembers();
     runs = [];
+    cornerOwner.clear();
     results.forEach((r, i) => {
       const token = b.tokens.find((t) => t.id === r.token);
       if (!token) return;
@@ -345,17 +375,28 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         x = { obj, at: new THREE.Vector3(...xAt), width: labelWidth(words), callout: callout !== null };
       }
 
+      const item = runItem(b, r, route);
+      let corner: CornerFx | null = null;
+      const at = item.corner;
+      if (at) {
+        corner = makeCornerFx(at, token.size.height, reduced);
+        const door = route.points[route.points.findIndex((_, j) => Math.abs(cum[j]! - item.corner!.at) < 1e-6)]!;
+        corner.object.position.set(...door);
+        fx.add(corner.object);
+      }
+
       // A run's route stays in frame; a parked token (no path yet) never moves the camera, so a drop
       // on a high floor does not reframe the view under the player's hand.
       if (r.path.length > 0) for (const p of route.points) bounds.expandByPoint(new THREE.Vector3(...p));
       runs.push({
         points: route.points, cum, total, stopAt: route.stopAt, fail: r.status === 'fail',
-        delay: runs.length * MOTION.staggerSeconds, pellets, trail, id: token.id, discipline: token.discipline, token: tokenGroup, figure, x,
+        item, corner, yaw: null, clock: 0,
+        frame: at ? cornerFrame(at.door, at.inDir, at.outDir, at.corner) : null, bind: at ? bindTurn(at.corner) : null, pellets, trail, id: token.id, discipline: token.discipline, token: tokenGroup, figure, x,
         reachedAt: null,
       });
     });
     markSelected();
-    allDone = Math.max(0, runs.length - 1) * MOTION.staggerSeconds + MOTION.secondsPerToken;
+    plan = planRun(runs.map((run) => run.item));
   }
 
   // The smoke tint (smoke.ts): one translucent block per reached node of the slice, drawn with the
@@ -564,14 +605,28 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
   }
 
-  function update(run: Run, local: number): void {
-    const p = Math.min(1, Math.max(0, local / MOTION.secondsPerToken));
-    const along = easeInOut(p) * run.total;
-    const d = Math.min(run.stopAt, along);
-    if (run.reachedAt === null && local >= 0 && (p >= 1 || along >= run.stopAt - 1e-6)) {
-      run.reachedAt = local;
+  // The smoke's clock in the seconds setSmoke's secondsPerStep counts in: the people's own walk on
+  // the run timeline, scaled so the smoke reaches the step where it meets them as they get there, and
+  // holding still while another token's moment plays. Without people on the run, plain seconds.
+  function smokeSeconds(wall: number): number {
+    const k = runs.findIndex((run) => run.id === 'people');
+    const people = runs[k];
+    if (!people || people.item.distance < 1e-6) return wall - (smokeSpread?.delaySeconds ?? 0);
+    return walkClock(plan, k, people.item, wall, MOTION.secondsPerToken);
+  }
+
+  // One token at `wall` seconds into the run: where it is on its own timeline (timeline.ts), which way
+  // it faces, and its corner turn.
+  function update(run: Run, k: number, wall: number): void {
+    const clock = tokenClock(plan, k, wall);
+    const dt = Math.max(0, clock - run.clock);
+    run.clock = clock;
+    const s = localState(run.item, clock - (plan.starts[k] ?? 0));
+    const d = s.d;
+    const arrived = s.phase === 'stopped' || s.phase === 'done' || (s.phase === 'turn' && run.item.kind === 'jam');
+    if (run.reachedAt === null && arrived) {
+      run.reachedAt = clock;
       if (run.fail) {
-        if (run.x) run.x.obj.visible = true;
         for (const pellet of run.pellets) {
           if (pellet.d > run.stopAt + 1e-6) {
             pellet.core.material = dimMat;
@@ -580,6 +635,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         }
       }
     }
+    // The red X and its card wait for a jam to finish turning, so they never cover it mid-turn.
+    if (run.fail && run.x) run.x.obj.visible = s.phase === 'stopped' || s.phase === 'done';
     for (const pellet of run.pellets) {
       const ahead = pellet.d > d;
       pellet.core.visible = ahead;
@@ -594,12 +651,74 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     run.token.position.set(...pointAt(run.points, run.cum, d));
     // Walk (or roll) while on the way; idle when parked, arrived or stopped.
-    run.figure.setMotion(local >= 0 && run.reachedAt === null && run.total > 1e-6 ? 'moving' : 'idle');
-    const since = run.reachedAt === null ? Infinity : (local - run.reachedAt) * 1000;
-    if (run.fail && since < MOTION.failShakeMs && !reduced) {
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-      run.token.position.addScaledVector(right, Math.sin((since / MOTION.failShakeMs) * Math.PI * 4) * SHAKE_METRES);
+    // A token holding still for another token's moment stands, rather than walking on the spot.
+    run.figure.setMotion(s.phase === 'travel' && dt > 0 ? 'moving' : 'idle');
+    const yaw = run.frame ? turnPose(run, s) : null;
+    face(run, d, dt, yaw);
+  }
+
+  // The corner turn: the object's pose in the corner diagram, scaled with the figure about the door
+  // point. Returns the yaw of its long axis while it turns, or null when it is not turning.
+  function turnPose(run: Run, s: LocalState): number | null {
+    const fx = run.corner;
+    const frame = run.frame!;
+    const c = run.item.corner!;
+    const scale = run.figure.object.scale.x;
+    fx?.object.scale.setScalar(scale);
+    const jam = run.item.kind === 'jam';
+    const turnK = jam ? Math.min(1, (s.k * MOTION.jamSeconds) / MOTION.jamTurnSeconds) : s.k;
+    const u = jam ? (run.bind ?? 0) * easeOutCubic(turnK) : (Math.PI / 2) * easeInOutCubic(s.k);
+    const offset = (uu: number): [number, number] => {
+      const p = toPlan(frame, bodyPose(c.corner, uu).centre);
+      return [(p[0] - c.door[0]) * scale, (p[1] - c.door[1]) * scale];
+    };
+    // Show the ghost legs as the token reaches the corner; a pivot's fade out as it carries on.
+    const reach = Math.max(0, c.at - 2);
+    if (s.phase === 'turn' || s.phase === 'stopped') {
+      if (s.phase === 'turn' || !cornerOwner.has(c.edge)) cornerOwner.set(c.edge, run);
     }
+    const owner = cornerOwner.get(c.edge);
+    const mine = owner === undefined || owner === run;
+    const near = !mine || s.phase === 'wait' ? 0
+      : s.phase === 'travel' && s.k === 0 ? Math.max(0, (s.d - reach) / Math.max(c.at - reach, 1e-6)) : 1;
+    const gone = s.after === Infinity ? 1 : Math.max(0, 1 - s.after / MOTION.rejoinSeconds);
+    const turned = jam ? s.phase === 'stopped' || turnK >= 1 : false;
+    const sinceTurn = turned ? (s.phase === 'stopped' ? Infinity : ((s.k * MOTION.jamSeconds) - MOTION.jamTurnSeconds)) : null;
+    fx?.show(Math.min(near, gone), turned && mine ? (reduced ? Infinity : sinceTurn) : null, turned && mine);
+    const atTurn = s.phase === 'turn' || (jam && s.phase === 'stopped');
+    if (atTurn) {
+      const [ox, oz] = offset(u);
+      run.token.position.x = c.door[0] + ox;
+      run.token.position.z = c.door[1] + oz;
+      return yawOf(Math.cos(u) * c.inDir[0] + Math.sin(u) * c.outDir[0], Math.cos(u) * c.inDir[1] + Math.sin(u) * c.outDir[1]);
+    }
+    if (!jam && s.after < MOTION.rejoinSeconds) {
+      // After a pivot, ease from where the turn ended back onto the route line.
+      const [ox, oz] = offset(Math.PI / 2);
+      const left = 1 - easeInOutCubic(s.after / MOTION.rejoinSeconds);
+      run.token.position.x += ox * left;
+      run.token.position.z += oz * left;
+    }
+    return null;
+  }
+
+  // Face the way of travel along the route at d, easing the turn; `yaw`, when set, is the heading
+  // to take exactly (a corner turn). Parked figures keep the pose made for the default camera.
+  function face(run: Run, d: number, dt: number, yaw: number | null): void {
+    const forward = FORWARD[run.figure.kind];
+    if (forward === null) return;
+    let target = yaw;
+    if (target === null && d > 1e-6) {
+      const a = pointAt(run.points, run.cum, Math.max(0, d - 0.05));
+      const b = pointAt(run.points, run.cum, Math.min(run.total, d + 0.05));
+      if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 1e-4) target = yawOf(b[0] - a[0], b[2] - a[2]);
+    }
+    if (target === null) {
+      if (run.yaw !== null) run.figure.setHeading(run.yaw - forward);
+      return;
+    }
+    run.yaw = yaw !== null || reduced || run.yaw === null && dt === 0 ? target : turnToward(run.yaw ?? forward, target, dt, TIMING.turnTau);
+    run.figure.setHeading(run.yaw - forward);
   }
 
   // Figures keep their real size close up and grow to stay readable further out.
@@ -611,26 +730,36 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   let lastFrame = 0;
   function frame(now: number): void {
-    const t = reduced ? allDone + 60 : (now - t0) / 1000;
+    perf?.begin(now);
+    const t = reduced ? plan.end + 60 : (now - t0) / 1000;
     const dt = reduced || !lastFrame ? 0 : Math.min(0.1, (now - lastFrame) / 1000); // clips hold still on reduced motion
     lastFrame = now;
-    for (const run of runs) update(run, t - run.delay);
-    if (haze && smokeSpread) for (const b of haze.blocks) {
-      // On when its step has come and its floor is not one the open facade hides.
-      b.mesh.visible = tintVisible(b.step, smokeSpread.secondsPerStep, t, reduced, smokeSpread.delaySeconds) && tintOnShownFloor(b.floor, opened > 0, pickCeiling);
+    runs.forEach((run, k) => update(run, k, t));
+    // A figure, and its corner diagram, on a floor the open facade cuts away is not drawn with it.
+    for (const run of runs) {
+      const shownFloor = opened <= 0 || run.token.position.y < pickCeiling;
+      run.token.visible = shownFloor && !(carried?.moving && carried.id === run.id);
+      if (run.corner) run.corner.object.visible = shownFloor;
+    }
+    if (haze && smokeSpread) {
+      const seconds = smokeSeconds(t);
+      for (const b of haze.blocks) {
+        // On when its step has come and its floor is not one the open facade hides.
+        b.mesh.visible = tintVisible(b.step, smokeSpread.secondsPerStep, seconds, reduced) && tintOnShownFloor(b.floor, opened > 0, pickCeiling);
+      }
     }
     for (const run of runs) run.figure.tick(dt);
     carried?.figure.tick(dt);
     scaleFigures();
     if (beating.length > 0) {
       // A member without support blinks as often as the red X (MOTION.failBlinkHz, failBlinkCount) once the run ends, then stays red.
-      const since = t - allDone;
+      const since = t - plan.end;
       const blinking = !reduced && since >= 0 && since < MOTION.failBlinkCount / MOTION.failBlinkHz;
       const pale = blinking && Math.floor(since * MOTION.failBlinkHz * 2) % 2 === 1;
       for (const mat of beating) mat.color.set(pale ? FAIL_TINT : FAIL);
     }
-    if (win && t >= allDone) {
-      const since = t - allDone;
+    if (win && t >= plan.end) {
+      const since = t - plan.end;
       banner.classList.add('on');
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
@@ -649,6 +778,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.render(fx, camera);
     labels.render(marks, camera);
     hideCoveredRooms();
+    perf?.end();
   }
 
   // A room label under the selection caption hides while the caption is there (labels.ts coveredBy).
@@ -919,7 +1049,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     markSelected();
   });
 
-  function show(building: Building, results: SolverResult[]): void {
+  function show(building: Building, results: SolverResult[]): number {
     shown = { building, results };
     drawBuilding(building);
     buildRuns(building, results);
@@ -928,6 +1058,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     banner.classList.remove('on', 'small');
     fit();
     t0 = performance.now();
+    return plan.end;
   }
 
   function setBackdrop(object: THREE.Object3D | null): void {
@@ -1037,14 +1168,17 @@ function injectStyles(): void {
 .ep-toast { transition: opacity 0.4s; }
 .ep-toast.on { opacity: 1; animation: ep-nudge 0.3s ease-out; }
 body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select: none; }
-.ep-x { position: absolute; top: ${X_LIFT}px; width: 0; height: 0; animation: ep-pop 0.25s ease-out,
-  ep-blink ${1 / MOTION.failBlinkHz}s steps(1, end) 0.25s ${MOTION.failBlinkCount}; }
+.ep-x { position: absolute; top: ${X_LIFT}px; width: 0; height: 0; animation: ep-fade 0.4s ${EASE_GLASS}; }
 .ep-x::before, .ep-x::after { content: ''; position: absolute; width: 50px; height: 9px; border-radius: 5px;
   background: ${FAIL}; box-shadow: 0 0 0 2px #ffffff; transform: translate(-50%, -50%) rotate(45deg); }
 .ep-x::after { transform: translate(-50%, -50%) rotate(-45deg); }
 .ep-card { position: absolute; top: ${X_LIFT}px; transform: translateY(-50%); white-space: nowrap; background: ${GLASS_STRONG};
   border: 2px solid ${FAIL}; border-radius: 10px; padding: 8px 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
-  animation: ep-fade 0.25s ease-out; }
+  animation: ep-fade 0.4s ${EASE_GLASS}; }
+/* The corner diagram's one line of numbers, left of the dashed line it names, clear of the card (right) and the caption (below). */
+.ep-fits { z-index: 99998 !important; width: 0; height: 0; }
+.ep-fits span { position: absolute; transform: translate(calc(-100% - 16px), -50%); white-space: nowrap; font: 700 13px/1 ${FONT_BODY};
+  color: ${TEXT}; background: ${GLASS_STRONG}; border: 2px dashed ${ACCENT}; border-radius: 999px; padding: 5px 9px; }
 .side-right .ep-card { left: ${LABEL_GAP}px; }
 .side-left .ep-card { right: ${LABEL_GAP}px; }
 .side-above .ep-card { left: 0; top: ${X_LIFT - 32}px; transform: translate(-50%, -100%); }
@@ -1060,8 +1194,6 @@ body.ep-carrying, body.ep-carrying * { cursor: grabbing !important; user-select:
   opacity: 0; transform: translateY(-50%) scale(0.6); transition: opacity 0.3s, transform 0.3s, top 0.4s, font-size 0.4s; }
 .ep-banner.on { opacity: 1; transform: translateY(-50%) scale(1); }
 .ep-banner.on.small { top: 32px; font-size: 20px; }
-@keyframes ep-pop { from { transform: scale(0); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
-@keyframes ep-blink { 50% { opacity: 0; } }
 @keyframes ep-fade { from { opacity: 0; } }
 @keyframes ep-ring { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
 @keyframes ep-nudge { 0%, 100% { margin-left: 0; } 25% { margin-left: -8px; } 75% { margin-left: 8px; } }

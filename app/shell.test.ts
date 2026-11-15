@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, togglePlaced, tokenCaption, withStarts } from './shell.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -48,8 +48,6 @@ test('phase and summary words', () => {
   assert.equal(countText('complete', 1, [res('a', 'pass')]), 'Yes', 'one question answered yes reads Answer | Yes');
   assert.deepEqual((['empty', 'placed', 'running'] as const).map((p) => phaseWord(p, 2)), ['Your building', 'Ready', 'Checking']);
   assert.deepEqual([phaseWord('result', 1), phaseWord('result', 2), phaseWord('complete', 1), phaseWord('complete', 3)], ['Answer', 'Answers', 'Answer', 'Yes to all']);
-  assert.equal(runSeconds(0, 2, 0.25), 0);
-  assert.equal(runSeconds(4, 2, 0.25), 2.75);
 });
 
 test('parse: a clear sentence becomes one text edit', () => {
