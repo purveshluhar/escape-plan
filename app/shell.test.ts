@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import type { Building, ExpectedFile, SolverResult } from '../contract/types.ts';
-import { countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
+import { showMeKey, countText, dropPlaced, parkedResults, parseEdit, phaseAfterRun, phaseWord, pickerItems, runSeconds, togglePlaced, tokenCaption, withStarts } from './shell.ts';
 import { demoButtons, initialState, run } from './state.ts';
 
 const read = (p: string): unknown => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
@@ -176,4 +176,12 @@ test('a token that starts on a member (the load) never takes a floor start', () 
   const kept = withStarts(building, new Map([['load', 'plant'], ['sofa', 'office']]));
   assert.equal(kept.tokens.find((t) => t.id === 'load')!.start, 'beam-b2');
   assert.equal(kept.tokens.find((t) => t.id === 'sofa')!.start, 'office');
+});
+
+test('keys: Space and Enter run Show me on the page, but on a focused button they press that button', () => {
+  assert.equal(showMeKey(' ', false), true);
+  assert.equal(showMeKey('Enter', false), true);
+  assert.equal(showMeKey(' ', true), false);
+  assert.equal(showMeKey('Enter', true), false);
+  assert.equal(showMeKey('a', false), false);
 });

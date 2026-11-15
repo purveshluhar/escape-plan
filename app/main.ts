@@ -25,7 +25,7 @@ import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName, stuckLine } from './scoreboard.ts';
 import { allYesText, questionOf, routeShown, yesLine } from './questions.ts';
 import {
-  countText, dropPlaced, parkedResults, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
+  countText, dropPlaced, showMeKey, parkedResults, phaseAfterRun, pickerItems, runSeconds, togglePlaced, phaseWord, tokenCaption, withStarts,
 } from './shell.ts';
 import type { Phase, PickItem } from './shell.ts';
 import { readEdit } from './parse-client.ts';
@@ -548,8 +548,8 @@ document.addEventListener('keydown', (ev) => {
   const k = Number(ev.key);
   const hit = items.find((i) => i.key === k);
   if (hit?.token) return place(hit.token);
-  // Space is always Show me (outside the text box); Enter is Show me unless a button has focus.
-  if (ev.key === ' ' || (ev.key === 'Enter' && !onBtn)) {
+  // Space and Enter are Show me, unless a button has focus: then they press that button.
+  if (showMeKey(ev.key, onBtn)) {
     ev.preventDefault();
     return escape();
   }

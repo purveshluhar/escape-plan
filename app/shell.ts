@@ -116,6 +116,12 @@ export function countText(phase: Phase, placed: number, results: readonly Solver
   return count(placed, 'question');
 }
 
+// Does this key press run Show me? Space and Enter do on the page; on a focused button they press
+// that button (the Hint, Apply and Close buttons, the suggested fixes), so a keyboard user can use them.
+export function showMeKey(key: string, onButton: boolean): boolean {
+  return (key === ' ' || key === 'Enter') && !onButton;
+}
+
 // Seconds the viewer needs to finish every placed token's walk (stagger plus one full path).
 export function runSeconds(count: number, perToken: number, stagger: number): number {
   return count === 0 ? 0 : (count - 1) * stagger + perToken;
