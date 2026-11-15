@@ -9,6 +9,7 @@ import { MOTION } from '../design/tokens.ts';
 import { IMPLEMENTED_RULES } from '../solver/index.ts';
 import { createViewer } from '../viewer/index.ts';
 import { answers, relevantTargets } from './answers.ts';
+import { loadBackdrop } from './backdrop-load.ts';
 import type { Answer } from './answers.ts';
 import { fixesFor } from './flow.ts';
 import { REASON_TEXT, numbersText, placeName } from './scoreboard.ts';
@@ -390,3 +391,8 @@ document.addEventListener('keydown', (ev) => {
 
 idle();
 render();
+
+// The Cityweft block, when this machine has fetched it (data/README.md). Plain ground otherwise.
+loadBackdrop()
+  .then((block) => block && viewer.setBackdrop(block))
+  .catch((err: unknown) => console.warn('Cityweft backdrop not loaded:', err));
