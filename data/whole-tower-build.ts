@@ -1,8 +1,8 @@
-// Builds the whole 432 Park tower from the git-ignored package (private-context/432-park/).
+// Builds the whole 432 Park tower from the package files in data/432-park/.
 // Run: node data/whole-tower-build.ts
 // 1. Gives every apartment floor a random typical plan (seed 432, the turn the package gave it).
 // 2. Rewrites type_assignment in the package's Rooms CSV to the GLB room each room comes from
-//    (the original CSV is kept once as 432_Park_Avenue_Rooms.original.csv).
+//    (the original CSV is kept as 432_Park_Avenue_Rooms.original.csv, which the script reads).
 // 3. Rebuilds the tower part of data/building.json (levels, nodes and edges named T<nn>) from those
 //    plans, and writes data/tower-floors.ts for the viewer. The demo slice L1 to L3 is never touched.
 // Rerunnable: the same seed gives the same tower. Owner: P5.
@@ -14,7 +14,7 @@ import { buildTower } from './whole-tower.ts';
 import type { PackageMeta } from './whole-tower.ts';
 
 const SEED = 432;
-const PKG = new URL('../private-context/432-park/', import.meta.url);
+const PKG = new URL('./432-park/', import.meta.url);
 const BUILDING = new URL('./building.json', import.meta.url);
 const FLOORS_TS = new URL('./tower-floors.ts', import.meta.url);
 const CSV = new URL('432_Park_Avenue_Rooms.csv', PKG);

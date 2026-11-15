@@ -15,8 +15,10 @@ They are not real answers. Replace them with v1.
 - Every case lists the edits applied in order, and only the fields you checked by hand.
 - `npm test` validates every `data/*.json` file against its schema and checks that every id
   points at something real. A new JSON file needs a line in `SCHEMA_FOR` in `data.test.ts`.
-- Self-made and synthetic data only. No Cityweft files here: they go in git-ignored
-  `data/cityweft/` or `private-context/`.
+- Self-made and synthetic data only, with one exception: the Cityweft block (`data/cityweft/block.glb`
+  and `meta.json`) is committed so a fresh clone shows the real city around the tower. Credit:
+  Cityweft, OpenStreetMap, Overture Maps Foundation, Meta & WRI canopy heights. `instances.json` and
+  anything else Cityweft writes stays git-ignored.
 
 ## Cityweft block (tier 2)
 
@@ -42,9 +44,8 @@ git-ignored `.env`, never with a `VITE_` prefix. Nothing from `data/cityweft/` i
 ## The whole tower
 
 `building.json` holds the demo slice (L1 to L3, hand-written) plus the rest of 432 Park Avenue as
-levels `T04` to `T86`. It is built from the 432 Park package kept in git-ignored
-`private-context/432-park/` (never in the repo, ADR 0004), using the package's individual floor
-plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
+levels `T04` to `T86`. It is built from the 432 Park package in `data/432-park/`, using the
+package's individual floor plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
 
 - `node data/whole-tower-build.ts` does all of it, and is rerunnable (seed 432, same tower each time):
   1. `tower-plans.ts` gives every apartment floor a random plan, keeping the turn the package gave it.
@@ -57,6 +58,11 @@ plans (Typical_1 to Typical_4 in its GLB: one, two, three and four apartments).
   4. `tower-floors.ts` (generated, do not edit) records the plan and turn per level for the viewer.
 - `typical-floors.ts` and `typical-floors-load.ts` draw the real floor plan at every apartment level
   (and the slice's level 10) in the viewer, when the package is on the machine.
+- The two package models the viewer draws are in the repo, in `data/432-park/`:
+  `432_Park_Avenue_Typical_Plans.glb` (the four floor plans) and `432_Park_Avenue_Lightweight.glb`
+  (the complete tower, used for its exterior). They are our own approximate model (a reconstruction
+  from published diagrams), 4.8 MB together. The package's metadata, CSV, plan polygons and README
+  (sources and assumptions) that `whole-tower-build.ts` reads sit beside them.
 - The outside is the package's complete Lightweight model (`432_Park_Avenue_Lightweight.glb`): its
   exterior concrete grid, facade and window modules and roof parapet, 28.5 m by 425.5 m, centred on
   the tower. Its own levels, interiors and ground plinth are dropped (our floors and the backdrop
