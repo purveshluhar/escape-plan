@@ -80,3 +80,129 @@ export function layerColor(name: string): string {
 export function coversPoint(box: { minX: number; maxX: number; minZ: number; maxZ: number }, p: { x: number; z: number }, pad = 2): boolean {
   return p.x >= box.minX - pad && p.x <= box.maxX + pad && p.z >= box.minZ - pad && p.z <= box.maxZ + pad;
 }
+
+// ---------- Colour from Cityweft's descriptors ----------
+// Every mesh in the block GLB carries Cityweft's descriptor (three puts glTF mesh extras in
+// userData.descriptor). Buildings may have a facade and roof colour, a facade and roof material
+// and a building type. Reference: https://cityweft.gitbook.io/docs/basics/metadata-descriptors.md
+// The context must stay calm so the tower and the figures carry the colour (design/look.md rule 4):
+// every tint is pale, low in saturation and close to the plain building tone.
+
+export const BUILDING = '#eef0f4'; // the plain building tone, when the descriptor says nothing
+
+// The daylight band every backdrop building colour is pulled into (HSL lightness and saturation).
+const L_MIN = 0.86;
+const L_MAX = 0.95;
+const S_KEEP = 0.4; // share of the source saturation that survives
+const S_MAX = 0.22;
+
+function hex(r: number, g: number, b: number): string {
+  const to = (v: number): string => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+// Soften one Cityweft colour (0xRRGGBB) into the band: keep its hue, map its lightness into
+// L_MIN..L_MAX in the same order, and cap its saturation.
+export function calmColor(rgb: number): string {
+  const r = ((rgb >> 16) & 255) / 255;
+  const g = ((rgb >> 8) & 255) / 255;
+  const b = (rgb & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  const l2 = L_MIN + l * (L_MAX - L_MIN);
+  const s2 = Math.min(S_MAX, s * S_KEEP);
+  const c = (1 - Math.abs(2 * l2 - 1)) * s2;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const m = l2 - c / 2;
+  const [r1, g1, b1] = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  return hex(r1 + m, g1 + m, b1 + m);
+}
+
+// When there is no colour: tints by material class (Cityweft's coarse classes "intended for rendering").
+const FACADE_MATERIAL: Record<string, string> = {
+  plaster: '#efede8',
+  brick: '#eddcd4',
+  glass: '#dfe7ef',
+  wood: '#ece3d6',
+  cementBlock: '#e6e6e3',
+};
+const ROOF_MATERIAL: Record<string, string> = {
+  concrete: '#e4e5e7',
+  tiles: '#ebd9d0',
+  metal: '#dfe3e9',
+  glass: '#dde6ef',
+  grass: '#d6e3d0',
+  tar: '#dddee1',
+  thatch: '#e9e1cd',
+  eternit: '#e2e3e1',
+};
+// The premium tier gives most buildings no colour or material, some a building type: homes read
+// a touch warm, work places a touch cool, public buildings a touch lilac.
+const HOME = '#f1ede7';
+const WORK = '#e8edf3';
+const PUBLIC = '#ece9f1';
+const BUILDING_TYPE: Record<string, string> = {
+  residential: HOME, apartments: HOME, house: HOME, hotel: HOME, dormitory: HOME,
+  commercial: WORK, office: WORK, retail: WORK, industrial: WORK, warehouse: WORK,
+  church: PUBLIC, school: PUBLIC, hospital: PUBLIC, university: PUBLIC, civic: PUBLIC, public: PUBLIC,
+};
+
+type Descriptor = Record<string, unknown>;
+
+const asDescriptor = (d: unknown): Descriptor => (d && typeof d === 'object' ? (d as Descriptor) : {});
+const rgbOf = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : null;
+const pick = (table: Record<string, string>, v: unknown): string | null =>
+  typeof v === 'string' && Object.hasOwn(table, v) ? table[v]! : null;
+
+// Facade and roof colours for one building descriptor. Order: Cityweft's colour, then its
+// material, then the building type, then the plain tone. A roof with nothing of its own takes
+// the facade's colour.
+export function buildingColors(descriptor: unknown): { facade: string; roof: string } {
+  const d = asDescriptor(descriptor);
+  const facadeRgb = rgbOf(d.buildingFacadeColor);
+  const facade = (facadeRgb !== null ? calmColor(facadeRgb) : null)
+    ?? pick(FACADE_MATERIAL, d.buildingFacadeMaterial)
+    ?? pick(BUILDING_TYPE, d.buildingType)
+    ?? BUILDING;
+  const roofRgb = rgbOf(d.buildingRoofColor);
+  const roof = (roofRgb !== null ? calmColor(roofRgb) : null) ?? pick(ROOF_MATERIAL, d.buildingRoofMaterial) ?? facade;
+  return { facade, roof };
+}
+
+const ROAD = '#d9dde4'; // roadways and crossings: a touch deeper than the sidewalk
+const SIDEWALK = '#e6e9ee';
+const HEDGE = '#d3dfcf';
+
+// Ground, walls and fences: by the descriptor's type where it says something useful, else by
+// the layer name (LAYER_COLOR).
+export function surfaceColor(descriptor: unknown, name: string): string {
+  const d = asDescriptor(descriptor);
+  if (d.type === 'roadwayIntersection' || d.type === 'asphalt' || d.type === 'roadwayArea' || d.pathType === 'roadway') return ROAD;
+  if (d.type === 'pavement' || d.pathType === 'footway') return SIDEWALK;
+  if (d.type === 'wall' && d.wallType === 'hedge') return HEDGE;
+  return layerColor(name);
+}
+
+// Per-vertex colours for one building from the up (y) part of each vertex normal: a vertex on a
+// face that looks up (a roof) takes `roof`, every other vertex takes `facade`. Linear RGB, 3 per vertex.
+const ROOF_NORMAL_Y = 0.5;
+export function roofOrFacade(normalY: ArrayLike<number>, facade: readonly number[], roof: readonly number[]): Float32Array {
+  const out = new Float32Array(normalY.length * 3);
+  for (let v = 0; v < normalY.length; v++) {
+    const c = normalY[v]! > ROOF_NORMAL_Y ? roof : facade;
+    out[v * 3] = c[0]!;
+    out[v * 3 + 1] = c[1]!;
+    out[v * 3 + 2] = c[2]!;
+  }
+  return out;
+}

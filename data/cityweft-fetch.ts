@@ -4,7 +4,7 @@
 // Output goes to git-ignored data/cityweft/ and never enters the repo (docs/adr/0004).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  buildInstancesRequest, buildRequest, describeStatus, extractInstances, shiftCenter, toLocal,
+  buildInstancesRequest, buildRequest, describeStatus, extractInstances, retryDelayMs, shiftCenter, toLocal, MAX_ATTEMPTS,
 } from './cityweft-request.ts';
 
 const ENDPOINT = 'https://api.cityweft.com/v1/context';
@@ -16,7 +16,6 @@ const CENTRAL_PARK_CORNER = { lat: 40.76444, lon: -73.97333 }; // Grand Army Pla
 const OFFSET_METRES = { north: 162, east: -10 };
 const CENTER = shiftCenter(TARGET, OFFSET_METRES.north, OFFSET_METRES.east);
 const SIZE_METRES = Number(process.env.CITYWEFT_SIZE_M) || 500; // a side; override in .env or the shell
-const MAX_TRIES = 3;
 const OUT_DIR = new URL('./cityweft/', import.meta.url);
 
 const key = process.env.CITYWEFT_API_KEY;
@@ -27,17 +26,29 @@ if (!key) {
 
 const body = buildRequest(CENTER, SIZE_METRES);
 
+// One POST with bounded retries (retryDelayMs). Each try is logged with its status only, never the key.
 async function post(payload: object): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify(payload),
-    });
-    if (res.status !== 503 || attempt === MAX_TRIES) return res;
-    const wait = Number(res.headers.get('Retry-After')) || 5;
-    console.error(`${describeStatus(503)} Waiting ${wait}s (try ${attempt} of ${MAX_TRIES}).`);
-    await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+    let res: Response | null = null;
+    try {
+      res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      res = null; // network error: retried like a busy answer
+    }
+    const status = res?.status ?? 0;
+    console.error(`Try ${attempt} of ${MAX_ATTEMPTS}: ${status === 0 ? 'no answer' : status}.`);
+    const wait = res?.ok ? null : retryDelayMs(status, attempt, res?.headers.get('Retry-After') ?? null);
+    if (wait === null) {
+      if (res) return res;
+      console.error(describeStatus(0));
+      process.exit(1);
+    }
+    console.error(`${describeStatus(status)} Waiting ${(wait / 1000).toFixed(1)} s.`);
+    await new Promise((resolve) => setTimeout(resolve, wait));
   }
 }
 

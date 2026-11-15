@@ -4,7 +4,7 @@
 // under the tower. Owner: P3.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CUT_HEIGHT, backdropMatrix, coversPoint, layerColor, metaToBlock } from './backdrop.ts';
+import { CUT_HEIGHT, backdropMatrix, buildingColors, coversPoint, metaToBlock, roofOrFacade, surfaceColor } from './backdrop.ts';
 
 const BASE = '/data/cityweft/';
 const CUT = [new THREE.Plane(new THREE.Vector3(0, -1, 0), CUT_HEIGHT)]; // keeps y <= CUT_HEIGHT
@@ -40,16 +40,32 @@ export async function loadBackdrop(): Promise<THREE.Object3D | null> {
   // The real 432 Park Avenue: the building whose footprint covers the target. Our own model stands
   // in its place, so it is cut, and its footprint centre and base anchor the whole block.
   let tower: { mesh: THREE.Object3D; box: THREE.Box3 } | null = null;
+  // Colours come from each mesh's Cityweft descriptor (glTF mesh extras, in userData). Buildings
+  // share one vertex-colour material (facade and roof per vertex); the ground shares one per colour.
   const mats = new Map<string, THREE.Material>();
+  const buildingMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: CUT });
+  const linear = (hex: string): number[] => new THREE.Color(hex).toArray();
+  const n = new THREE.Vector3();
   block.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const name = o.name || o.parent?.name || '';
+    const descriptor = o.userData.descriptor;
     if (/buildings/i.test(name)) {
       const box = new THREE.Box3().setFromObject(o);
       const covers = coversPoint({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z }, target);
       if (covers && (!tower || box.max.y > tower.box.max.y)) tower = { mesh: o, box };
+      const geometry = o.geometry as THREE.BufferGeometry;
+      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+      const { facade, roof } = buildingColors(descriptor);
+      const normal = geometry.getAttribute('normal');
+      // the world up part of each normal (any node rotation; interleaved or quantised normals too)
+      const toWorld = new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+      const up = Float32Array.from({ length: normal.count }, (_, i) => n.fromBufferAttribute(normal, i).applyMatrix3(toWorld).normalize().y);
+      geometry.setAttribute('color', new THREE.BufferAttribute(roofOrFacade(up, linear(facade), linear(roof)), 3));
+      o.material = buildingMat;
+      return;
     }
-    const color = layerColor(name);
+    const color = surfaceColor(descriptor, name);
     let mat = mats.get(color);
     if (!mat) {
       mat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, clippingPlanes: CUT });

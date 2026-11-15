@@ -151,9 +151,38 @@ export function describeStatus(status: number): string {
       return '401: missing or invalid key. Set CITYWEFT_API_KEY in the git-ignored .env.';
     case 402:
       return '402: no active subscription or remaining balance for this request.';
+    case 429:
+      return '429: this key reached its Cityweft usage limit. It resets with the billing period, or an admin raises it.';
+    case 0:
+      return 'No answer from Cityweft (network error).';
     case 503:
       return '503: Cityweft is busy. Retry shortly.';
     default:
       return `${status}: unexpected response from Cityweft.`;
   }
+}
+
+// Retries for /v1/context. The API documents 503 (busy, with Retry-After) and 402 (no balance):
+// https://cityweft.gitbook.io/docs/getting-started/api-reference.md. Other 5xx and a network
+// error (status 0) clear on their own, so they are retried too; 402, 400 and 401 do not.
+// Cityweft answers 429 when a key reaches its usage limit, which holds until the billing period
+// resets (https://cityweft.gitbook.io/docs/basics/usage-limits.md), so a 429 is retried only
+// when it says when to come back (Retry-After). Up to MAX_ATTEMPTS tries, each wait under MAX_WAIT_MS.
+export const MAX_ATTEMPTS = 5;
+const RETRYABLE = new Set([0, 500, 502, 503, 504]);
+const BASE_WAIT_MS = 2000;
+const MAX_WAIT_MS = 120_000;
+
+// How long to wait before the next try after `attempt` (1-based) answered `status`, or null when
+// there is no next try. A Retry-After in seconds wins; else the wait doubles each try, plus up to
+// half again of random jitter.
+export function retryDelayMs(status: number, attempt: number, retryAfter: string | null, random: () => number = Math.random): number | null {
+  if (attempt >= MAX_ATTEMPTS) return null;
+  const seconds = Number(retryAfter);
+  const hasRetryAfter = retryAfter !== null && retryAfter.trim() !== '' && Number.isFinite(seconds) && seconds >= 0;
+  if (status === 429 && hasRetryAfter) return Math.min(MAX_WAIT_MS, seconds * 1000);
+  if (!RETRYABLE.has(status)) return null;
+  if (hasRetryAfter) return Math.min(MAX_WAIT_MS, seconds * 1000);
+  const base = BASE_WAIT_MS * 2 ** (attempt - 1);
+  return Math.min(MAX_WAIT_MS, Math.round(base * (1 + 0.5 * random())));
 }

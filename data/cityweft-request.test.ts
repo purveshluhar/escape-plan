@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, shiftCenter, toLocal, MAX_AREA_KM2,
+  buildRequest, buildInstancesRequest, describeStatus, extractInstances, polygonAreaKm2, retryDelayMs, shiftCenter, toLocal, MAX_AREA_KM2, MAX_ATTEMPTS,
 } from './cityweft-request.ts';
 
 const BROADWAY_120 = { lat: 40.7085, lon: -74.0108 };
@@ -123,4 +123,44 @@ test('toLocal gives block metres: x north and z east from the south-west corner'
   assert.ok(Math.abs(north.x - 750) < 1e-6 && Math.abs(north.z - 400) < 1e-6);
   const east = at(shiftCenter(centre, 0, 100));
   assert.ok(Math.abs(east.z - 500) < 1e-6 && Math.abs(east.x - 400) < 1e-6);
+});
+
+// Retries: https://cityweft.gitbook.io/docs/getting-started/api-reference.md lists 402 (no balance)
+// and 503 (busy, with Retry-After); https://cityweft.gitbook.io/docs/basics/usage-limits.md says a
+// 429 means the key reached its usage limit, which holds until the billing period resets.
+test('a busy answer is retried, with Retry-After honoured when given', () => {
+  assert.equal(retryDelayMs(503, 1, '7', () => 0.5), 7000);
+  for (const s of [0, 500, 502, 503, 504]) assert.ok(retryDelayMs(s, 1, null, () => 0.5)! > 0, `status ${s}`);
+});
+
+test('a 429 is retried only when it says when to come back (a usage limit does not clear in minutes)', () => {
+  assert.equal(retryDelayMs(429, 1, '3', () => 0.5), 3000);
+  assert.equal(retryDelayMs(429, 1, null, () => 0.5), null);
+  assert.equal(retryDelayMs(429, 1, 'soon', () => 0.5), null);
+});
+
+test('without Retry-After the wait doubles each attempt, with jitter, and stays under five minutes', () => {
+  const lo = (a: number) => retryDelayMs(503, a, null, () => 0)!;
+  const hi = (a: number) => retryDelayMs(503, a, null, () => 0.999)!;
+  assert.ok(lo(2) >= 2 * lo(1) - 1 && lo(3) >= 2 * lo(2) - 1, 'doubles');
+  assert.ok(hi(1) > lo(1), 'jitter');
+  assert.ok(hi(4) < 5 * 60 * 1000);
+  assert.ok(retryDelayMs(503, 1, '9999', () => 0.5)! < 5 * 60 * 1000, 'a huge Retry-After is capped');
+});
+
+test('no retry for answers a retry cannot fix (402 no balance, 400, 401), nor after the last try', () => {
+  for (const s of [200, 400, 401, 402, 404]) assert.equal(retryDelayMs(s, 1, null, () => 0.5), null, `status ${s}`);
+  assert.equal(retryDelayMs(503, MAX_ATTEMPTS, null, () => 0.5), null);
+  assert.ok(MAX_ATTEMPTS <= 5);
+});
+
+test('every wait across all attempts adds up to under ten minutes', () => {
+  let total = 0;
+  for (let a = 1; a < MAX_ATTEMPTS; a++) total += retryDelayMs(503, a, '9999', () => 0.999)!;
+  assert.ok(total < 10 * 60 * 1000, `${total} ms`);
+});
+
+test('the status lines name 429 and never carry a key', () => {
+  assert.match(describeStatus(429), /^429/);
+  for (const s of [0, 400, 401, 402, 429, 503, 500]) assert.doesNotMatch(describeStatus(s), /cw_|Bearer/);
 });
