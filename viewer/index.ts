@@ -51,6 +51,8 @@ export interface Viewer {
   focusLevel(level: Id): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
+  // The same for a panel on the left (the typed-edit strip): the model centres between the two.
+  setInsetLeft(pixels: number): void;
   // Node ids left out of the frame, because something else (the real tower in the
   // backdrop) stands in for them. No node is drawn as a box; routes still run through every node.
   // Redraws at once.
@@ -149,6 +151,7 @@ interface Run {
 
 export function createViewer(container: HTMLElement, options: ViewerOptions = {}): Viewer {
   let insetRight = options.insetRight ?? 0;
+  let insetLeft = 0;
   injectStyles();
   if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
 
@@ -467,7 +470,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
-    Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, margin: VIEW_MARGIN * zoom }), pan));
+    Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, insetLeft, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
     // The level in the middle of the free view stays the top one drawn.
@@ -1179,6 +1182,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     fit();
   }
 
+  function setInsetLeft(pixels: number): void {
+    if (pixels === insetLeft) return;
+    insetLeft = pixels;
+    fit();
+  }
+
   function setCovered(ids: Iterable<Id>): void {
     covered = new Set(ids);
     if (shown) show(shown.building, shown.results);
@@ -1213,7 +1222,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
+  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setInsetLeft, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements

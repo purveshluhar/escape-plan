@@ -124,6 +124,18 @@ test('the view centres the model in the screen left of a side panel, scaled to f
   assert.equal(centrePx, 250);
 });
 
+test('a panel on the left too: the model centres in the free space between the two panels', () => {
+  // 1000 x 500 px canvas, 300 px panel on the left and 200 px on the right: 500 px free, from 300 to 800.
+  const both = frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 200, insetLeft: 300, margin: 1 });
+  const centrePx = ((0 - both.left) / (both.right - both.left)) * 1000;
+  assert.equal(centrePx, 550);
+  // The 20 m model fills the 500 px free span, so 1 m is 25 px.
+  assert.equal(1000 / (both.right - both.left), 25);
+  // With no left panel it is the right-panel case.
+  assert.deepEqual(frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, insetLeft: 0, margin: 1 }),
+    frustum({ hx: 10, hy: 5, width: 1000, height: 500, insetRight: 500, margin: 1 }));
+});
+
 test('covered nodes are left out of the drawn boxes, the rest keep their order', () => {
   const boxes = [
     { id: 'a', center: [0, 0, 0], size: [1, 1, 1] },

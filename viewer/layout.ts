@@ -186,16 +186,17 @@ export interface FrustumInput {
   width: number; // canvas, pixels
   height: number;
   insetRight: number; // pixels on the right covered by a panel
+  insetLeft?: number; // pixels on the left covered by a panel (default 0)
   margin: number; // 1 = touching the edges
 }
 
-// Orthographic camera bounds that fit the model into the canvas left of `insetRight`, with the
-// model's centre (camera x = 0) in the middle of that free space.
-export function frustum({ hx, hy, width, height, insetRight, margin }: FrustumInput):
+// Orthographic camera bounds that fit the model into the canvas between `insetLeft` and
+// `insetRight`, with the model's centre (camera x = 0) in the middle of that free space.
+export function frustum({ hx, hy, width, height, insetRight, insetLeft = 0, margin }: FrustumInput):
   { left: number; right: number; top: number; bottom: number } {
-  const free = Math.max(width - insetRight, 1);
+  const free = Math.max(width - insetRight - insetLeft, 1);
   const half = Math.max(hy, hx / (free / height)) * margin;
-  const left = (-free * half) / height;
+  const left = (-(2 * insetLeft + free) * half) / height;
   return { left, right: left + (2 * half * width) / height, top: half, bottom: -half };
 }
 

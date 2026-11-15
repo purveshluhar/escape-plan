@@ -82,6 +82,9 @@ const S: State = {
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 // On a wide screen the fix sheet and the edit box sit on the right, so the model centres left of them.
 const SIDE_PANEL = 404; // #sheet width (380) + its 24 px gutter
+const STRIP_GAP = 16; // pixels kept between the strip and the model
+const WIDE = 1500; // screens this wide and wider move the model clear of the strip
+const MIN_MODEL_WIDTH = 480; // the least free width the model is framed in beside the strip
 // The loaded city and real floors (null until they load) and the viewer's last reveal, so floors
 // that load after a zoom in still get it.
 const context3d = { block: null as THREE.Object3D | null, floor: null as TypicalFloor | null, amount: 0, cut: Infinity, dimmed: 0 };
@@ -537,6 +540,12 @@ function renderEdit(): void {
       render();
     },
   });
+  // On a wide screen the model moves right of the open strip, so the strip never covers the answer
+  // it explains. Narrower screens keep the model where it is: the space left would be too small.
+  const strip = $('strip');
+  const stripRight = strip.classList.contains('on') ? strip.offsetLeft + strip.offsetWidth + STRIP_GAP : 0;
+  const roomLeft = innerWidth - stripRight - (S.results && S.results.length > 0 ? SIDE_PANEL : 0);
+  viewer.setInsetLeft(stripRight > 0 && innerWidth >= WIDE && roomLeft >= MIN_MODEL_WIDTH ? stripRight : 0);
 }
 
 // The Hint panel stacks above the "who decided" strip, so it draws after the strip does.
