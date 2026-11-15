@@ -102,7 +102,9 @@ export const LOAD_PATH_TAG = 'Simplified load path';
 const KIND_WORD: Record<MemberKind, string> = { foundation: 'Footing', column: 'Column', beam: 'Beam', transfer_beam: 'Transfer beam' };
 const shortId = (id: Id): string => (id.split(/[-_]/).pop() ?? id).toUpperCase();
 
-export function memberTag(b: Building, id: Id): { name: string; line: string } | null {
+// `cut`: the members the load has lost its support at (flashingMembers). Their lines say so, as the
+// answer does, instead of the support the data drew for them.
+export function memberTag(b: Building, id: Id, cut: ReadonlySet<Id> = new Set()): { name: string; line: string } | null {
   const m = b.members.find((x) => x.id === id);
   if (!m) return null;
   const named = (ids: readonly Id[]): string => ids.map((i) => b.members.find((x) => x.id === i))
@@ -111,10 +113,14 @@ export function memberTag(b: Building, id: Id): { name: string; line: string } |
   const below = named(m.supported_by);
   if (m.kind === 'foundation') return { name, line: 'the load path ends here' };
   if (m.kind === 'column') {
-    const held = named(b.members.filter((o) => o.supported_by.includes(m.id)).map((o) => o.id));
+    const on = b.members.filter((o) => o.supported_by.includes(m.id)).map((o) => o.id);
+    const held = named(on.filter((o) => !cut.has(o)));
+    const lost = named(on.filter((o) => cut.has(o)));
+    if (!held && lost) return { name, line: `${lost} no longer rests on it` };
     return { name, line: [held ? `carries ${held}` : 'carries the load', below ? `down to ${below}` : ''].filter(Boolean).join(' ') };
   }
   // A beam holds up the floor of the room it sits in: "Mechanical level plant" -> "the plant floor".
   const room = b.nodes.find((n) => n.id === m.node)?.name.trim().split(/\s+/).pop()?.toLowerCase();
-  return { name, line: [room ? `holds up the ${room} floor` : 'holds up its floor', below ? `sits on ${below}` : ''].filter(Boolean).join(', ') };
+  const rests = cut.has(m.id) ? 'no path down to a foundation' : below ? `sits on ${below}` : '';
+  return { name, line: [room ? `holds up the ${room} floor` : 'holds up its floor', rests].filter(Boolean).join(', ') };
 }

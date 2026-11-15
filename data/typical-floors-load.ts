@@ -19,8 +19,12 @@ const LOUVRE_SLAT = new THREE.MeshLambertMaterial({ color: '#5b6574' });
 const LOUVRE_BACK = new THREE.MeshBasicMaterial({ color: '#2a313b' });
 const WINDOW_HALF = 14.0; // the glass plane, metres from the tower centre (the grid's face is at 14.25)
 const OPENING = { bottom: 0.66, top: 3.71 }; // the window opening within its 4.72 m module
-const SLAT = new THREE.BoxGeometry(2 * WINDOW_HALF, 0.12, 0.22);
+const SLAT = new THREE.BoxGeometry(2 * WINDOW_HALF - 0.5, 0.12, 0.22); // short of the corners, where the faces meet
 const BACK = new THREE.PlaneGeometry(2 * WINDOW_HALF, OPENING.top - OPENING.bottom);
+// A lid at the top of the band, in the slab's grey: looking down through the glass above, the far
+// side's louvres would show through the empty tower; the lid stands in for the floor above.
+const LID = new THREE.PlaneGeometry(2 * WINDOW_HALF, 2 * WINDOW_HALF);
+const LOUVRE_LID = new THREE.MeshLambertMaterial({ color: '#d9dde3' });
 
 function louvreBand(elevation: number): THREE.Object3D {
   const band = new THREE.Group();
@@ -31,7 +35,7 @@ function louvreBand(elevation: number): THREE.Object3D {
     for (let y = OPENING.bottom + 0.15; y < OPENING.top; y += 0.38) {
       const s = new THREE.Mesh(SLAT, LOUVRE_SLAT);
       s.position.set(0, y, WINDOW_HALF - 0.05);
-      s.rotation.x = -0.5; // tilted down and out, as louvres are
+      s.rotation.x = 0.5; // the outer edge tilted down, as louvres are
       face.add(s);
     }
     const dark = new THREE.Mesh(BACK, LOUVRE_BACK);
@@ -39,6 +43,10 @@ function louvreBand(elevation: number): THREE.Object3D {
     face.add(dark);
     band.add(face);
   }
+  const lid = new THREE.Mesh(LID, LOUVRE_LID);
+  lid.rotation.x = -Math.PI / 2;
+  lid.position.y = OPENING.top + 0.2;
+  band.add(lid);
   band.position.y = elevation;
   return band;
 }

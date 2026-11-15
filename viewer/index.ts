@@ -269,7 +269,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let runs: Run[] = [];
   // Members drawn over the building, with their height: hidden with the floors when the facade opens.
   // `holds`: not the red member, so it fades back when the facade opens. Each has a name tag.
-  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[]; holds: boolean; tag: CSS2DObject }[] = [];
+  // `span`: a beam's middle, so its tag goes on the side away from the beam and never covers it.
+  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[]; holds: boolean; tag: CSS2DObject; span: THREE.Vector3 | null }[] = [];
   // The structure shows only when it is needed (members.ts structureWanted), easing in and out.
   let structure: Fade = { from: 0, to: 0, start: 0 };
   let structureNow = 0; // its amount this frame
@@ -359,7 +360,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         o.rotation.y = m.yaw;
         fx.add(o);
       }
-      const words = memberTag(b, m.id);
+      const words = memberTag(b, m.id, red);
       const el = document.createElement('div');
       el.className = 'ep-member';
       const face = document.createElement('span');
@@ -372,7 +373,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       const half = m.kind === 'beam' || m.kind === 'transfer_beam' ? m.size[0] / 2 : 0;
       tag.position.set(m.center[0] + half * Math.cos(m.yaw), m.center[1], m.center[2] - half * Math.sin(m.yaw));
       fx.add(tag);
-      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: [mat, line], holds: !red.has(m.id), tag });
+      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: [mat, line], holds: !red.has(m.id), tag, span: half > 0 ? new THREE.Vector3(...m.center) : null });
     }
   }
 
@@ -389,7 +390,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     if (now - tagsCheckedAt < (following() || structureNow < 1 ? 100 : 250)) return;
     tagsCheckedAt = now;
     const r = canvas.getBoundingClientRect();
-    const others = [...textOnModel(), ...floorTags.filter((t) => t.obj.visible && t.rect).map((t) => t.rect!)];
+    // The app's own panels are measured here too: avoidBoxes is kept fresh only while the facade is
+    // open, and some panels (the banner) take no pointer events, so elementFromPoint sees through them.
+    const panels = (options.avoid?.() ?? []).flatMap((el) => {
+      const b = el.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 ? [{ left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top }] : [];
+    });
+    const others = [...textOnModel(), ...panels, ...floorTags.filter((t) => t.obj.visible && t.rect).map((t) => t.rect!)];
     const placed: ScreenRect[] = [];
     const m = 4;
     const fits = (el: HTMLElement): ScreenRect | null => {
@@ -404,13 +411,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     // Top member first: the first tag shown also says the drawing is a simplified load path. Each tag
     // goes right of its member, else left of it, else hides.
     let lead = true;
-    for (const { tag } of [...memberMarks].sort((a, b) => b.y - a.y)) {
+    for (const { tag, span } of [...memberMarks].sort((a, b) => b.y - a.y)) {
       const el = tag.element;
       const face = el.firstElementChild as HTMLElement;
       let box: ScreenRect | null = null;
       if (tag.visible && structureNow >= 0.5) {
         el.classList.toggle('lead', lead);
-        for (const side of ['right', 'left']) {
+        const spanRight = span !== null && span.clone().project(camera).x > tag.position.clone().project(camera).x;
+        for (const side of spanRight ? ['left', 'right'] : ['right', 'left']) {
           el.classList.toggle('left', side === 'left');
           if ((box = fits(face))) break;
         }
@@ -749,7 +757,6 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       options.onReveal?.(opened, cutNow);
       cutMembers();
     } else if (structureNow !== structureThen) cutMembers();
-    if (memberMarks.length > 0 && (structureNow > 0 || structureThen > 0)) checkMemberTags(now);
     if (opened <= 0) {
       for (const tag of floorTags) tag.obj.visible = false;
       return;
@@ -1012,6 +1019,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.render(fx, camera);
     labels.render(marks, camera);
     hideCoveredRooms();
+    // After the label render, so a tag drawn for the first time is in the page and can be measured.
+    if (memberMarks.length > 0 && structureNow > 0) checkMemberTags(now);
     perf?.end();
   }
 
@@ -1474,10 +1483,10 @@ function injectStyles(): void {
 .ep-member span { position: absolute; left: 14px; transform: translateY(-50%); white-space: nowrap; background: ${GLASS_STRONG};
   border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 10px; padding: 5px 9px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
 .ep-member.left span { left: auto; right: 14px; }
-.ep-member em { display: none; font: 700 10px/1.3 ${FONT_BODY}; font-style: normal; letter-spacing: 1px; text-transform: uppercase; color: ${TEXT_MUTED}; }
+.ep-member em { display: none; font: 700 11px/1.3 ${FONT_BODY}; font-style: normal; letter-spacing: 1px; text-transform: uppercase; color: ${TEXT_MUTED}; }
 .ep-member.lead em { display: block; margin-bottom: 2px; }
-.ep-member b { display: block; font: 700 13px/1.25 ${FONT_BODY}; color: ${TEXT}; }
-.ep-member i { display: block; font: 600 12px/1.25 ${FONT_BODY}; font-style: normal; color: ${TEXT_MUTED}; }
+.ep-member b { display: block; font: 700 14px/1.25 ${FONT_BODY}; color: ${TEXT}; }
+.ep-member i { display: block; font: 600 13px/1.25 ${FONT_BODY}; font-style: normal; color: ${TEXT_MUTED}; }
 /* Exit names: quiet caps at street level, always under tokens and fail cards. */
 .ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;
