@@ -1,7 +1,8 @@
 # Demo script
 
 Owner: P4, with P1. The live demo the team speaks over the real app, beat by beat. Every click
-below passed in the final click-through of the demo build (step ids S01 to S53). Every string in
+below passed in the final click-through of the demo build (step ids S01 to S53), except two rows
+checked later on the follow-camera build: the camera in beat 1 and the drag in beat 5. Every string in
 quotes is the exact text on screen. Words follow `design/copy.md`.
 
 Each beat opens with one person's question about their building. Say the answer, then the
@@ -25,7 +26,7 @@ closes a panel.
 | Click | On screen | Say |
 |---|---|---|
 | Open the page | The 432 Park Avenue tower in its city block. "Your building", "Pick a question to start" | "This is 432 Park Avenue in Manhattan. One building, and everyone who lives in it or runs it has a question." |
-| Click "Wheelchair", then Show me | "Checking 1 route", then the card: "FAMILY", "Can my parent's wheelchair get out?", "No", "Step in the way at Terrace door", "0.15 m high, needs level" | "A family asks if their parent's wheelchair gets out. No. There is a 15 cm step at the terrace door." |
+| Click "Wheelchair", then Show me | The camera closes in on the wheelchair and stays on it. "Checking 1 route", then the card: "FAMILY", "Can my parent's wheelchair get out?", "No", "Step in the way at Terrace door", "0.15 m high, needs level" | "A family asks if their parent's wheelchair gets out. No. There is a 15 cm step at the terrace door." |
 | Click "Add ramp at terrace door" | "Yes", "The wheelchair gets out, no steps. With 1 edit." | "Add a ramp. Every answer is checked again, and now it is Yes." |
 | Click "Undo edits" | "Checked again with the original building" | "Undo puts the building back as built." |
 | Click "Clear" | "Pick a question to start" | |
@@ -69,15 +70,15 @@ Optional, after the beat, to show "not sure": press `R`, press `/`, type `make i
 | Click "Widen office door to 0.9 m" | "Smoke gets there first at North service corridor", "People reach North service corridor at step 1. Smoke gets there at step 1. A tie goes to the smoke." | "Now they get out of the office, but the smoke reaches the corridor at the same step. A tie goes to the smoke." |
 | Click "Close lobby door" | "Yes", "Everyone gets out before the smoke. With 2 edits." | "Close the lobby door. The smoke is now one step behind them." |
 
-Say it plainly: "This answer is for the ground floor. On every floor above it, the smoke reaches
-the stairs first, whatever door is closed. So the app offers no fix up there."
+Say it plainly: "This answer is for the ground floor. We also checked people starting on Level 10
+and Level 20: there the smoke reaches the stairs first, even with the lobby door closed."
 
 ## Beat 5. The whole tower
 
 | Click | On screen | Say |
 |---|---|---|
 | Click Clear. Turn the mouse wheel 3 notches in | The facade fades. The open floor has a label, for example "Level 2". | "Zoom in and the facade opens to the floor plans." |
-| Click the middle of the floor rail on the right, then press `End`, then `Home` | The camera glides to that floor. The rail reads "Level 86" at the top and "Level 2" at the bottom. | "The rail moves through the tower, from Level 2 to Level 86." |
+| Right-drag the model down twice, then up once | The open floor changes as the view moves: "Level 4", then "Level 2" again. | "Every floor of the tower opens like this, from Level 2 to Level 86." |
 | Double-click the model | Back to the framed view | "Every edit checks every question again over the whole tower, in a few milliseconds." |
 
 ## Close
@@ -128,7 +129,8 @@ of the Answers panel: "A quick check of sizes and routes, not a code review."
 |---|---|---|
 | The server is off | The strip: "Read by: this page", "The server is not reachable." The panel: "Review panel is off", "No votes - the server is not reachable", "The rules still decide every answer." | Keep going. The page reads the sentence itself, and the edit is made. Say: "The rules still decide every answer." |
 | The model is off or slow (`DECIDER=strands`) | The strip: "Read by: this page", "The model gave no answer (down or busy)." The panel: "Votes by: the rules. The model gave no usable vote (off, busy, slow or unclear)." | Keep going. The page reads it, and the rules vote. |
-| The city block is slow | "Loading the city around the tower". Questions and answers work before it arrives; the floor plans and the rail come with it. | Start with beats 1 to 4. Do beat 5 once the block is in. |
+| The view was dragged during a run | "Follow" under the answer pill | Click Follow, and the camera goes back to the route and its answer. The next Show me follows again anyway. |
+| The city block is slow | "Loading the city around the tower". Questions and answers work before it arrives; the floor plans come with it. | Start with beats 1 to 4. Do beat 5 once the block is in. |
 | The city block is not on this laptop | Plain ground, no city. The tower questions still work. | Skip the city line. |
 | A typed edit asks "Did you mean" | Amber strip, "Nothing was changed." | Click the right button under "Did you mean", or use the fix button. |
 | The page breaks | | Switch to the backup recording without apology and keep talking. |
@@ -138,7 +140,7 @@ of the Answers panel: "A quick check of sizes and routes, not a code review."
 | Question | Answer |
 |---|---|
 | Does the AI decide? | No. Plain rules in the solver decide every Yes and No, the same every time. The model only reads the sentence and votes. |
-| Why not just try everything? | We do, where it is cheap. In a test, every single edit across the building took 6,934 solves in 8.2 s. That is too slow to feel live. Trying edits only at the stuck places took 69 solves in about 0.1 s, and found a fix for each stuck question. That is what Hint does: on the sofa it needed 4 tries. It stops at 100 tries or 250 ms. |
+| Why not just try everything? | We do, where it is cheap. On this build, trying every single edit across the building takes 11,922 solves in about 25 s. That is too slow to feel live. Trying edits only at the stuck places takes 10 tries in about 35 ms, and finds a fix for each stuck question. That is what Hint does: on the sofa it needed 4 tries. It stops at 100 tries or 250 ms. |
 | Is this a code check? | No. It is a quick check of sizes and routes, so the right expert looks early. |
 | Is the building real? | The tower is a 432 Park Avenue model we built from published diagrams and sources: the real height and floor-to-floor, approximate plans. The doors, lifts and stairs are self-made. |
 | Which model reads the words? | Today, on this laptop, the page reads them by keywords; the strip says "Read by: this page". The server can run Strands Decider, an open-source (Apache-2.0) decision model, on this computer. Then the strip says "Read by: the model". |

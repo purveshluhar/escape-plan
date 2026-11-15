@@ -85,3 +85,37 @@ export function drawnLevels(b: Building): string[] {
   const slice = floorPlacement(b).position[1];
   return b.levels.filter((l) => /^T\d\d$/.test(l.id) || l.elevation === slice).map((l) => l.id);
 }
+
+// Zoomed in, the facade opens to a floor plan. Its full-height walls would hide the rooms, the routes
+// and the figures from the camera looking down, so the open floor is drawn as a cutaway: its
+// partitions, core, columns and stairs stand only CUT_WALL_HEIGHT metres high, a little above the
+// furniture (1 m), so each room still reads as a room. The slab, finish and furniture stay as they are.
+export const CUT_WALL_HEIGHT = 1.2;
+
+export function isCutWall(name: string): boolean {
+  return /_(Partitions|Core|Concrete_Grid|Stairs)$/.test(name);
+}
+
+// The height scale of a cut wall `height` metres tall while the facade is `amount` open (0 shut, 1
+// open): full height when shut, CUT_WALL_HEIGHT when open, eased with the facade fade between.
+export function cutWallScale(height: number, amount: number): number {
+  if (!(height > CUT_WALL_HEIGHT)) return 1;
+  const a = Math.min(1, Math.max(0, amount));
+  return 1 - a * (1 - CUT_WALL_HEIGHT / height);
+}
+
+// The Lightweight facade is one module per 4.7244 m storey: Facade_Module_001 at the ground, with its
+// window glass in Windows_Module_001, and so on up. The real open mechanical bands (tower level 19 and
+// up) already come without glass. A slice level that holds the plant stands for one of those bands
+// (the data note: L3 is tower level 19, an open mechanical band), so its module is drawn the same way:
+// no glass, louvres in the openings. No airflow is modelled; this is the look only.
+export const FACADE_MODULE_HEIGHT = 4.7244;
+
+export function plantBandElevations(b: Building): number[] {
+  const levels = new Set(b.nodes.filter((n) => n.type === 'plant' && !/^T\d\d$/.test(n.level)).map((n) => n.level));
+  return b.levels.filter((l) => levels.has(l.id)).map((l) => l.elevation);
+}
+
+export function windowModuleAt(elevation: number): string {
+  return `Windows_Module_${String(Math.round(elevation / FACADE_MODULE_HEIGHT) + 1).padStart(3, '0')}`;
+}

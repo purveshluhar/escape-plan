@@ -20,8 +20,6 @@ import { answers, relevantTargets } from './answers.ts';
 import { cutHeight } from './backdrop.ts';
 import { dimBlock, loadBackdrop, setCutHeight } from './backdrop-load.ts';
 import { MVP_TOKENS, mvpButtons } from './mvp.ts';
-import { scrollerStops } from './scroller.ts';
-import { mountScroller } from './scroller-view.ts';
 import type { Answer } from './answers.ts';
 import { conflictOf } from './conflict.ts';
 import type { Conflict } from './conflict.ts';
@@ -90,11 +88,9 @@ const applyReveal = (): void => {
   if (context3d.block && context3d.amount !== context3d.dimmed) dimBlock(context3d.block, context3d.amount);
   context3d.dimmed = context3d.amount;
 };
-// The floor scroller on the right edge; it lists the drawn floors once they load and drives viewer.focusLevel.
 // The zoom (1 = framed) and the floors the view can open, for the arrow keys: zoomed in, a question
 // steps only onto a floor that can be shown, and the view follows it there.
 const view = { zoom: 1, floors: new Set<Id>() };
-const rail = mountScroller($('hud'), (level) => viewer.focusLevel(level));
 const viewer = createViewer($('viewer'), {
   onZoom: (zoom) => {
     setCutHeight(cutHeight(zoom));
@@ -105,10 +101,10 @@ const viewer = createViewer($('viewer'), {
     applyReveal();
   },
   // Floor labels and fail cards keep clear of the panels over the model: the banner, the review panel,
-  // the strip, the Hint panel and the rail (its floor name pill sticks out left).
-  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint'), $('floors'), ...document.querySelectorAll('#floors .fl-name')],
-  onFocus: (level) => rail.follow(level),
-  onInset: (pixels) => rail.setInset(pixels), // the scroller keeps clear of the same panels as the model
+  // the strip, the Hint panel and the Follow button.
+  avoid: () => [$('banner'), $('votes'), $('strip'), $('hint'), $('follow')],
+  // The person moved the view during a run: offer to put the camera back on the moving objects.
+  onFollowPaused: (paused) => $('follow').classList.toggle('on', paused),
   onDrop: (token, node) => moveTo(token, node),
   onRefuse: (token) => {
     const what = S.placed.includes(token) ? 'not moved' : 'not placed';
@@ -125,6 +121,7 @@ const viewer = createViewer($('viewer'), {
 // Frame the slice, not the whole tower, from the first frame on: the tower's nodes are never drawn,
 // so framing them shows an empty 424 m view until (or unless) the real floors load.
 viewer.setCovered(coveredNodes(building));
+$('follow').addEventListener('click', () => viewer.resumeFollow());
 // The model centres in the whole view, and moves left of the fix sheet or the all-yes banner after
 // a run (both float on the right on wider screens; on phones they sit at the bottom).
 // The all-yes banner uses the same slot, so the model also moves left of it when every answer is yes.
@@ -682,7 +679,6 @@ document.addEventListener('keydown', (ev) => {
         // The camera glides only to a drawn floor; the terrace and plant levels go to the nearest one.
         const floor = focusFloor(building, [...view.floors], level);
         viewer.focusLevel(floor);
-        rail.follow(floor); // the rail names the floor at once, not only when the glide ends
       }
       return;
     }
@@ -723,6 +719,5 @@ Promise.all([
   applyReveal();
   const drawn = floor ? drawnLevels(building) : [];
   view.floors = new Set(drawn);
-  rail.setStops(scrollerStops(building.levels, drawn)); // before setFloors: its first frame tells the rail where the view is
   viewer.setFloors(drawn); // only real floors can be opened
 });

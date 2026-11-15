@@ -79,3 +79,48 @@ export function flashPoint(b: Building, id: Id): Vec3 | null {
   }
   return memberBoxes(b).find((m) => m.id === id)?.center ?? null;
 }
+
+// The structure is hidden until something needs it, so the view stays clean: a question whose answer
+// depends on it (the load, and the chiller, whose shaft crosses beam B2), a member the load has lost
+// its support at, or an edit that touched a member or an opening that crosses one (`touched`).
+const STRUCTURE_QUESTIONS: ReadonlySet<Id> = new Set(['load', 'chiller']);
+
+export function touchesStructure(b: Building, id: Id): boolean {
+  return b.members.some((m) => m.id === id) || (b.edges.find((e) => e.id === id)?.crosses?.length ?? 0) > 0;
+}
+
+export function structureWanted(b: Building, results: readonly SolverResult[], touched: Id | null): boolean {
+  return results.some((r) => STRUCTURE_QUESTIONS.has(r.token)) || flashingMembers(results).length > 0
+    || (touched !== null && touchesStructure(b, touched));
+}
+
+// A member's name and one plain line from the data on where its load goes: "Beam B2" / "holds up the
+// plant floor, sits on column C1". The drawing is a schematic load path, not the real tower's
+// structure, so the lines name only what the data has (no sizes, materials or capacities). The data
+// has no names for members: the kind in words and the id's last part ("beam-b2" -> "B2").
+export const LOAD_PATH_TAG = 'Simplified load path';
+const KIND_WORD: Record<MemberKind, string> = { foundation: 'Footing', column: 'Column', beam: 'Beam', transfer_beam: 'Transfer beam' };
+const shortId = (id: Id): string => (id.split(/[-_]/).pop() ?? id).toUpperCase();
+
+// `cut`: the members the load has lost its support at (flashingMembers). Their lines say so, as the
+// answer does, instead of the support the data drew for them.
+export function memberTag(b: Building, id: Id, cut: ReadonlySet<Id> = new Set()): { name: string; line: string } | null {
+  const m = b.members.find((x) => x.id === id);
+  if (!m) return null;
+  const named = (ids: readonly Id[]): string => ids.map((i) => b.members.find((x) => x.id === i))
+    .filter((x) => x !== undefined).map((x) => `${KIND_WORD[x.kind].toLowerCase()} ${shortId(x.id)}`).join(' and ');
+  const name = `${KIND_WORD[m.kind]} ${shortId(m.id)}`;
+  const below = named(m.supported_by);
+  if (m.kind === 'foundation') return { name, line: 'the load path ends here' };
+  if (m.kind === 'column') {
+    const on = b.members.filter((o) => o.supported_by.includes(m.id)).map((o) => o.id);
+    const held = named(on.filter((o) => !cut.has(o)));
+    const lost = named(on.filter((o) => cut.has(o)));
+    if (!held && lost) return { name, line: `${lost} no longer rests on it` };
+    return { name, line: [held ? `carries ${held}` : 'carries the load', below ? `down to ${below}` : ''].filter(Boolean).join(' ') };
+  }
+  // A beam holds up the floor of the room it sits in: "Mechanical level plant" -> "the plant floor".
+  const room = b.nodes.find((n) => n.id === m.node)?.name.trim().split(/\s+/).pop()?.toLowerCase();
+  const rests = cut.has(m.id) ? 'no path down to a foundation' : below ? `sits on ${below}` : '';
+  return { name, line: [room ? `holds up the ${room} floor` : 'holds up its floor', rests].filter(Boolean).join(', ') };
+}

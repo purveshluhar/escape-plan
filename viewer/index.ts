@@ -22,16 +22,18 @@ import { makeCornerFx } from './corner-fx.ts';
 import type { CornerFx } from './corner-fx.ts';
 import { createPerfOverlay, perfEnabled } from './perf.ts';
 import { localState, planRun, runItem, tokenClock, turnToward, walkClock, yawOf, TIMING } from './timeline.ts';
-import type { LocalState, Plan, RunItem } from './timeline.ts';
+import type { LocalState, Phase, Plan, RunItem } from './timeline.ts';
+import { followButton, followFrame, followOnPause, followOnResume, followOnShow, followSet, followStep } from './follow.ts';
+import type { CameraFrame, FollowState } from './follow.ts';
 import { calloutText, coveredBy, failText, labelSides, labelWidth, roomLabel, stayText, tokenName } from './labels.ts';
 import type { LabelSide } from './labels.ts';
-import { flashPoint, flashingMembers, memberBoxes } from './members.ts';
+import { LOAD_PATH_TAG, flashPoint, flashingMembers, memberBoxes, memberTag, structureWanted } from './members.ts';
 import { smokeTints, tintOnShownFloor, tintVisible } from './smoke.ts';
 import type { Rect } from './labels.ts';
 import {
   cumulativeLengths, frustum, graphMarks, pointAt, tokenRoute, zoomFactor, CAMERA, DEFAULT_VIEW, PATH_LIFT, dragToPan, orbit, panned, viewDirection, type Vec3,
   focusHeight, belowCut, cutLevel, dropCeiling, fadeAt, floorName, floorTagRect, keepFloorTags, planExtent, retarget, revealed, facadeOpen, routesShown, answersCut, FLOOR_TAG_GAP,
-  glideStep, panForFocus,
+  glideStep, panForFocus, floorUnder,
   type Fade, type ScreenRect,
 } from './layout.ts';
 
@@ -49,6 +51,9 @@ export interface Viewer {
   // middle of the view; while the facade is open that floor is the one opened. A jump under reduced
   // motion. Dragging the view, or a double-click reset, ends the glide where it is.
   focusLevel(level: Id): void;
+  // The follow camera after the person moved the view during a run (ViewerOptions onFollowPaused):
+  // take the camera back to the moving objects and their answer.
+  resumeFollow(): void;
   // Change the right inset (see ViewerOptions) and reframe, for a panel that comes and goes.
   setInsetRight(pixels: number): void;
   // The same for a panel on the left (the typed-edit strip): the model centres between the two.
@@ -91,7 +96,7 @@ export interface ViewerOptions {
   onFocus?: (level: Id | null) => void;
   // The right inset changed (setInsetRight), for something beside the model that keeps clear of the same panels.
   onInset?: (pixels: number) => void;
-  // Elements of the app drawn over the model (a banner, the floor rail): floor labels and fail cards
+  // Elements of the app drawn over the model (a banner, a panel): floor labels and fail cards
   // keep clear of them as they do of every panel.
   avoid?: () => Element[];
   // A token was dropped on a room or core: the app makes that node its start.
@@ -100,6 +105,10 @@ export interface ViewerOptions {
   onRefuse?: (token: Id) => void;
   // A click on a token (its id) or on empty space (null).
   onSelect?: (token: Id | null) => void;
+  // During a run the camera follows the moving objects and settles on the answer. A drag, the wheel
+  // or a double-click pauses that: called with true then, so the app can offer a Follow button
+  // (resumeFollow), and with false when there is nothing to resume.
+  onFollowPaused?: (paused: boolean) => void;
 }
 
 const VIEW_MARGIN = 1.2;
@@ -172,6 +181,7 @@ interface Run {
   figure: Figure;
   x: { obj: CSS2DObject; at: THREE.Vector3; width: number; callout: boolean; card?: { w: number; h: number } } | null;
   reachedAt: number | null; // token-local seconds when it reached its stop
+  phase: Phase; // where it is on its own timeline this frame (the follow camera reads it)
 }
 
 export function createViewer(container: HTMLElement, options: ViewerOptions = {}): Viewer {
@@ -235,6 +245,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   let glideAt = 0; // the last frame it moved
   let focused: Id | null | undefined; // last onFocus; undefined: tell the app again at the next fit
   let chromeStale = false; // floor labels moved since the last panel check
+  // The follow camera (follow.ts): who has the camera, the last frame time and what it frames.
+  let follow: FollowState = { mode: 'off', paused: false, before: null };
+  let followAt = 0;
+  let followPoints: Vec3[] = [];
+  let toldPaused = false; // last onFollowPaused
+  let followBase = { half: 1, aspect: 1 }; // fit(): half the view height at zoom 1 (metres) and the free view's width over height
+  let sized = { w: 0, h: 0 }; // the renderer size last set
   let smokeSpread: { steps: ReadonlyMap<Id, number>; secondsPerStep: number; delaySeconds?: number } | null = null;
   let haze: { group: THREE.Group; blocks: { mesh: THREE.Mesh; step: number; floor: number }[] } | null = null;
 
@@ -251,7 +268,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   const bounds = new THREE.Box3();
   let runs: Run[] = [];
   // Members drawn over the building, with their height: hidden with the floors when the facade opens.
-  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[] }[] = [];
+  // `holds`: not the red member, so it fades back when the facade opens. Each has a name tag.
+  // `span`: a beam's middle, so its tag goes on the side away from the beam and never covers it.
+  let memberMarks: { objs: THREE.Object3D[]; y: number; mats: THREE.Material[]; holds: boolean; tag: CSS2DObject; span: THREE.Vector3 | null }[] = [];
+  // The structure shows only when it is needed (members.ts structureWanted), easing in and out.
+  let structure: Fade = { from: 0, to: 0, start: 0 };
+  let structureNow = 0; // its amount this frame
+  let touched: Id | null = null; // what the last edit changed (flash), until the next show()
+  let tagsCheckedAt = 0;
   let beating: THREE.MeshLambertMaterial[] = []; // members drawn red: they blink after the run, then stay red
   let roomTags: { obj: CSS2DObject; text: string }[] = [];
   // A label per level ("Level 10"), pinned left of its floor plate; shown only while the facade is open.
@@ -336,17 +360,87 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         o.rotation.y = m.yaw;
         fx.add(o);
       }
-      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: red.has(m.id) ? [] : [mat, line] });
+      const words = memberTag(b, m.id, red);
+      const el = document.createElement('div');
+      el.className = 'ep-member';
+      const face = document.createElement('span');
+      face.append(Object.assign(document.createElement('em'), { textContent: LOAD_PATH_TAG }),
+        Object.assign(document.createElement('b'), { textContent: words?.name ?? m.id }), Object.assign(document.createElement('i'), { textContent: words?.line ?? '' }));
+      el.append(face);
+      el.style.visibility = 'hidden'; // until the tag check finds it clear of every panel and text
+      const tag = new CSS2DObject(el);
+      // A beam's tag sits at the end it rests on (its column), clear of the load standing on its middle.
+      const half = m.kind === 'beam' || m.kind === 'transfer_beam' ? m.size[0] / 2 : 0;
+      tag.position.set(m.center[0] + half * Math.cos(m.yaw), m.center[1], m.center[2] - half * Math.sin(m.yaw));
+      fx.add(tag);
+      memberMarks.push({ objs: [mesh, edges], y: m.center[1], mats: [mat, line], holds: !red.has(m.id), tag, span: half > 0 ? new THREE.Vector3(...m.center) : null });
+    }
+  }
+
+  // Ease the structure in or out for what is on the model now.
+  function retargetStructure(): void {
+    const want = shown !== null && structureWanted(shown.building, shown.results, touched);
+    structure = retarget(structure, want ? 1 : 0, performance.now(), reduced);
+  }
+
+  // A member's tag shows while the structure does, and only where it covers no panel (the dock, the
+  // answer cards, the strip, the Hint, the fix sheet), no other text on the model and no other tag.
+  // Checked as the floor tags are: within 100 ms while things move, else every 250 ms.
+  function checkMemberTags(now: number): void {
+    if (now - tagsCheckedAt < (following() || structureNow < 1 ? 100 : 250)) return;
+    tagsCheckedAt = now;
+    const r = canvas.getBoundingClientRect();
+    // The app's own panels are measured here too: avoidBoxes is kept fresh only while the facade is
+    // open, and some panels (the banner) take no pointer events, so elementFromPoint sees through them.
+    const panels = (options.avoid?.() ?? []).flatMap((el) => {
+      const b = el.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 ? [{ left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top }] : [];
+    });
+    const others = [...textOnModel(), ...panels, ...floorTags.filter((t) => t.obj.visible && t.rect).map((t) => t.rect!)];
+    const placed: ScreenRect[] = [];
+    const m = 4;
+    const fits = (el: HTMLElement): ScreenRect | null => {
+      const b = el.getBoundingClientRect();
+      const box = { left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top };
+      return b.width > 0 && box.left >= 0 && box.top >= 0 && box.right <= r.width && box.bottom <= r.height
+        && ![...others, ...placed].some((o) => o.left < box.right + m && box.left - m < o.right && o.top < box.bottom + m && box.top - m < o.bottom)
+        && [[box.left - m, box.top - m], [box.right + m, box.top - m], [box.left - m, box.bottom + m], [box.right + m, box.bottom + m],
+          [(box.left + box.right) / 2, (box.top + box.bottom) / 2]].every(([x, y]) => document.elementFromPoint(r.left + x!, r.top + y!) === canvas)
+        ? box : null;
+    };
+    // Top member first: the first tag shown also says the drawing is a simplified load path. Each tag
+    // goes right of its member, else left of it, else hides.
+    let lead = true;
+    for (const { tag, span } of [...memberMarks].sort((a, b) => b.y - a.y)) {
+      const el = tag.element;
+      const face = el.firstElementChild as HTMLElement;
+      let box: ScreenRect | null = null;
+      if (tag.visible && structureNow >= 0.5) {
+        el.classList.toggle('lead', lead);
+        const spanRight = span !== null && span.clone().project(camera).x > tag.position.clone().project(camera).x;
+        for (const side of spanRight ? ['left', 'right'] : ['right', 'left']) {
+          el.classList.toggle('left', side === 'left');
+          if ((box = fits(face))) break;
+        }
+      }
+      el.style.visibility = box ? '' : 'hidden';
+      if (box) {
+        placed.push(box);
+        lead = false;
+      }
     }
   }
 
   // A member on a hidden floor goes with it (tokens and their routes stay drawn, as always).
   // Zoomed in, a member that holds (not the red one) fades back, so it does not hide the plan, the
   // doors and the things at them; the red member stays strong.
+  // Hidden structure is not drawn at all; easing in or out, every member fades with it.
   function cutMembers(): void {
-    for (const { objs, y, mats } of memberMarks) {
-      for (const o of objs) o.visible = opened <= 0 || y < pickCeiling;
-      const k = 1 - MEMBER_FADE * Math.max(0, opened);
+    for (const { objs, y, mats, holds, tag } of memberMarks) {
+      const on = structureNow > 0 && (opened <= 0 || y < pickCeiling);
+      for (const o of objs) o.visible = on;
+      tag.visible = on;
+      const k = (holds ? 1 - MEMBER_FADE * Math.max(0, opened) : 1) * structureNow;
       for (const m of mats) m.opacity = m instanceof THREE.LineBasicMaterial ? k : MEMBER_OPACITY * k;
     }
   }
@@ -445,7 +539,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
         points: route.points, cum, total, stopAt: route.stopAt, fail: r.status === 'fail',
         item, corner, yaw: null, clock: 0,
         frame: at ? cornerFrame(at.door, at.inDir, at.outDir, at.corner) : null, bind: at ? bindTurn(at.corner) : null, pellets, trail, id: token.id, discipline: token.discipline, token: tokenGroup, figure, x,
-        reachedAt: null,
+        reachedAt: null, phase: 'wait',
       });
     });
     markSelected();
@@ -484,8 +578,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function fit(): void {
     const w = container.clientWidth || 800;
     const h = container.clientHeight || 600;
-    renderer.setSize(w, h);
-    labels.setSize(w, h);
+    // Setting the same size again would reallocate the canvas: the follow camera calls fit every frame.
+    if (w !== sized.w || h !== sized.h) {
+      renderer.setSize(w, h);
+      labels.setSize(w, h);
+      sized = { w, h };
+    }
     if (bounds.isEmpty()) return;
     const centre = bounds.getCenter(new THREE.Vector3());
     camera.position.copy(centre).addScaledVector(new THREE.Vector3(...viewDirection(view.azimuth, view.elevation)), CAMERA.distance);
@@ -499,6 +597,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       hx = Math.max(hx, Math.abs(v.x));
       hy = Math.max(hy, Math.abs(v.y));
     }
+    const free = Math.max(w - insetRight - insetLeft, 1) / Math.max(h - insetBottom, 1);
+    followBase = { half: Math.max(hy, hx / free) * VIEW_MARGIN, aspect: free };
     Object.assign(camera, panned(frustum({ hx, hy, width: w, height: h, insetRight, insetLeft, insetBottom, margin: VIEW_MARGIN * zoom }), pan));
     camera.updateProjectionMatrix();
 
@@ -507,7 +607,12 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     cut = cutLevel(drawn, focusHeight(centre.y, view, pan));
     // Opened for answers, not by zooming in: no figure on the model is cut away with its floor.
     // Only at the framed view itself: once the person pans or glides to a floor, the cut is theirs.
-    if (!revealed(zoom) && pan.x === 0 && pan.y === 0 && glideTo === null) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
+    // While the camera follows a run, the floor the followed figures are on is the open one, raised
+    // as at the framed view until none of them is cut away.
+    if (following() && followPoints.length) {
+      const ys = followPoints.map((p) => p[1]);
+      cut = answersCut(drawn, floorUnder(drawn, Math.min(...ys)), Math.max(...ys));
+    } else if (!revealed(zoom) && pan.x === 0 && pan.y === 0 && glideTo === null) cut = answersCut(drawn, cut, Math.max(-Infinity, ...runs.flatMap((r) => r.points.map((p) => p[1]))));
     pickCeiling = dropCeiling(drawn, cut);
     if (glideTo === null) {
       const now = drawn.find((l) => l.elevation === cut)?.id ?? null;
@@ -533,7 +638,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       span.style.right = `${FLOOR_TAG_GAP - rect.shift}px`;
       if (rect.top >= 0 && rect.bottom <= h && rect.right <= w - insetRight) tag.rect = rect;
       // A label that moved waits for the next panel check (within 100 ms) before it shows again.
-      if (!was || was.left !== rect.left || was.top !== rect.top) tag.free = false;
+      // Not while the follow camera eases: every label moves a little every frame, and they would
+      // blink for the whole run. The panel check (every 100 ms while labels move) still hides one under a panel.
+      if (!following() && (!was || was.left !== rect.left || was.top !== rect.top)) tag.free = false;
     }
     chromeStale = true;
 
@@ -643,11 +750,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function reveal(now: number): void {
     opened = fadeAt(fade, now);
     const cutNow = opened > 0 ? cut : Infinity;
+    const structureThen = structureNow;
+    structureNow = fadeAt(structure, now);
     if (opened !== told.amount || cutNow !== told.cut) {
       told = { amount: opened, cut: cutNow };
       options.onReveal?.(opened, cutNow);
       cutMembers();
-    }
+    } else if (structureNow !== structureThen) cutMembers();
     if (opened <= 0) {
       for (const tag of floorTags) tag.obj.visible = false;
       return;
@@ -697,6 +806,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const dt = Math.max(0, clock - run.clock);
     run.clock = clock;
     const s = localState(run.item, clock - (plan.starts[k] ?? 0));
+    run.phase = s.phase;
     const d = s.d;
     const arrived = s.phase === 'stopped' || s.phase === 'done' || (s.phase === 'turn' && run.item.kind === 'jam');
     if (run.reachedAt === null && arrived) {
@@ -814,6 +924,43 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     fit();
   }
 
+  const following = (): boolean => follow.mode === 'run' && !follow.paused;
+
+  // One frame of the follow camera: ease the pan and zoom towards the figures (or, going back, towards
+  // the camera from before the run).
+  function followCamera(now: number): void {
+    const dt = Math.min(0.1, Math.max(0, (now - followAt) / 1000));
+    followAt = now;
+    let target: CameraFrame | null = null;
+    if (following()) {
+      followPoints = followSet(runs.map((run) => ({ at: [run.token.position.x, run.token.position.y, run.token.position.z], phase: run.phase, fail: run.fail })));
+      const c = bounds.getCenter(new THREE.Vector3());
+      target = followFrame({ points: followPoints, centre: [c.x, c.y, c.z], view, baseHalf: followBase.half, aspect: followBase.aspect, userZoom: follow.before?.zoom ?? zoom });
+    } else if (follow.mode === 'back') target = follow.before;
+    if (!target || bounds.isEmpty()) return;
+    const next = followStep({ pan: { ...pan }, zoom }, target, dt, reduced);
+    const moved = next.pan.x !== pan.x || next.pan.y !== pan.y;
+    pan.x = next.pan.x;
+    pan.y = next.pan.y;
+    if (next.zoom !== zoom) setZoom(next.zoom);
+    else if (moved) fit();
+    if (follow.mode === 'back' && next.pan.x === target.pan.x && next.pan.y === target.pan.y && next.zoom === target.zoom) setFollow({ mode: 'off', paused: false, before: null });
+  }
+
+  function setFollow(next: FollowState): void {
+    follow = next;
+    const paused = followButton(follow);
+    if (paused !== toldPaused) options.onFollowPaused?.((toldPaused = paused));
+  }
+
+  // The person moved the view: the follow camera lets go of it until Follow is pressed or the next run.
+  const pauseFollow = (): void => setFollow(followOnPause(follow, (performance.now() - t0) / 1000 < plan.end && !reduced));
+
+  function resumeFollow(): void {
+    followAt = performance.now();
+    setFollow(followOnResume(follow));
+  }
+
   let lastFrame = 0;
   function frame(now: number): void {
     perf?.begin(now);
@@ -821,6 +968,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     const dt = reduced || !lastFrame ? 0 : Math.min(0.1, (now - lastFrame) / 1000); // clips hold still on reduced motion
     lastFrame = now;
     runs.forEach((run, k) => update(run, k, t));
+    if (follow.mode !== 'off') followCamera(now);
     // Once every answer shows, the cards lay out again: they now have their measured size, and the
     // selection caption its final words (the app rewrites it when the run ends).
     if (!laidOut && t >= plan.answered + RELAYOUT_AFTER) {
@@ -871,6 +1019,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     labels.render(fx, camera);
     labels.render(marks, camera);
     hideCoveredRooms();
+    // After the label render, so a tag drawn for the first time is in the page and can be measured.
+    if (memberMarks.length > 0 && structureNow > 0) checkMemberTags(now);
     perf?.end();
   }
 
@@ -905,6 +1055,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
+    pauseFollow();
     setZoom(zoomFactor(zoom, e.deltaY));
   }, { passive: false });
 
@@ -1113,6 +1264,9 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
+    if (dx === 0 && dy === 0) return;
+    // A press that stays inside the click slop is still a click (it selects): it leaves the camera be.
+    if (movedPastSlop(e.clientX - drag.x0, e.clientY - drag.y0)) pauseFollow();
     if (drag.mode === 'rotate') {
       view = orbit(view, dx, dy);
     } else {
@@ -1133,6 +1287,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('dblclick', () => {
+    pauseFollow();
     glideTo = null;
     pan.x = 0;
     pan.y = 0;
@@ -1172,13 +1327,22 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   function show(building: Building, results: SolverResult[]): number {
     shown = { building, results };
+    touched = null; // an edit that showed the structure counts for its own run only
     laidOut = false;
     retargetFade();
+    retargetStructure();
+    tagsCheckedAt = 0;
     drawBuilding(building);
     buildRuns(building, results);
     drawSmoke();
     win = results.length > 0 && results.every((r) => r.status === 'pass');
     banner.classList.remove('on', 'small');
+    // A run with routes: the camera follows it. No routes (the objects parked again): it goes back to
+    // where the person had it (follow.ts followOnShow).
+    setFollow(followOnShow(follow, routesShown(results), { zoom, pan: { ...pan } }));
+    if (follow.mode === 'run') glideTo = null;
+    followPoints = [];
+    followAt = performance.now();
     fit();
     t0 = performance.now();
     return plan.answered;
@@ -1202,14 +1366,15 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   function endGlide(): void {
     if (glideTo === null) return;
     glideTo = null;
-    focused = undefined; // the thumb may be ahead of the camera
+    focused = undefined; // the app may be ahead of the camera
     fit();
   }
 
   function focusLevel(level: Id): void {
+    pauseFollow();
     const at = shown?.building.levels.find((l) => l.id === level);
     if (!at || !Number.isFinite(at.elevation) || !floorLevels.has(level) || bounds.isEmpty()) {
-      focused = undefined; // nothing to go to: put the app's thumb back where the camera is
+      focused = undefined; // nothing to go to: tell the app again where the camera is
       fit();
       return;
     }
@@ -1264,6 +1429,8 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
   }
 
   function flash(target: Id): void {
+    touched = target;
+    retargetStructure();
     const at = shown ? flashPoint(shown.building, target) : null;
     if (!at) return;
     const el = document.createElement('div');
@@ -1277,7 +1444,7 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     }, MOTION.showMs);
   }
 
-  return { show, setBackdrop, setFloors, focusLevel, setInsetRight, setInsetLeft, setInsetBottom, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
+  return { show, setBackdrop, setFloors, focusLevel, resumeFollow, setInsetRight, setInsetLeft, setInsetBottom, setCovered, startDrag, setDragEnabled, select, flash, setSmoke };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
@@ -1311,6 +1478,15 @@ function injectStyles(): void {
 .ep-floor span { position: absolute; right: ${FLOOR_TAG_GAP}px; transform: translateY(-50%); white-space: nowrap;
   font: 600 13px/1 ${FONT_BODY}; color: ${TEXT}; background: ${GLASS_STRONG}; border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 999px; padding: 5px 10px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+/* A member's name and what it holds up: a calm two-line pill right of its centre, under every answer. */
+.ep-member { z-index: 1 !important; width: 0; height: 0; }
+.ep-member span { position: absolute; left: 14px; transform: translateY(-50%); white-space: nowrap; background: ${GLASS_STRONG};
+  border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 10px; padding: 5px 9px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+.ep-member.left span { left: auto; right: 14px; }
+.ep-member em { display: none; font: 700 11px/1.3 ${FONT_BODY}; font-style: normal; letter-spacing: 1px; text-transform: uppercase; color: ${TEXT_MUTED}; }
+.ep-member.lead em { display: block; margin-bottom: 2px; }
+.ep-member b { display: block; font: 700 14px/1.25 ${FONT_BODY}; color: ${TEXT}; }
+.ep-member i { display: block; font: 600 13px/1.25 ${FONT_BODY}; font-style: normal; color: ${TEXT_MUTED}; }
 /* Exit names: quiet caps at street level, always under tokens and fail cards. */
 .ep-room { z-index: 0 !important; transform-origin: center; white-space: nowrap; font: 600 11px/1 ${FONT_BODY};
   letter-spacing: 1.2px; text-transform: uppercase; color: ${TEXT_MUTED}; text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff;

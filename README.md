@@ -29,7 +29,7 @@ review panel gives one vote for each discipline asked about. A vote never change
 the stuck place that turns a No to Yes, and says what it breaks.
 
 The building is 432 Park Avenue in Manhattan, with all its floors. Zoom in and the facade opens
-to the floor plans; a floor rail moves from Level 2 to Level 86. The city block around it comes
+to the floor plans, from Level 2 to Level 86. The city block around it comes
 from Cityweft, on your own machine only.
 
 The live demo, beat by beat, is [design/demo-script.md](design/demo-script.md).

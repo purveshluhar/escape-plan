@@ -60,7 +60,7 @@ async function drive(page, steps) {
 
 // Every visible run of text on the page: its box, size, weight, colour and the label or panel it is in.
 function collect() {
-  const owners = '.glass, .ep-fail, .ep-room, .ep-floor, .ep-tag, .ep-toast, .ep-hint, .ep-banner, .ep-flash, [class*="caption"], .fl-name, .fl-end';
+  const owners = '.glass, .ep-fail, .ep-room, .ep-floor, .ep-tag, .ep-toast, .ep-hint, .ep-banner, .ep-flash, [class*="caption"]';
   const out = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -141,7 +141,8 @@ for (const vp of VIEWPORTS) {
       const ctx = await browser.newContext({ viewport: vp, reducedMotion: 'reduce' });
       const page = await ctx.newPage();
       await page.goto(url);
-      await page.waitForFunction(() => Number(document.querySelector('#floors .fl-track')?.getAttribute('aria-valuemax') ?? 0) > 0, null, { timeout: 60000 }).catch(() => {});
+      // The city and the floor plans are in once the loading note goes.
+      await page.waitForFunction(() => !document.querySelector('#loading')?.classList.contains('on'), null, { timeout: 60000 }).catch(() => {});
       await page.waitForTimeout(800);
       await drive(page, steps);
       if (wheel) {
