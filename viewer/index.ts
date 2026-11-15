@@ -16,6 +16,9 @@ import {
 
 export interface Viewer {
   show(building: Building, results: SolverResult[]): void;
+  // Optional context drawn under everything (for example the Cityweft block), already placed in
+  // viewer metres. It never changes the framing, and the building always draws over it. null clears it.
+  setBackdrop(object: THREE.Object3D | null): void;
 }
 
 export interface ViewerOptions {
@@ -76,7 +79,13 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
 
   const world = new THREE.Scene(); // building and grid
   const fx = new THREE.Scene(); // routes and tokens, drawn over the building so they always read
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1500); // far reaches a 500 m backdrop
+  const backdrop = new THREE.Scene(); // context under the model; lit, unlike the model
+  backdrop.add(new THREE.HemisphereLight('#ffffff', '#d9dde3', 2.2));
+  const sun = new THREE.DirectionalLight('#ffffff', 1.4);
+  sun.position.set(-60, 120, 40);
+  backdrop.add(sun);
+  let backdropObject: THREE.Object3D | null = null;
 
   const wallMat = new THREE.LineBasicMaterial({ color: WALL });
   const fillMat = new THREE.MeshBasicMaterial({ color: WALL_INNER, transparent: true, opacity: FILL_OPACITY, depthWrite: false });
@@ -275,6 +284,10 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
       banner.classList.toggle('small', reduced || since >= MOTION.bannerHoldSeconds);
     }
     renderer.clear();
+    if (backdropObject) {
+      renderer.render(backdrop, camera);
+      renderer.clearDepth();
+    }
     renderer.render(world, camera);
     renderer.clearDepth();
     renderer.render(fx, camera);
@@ -294,7 +307,14 @@ export function createViewer(container: HTMLElement, options: ViewerOptions = {}
     t0 = performance.now();
   }
 
-  return { show };
+  function setBackdrop(object: THREE.Object3D | null): void {
+    if (backdropObject) backdrop.remove(backdropObject);
+    backdropObject = object;
+    if (object) backdrop.add(object);
+    renderer.localClippingEnabled = object !== null; // a backdrop may cut itself with clipping planes
+  }
+
+  return { show, setBackdrop };
 }
 
 // Empty a scene, freeing GPU memory for everything that is not shared, and removing label elements
