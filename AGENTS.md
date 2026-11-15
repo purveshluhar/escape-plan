@@ -37,8 +37,6 @@ This file is the one source of truth for every coding agent (Claude Code reads i
 
 @minsookim1014 and @jackwayfeel share P3 and P4 and work on both roles together.
 Shared files outside these folders (root config, `docs/`, `.github/`, `.claude/`) belong to P1.
-When the first `server/` code lands, P1 adds `server/` to the test globs in `package.json` and to
-`include` in `tsconfig.json`.
 Each folder's `README.md` says what it consumes and produces.
 
 ## Commands
@@ -47,6 +45,7 @@ Each folder's `README.md` says what it consumes and produces.
 |---|---|
 | `npm ci` | Install exact versions from `package-lock.json`. |
 | `npm run dev` | Start the game at http://localhost:5173. |
+| `npm run server` | Start the local server on 127.0.0.1 (`server/README.md`). It reads the git-ignored `.env`. |
 | `npm test` | Node's built-in test runner: contract, solver, data schema checks, and every `*.test.ts`. |
 | `npm run check` | Typecheck, test and build: the gate before every merge (CI runs it too). |
 | `npm run typecheck` | `tsc --noEmit` over all source, test files included. |

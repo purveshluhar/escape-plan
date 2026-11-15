@@ -12,8 +12,9 @@
     "dev": "vite --port 5173",
     "build": "vite build",
     "preview": "vite preview",
+    "server": "node --env-file-if-exists=.env server/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"contract/**/*.test.ts\" \"solver/**/*.test.ts\" \"viewer/**/*.test.ts\" \"app/**/*.test.ts\" \"design/**/*.test.ts\" \"data/**/*.test.ts\"",
+    "test": "node --test \"contract/**/*.test.ts\" \"solver/**/*.test.ts\" \"viewer/**/*.test.ts\" \"app/**/*.test.ts\" \"design/**/*.test.ts\" \"data/**/*.test.ts\" \"server/**/*.test.ts\"",
     "check": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
