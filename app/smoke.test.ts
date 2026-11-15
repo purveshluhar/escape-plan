@@ -98,8 +98,8 @@ test('step-count text: the tie goes to the smoke, and a win says who is one step
 
 test('the stuck line names people, not the smoke, and counts 1 step as 1 step', () => {
   const lost = after(widenOffice);
-  assert.equal(stuckLine(lost.b, raceAnswer(lost.rows)!), 'People are stuck at North service corridor: smoke gets there first, people at step 1, smoke at step 1');
-  assert.match(answerLines([raceAnswer(lost.rows)!], lost.b)[0]!.detail, /^Stuck at North service corridor: smoke gets there first, people at step 1, smoke at step 1$/);
+  assert.equal(stuckLine(lost.b, raceAnswer(lost.rows)!), 'People are stuck at North service corridor: smoke gets there first, both at step 1, a tie goes to the smoke');
+  assert.match(answerLines([raceAnswer(lost.rows)!], lost.b)[0]!.detail, /^Stuck at North service corridor: smoke gets there first, both at step 1, a tie goes to the smoke$/);
 });
 
 test('smoke is drawn parked in the lobby, and people are drawn with it even when only the smoke is placed', () => {

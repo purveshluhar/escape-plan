@@ -27,11 +27,14 @@ play, token, race, PASS or FAIL.
   runs in (street to lobby).
 - Assumption 2026-11-15: one line on the Answers panel says "A quick check of sizes and routes,
   not a code review." ADR 0007's no-compliance rule still holds.
-- Assumption 2026-11-15 (final walkthrough): a corner jam says "2.2 m long, longest that turns
-  2.0 m", and a smoke No says "people at step 1, smoke at step 1". "Needs 2.2 m, has 2.0 m" next to
+- Assumption 2026-11-15 (final walkthrough): a corner jam says "2.2 m long, longest that fits
+  2.0 m", and a smoke No says "people at step 4, smoke at step 3" or, on a tie, "both at step 1, a tie goes to the smoke" (the model card: "2.2 m long, fits 2.0 m", "both at step 1, a tie"). "Needs 2.2 m, has 2.0 m" next to
   the fix "Widen lobby door to 1.6 m" read as making the door narrower; "needs 1, has 1" read as a Yes.
 - Assumption 2026-11-15 (final walkthrough): the chiller chip asks "Does a new chiller fit through
   the shaft?". "Can I widen this shaft?" answered "No: too narrow" did not answer the question.
+- Assumption 2026-11-15 (final walkthrough): new strings: "No model is connected, so this page read
+  it." (strip), "Votes by: the rules. No model is connected." (review panel), "Suggested fixes (n)"
+  when the sheet has more than one card.
 - Assumption 2026-11-15: contract ids (`token`, `Reason`, `escape`, phase `complete`) and
   export names (`SCORE`, `levelComplete`, `scoreRows`) stay. Only words people read change.
 
@@ -55,13 +58,13 @@ Each question opens the scenario. Numbers are LIVE from the solver on `data/buil
 
 | Thing | Person | Question (chip text) | Yes line | No line today (base building) | Suggested fix | In dock |
 |---|---|---|---|---|---|---|
-| Sofa | Home buyer | Can my sofa get in? | The sofa gets in | Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that turns 2.0 m | Widen lobby door to 1.6 m | now (key 2) |
+| Sofa | Home buyer | Can my sofa get in? | The sofa gets in | Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that fits 2.0 m | Widen lobby door to 1.6 m | now (key 2) |
 | Wheelchair | Family | Can my parent's wheelchair get out? | The wheelchair gets out, no steps | Wheelchair is stuck at Terrace door: step in the way, 0.15 m high, needs level | Add ramp at terrace door | now (key 1) |
 | People | Building manager | Can everyone get out? | Everyone gets out | People are stuck at Office door: too narrow, needs 0.6 m, has 0.5 m | Widen office door to 0.9 m | now (key 3) |
 | Chiller | Building owner | Does a new chiller fit through the shaft? | The chiller fits through the shaft | Chiller is stuck at Plant shaft: too narrow, needs 1.6 m, has 1.2 m | Widen plant shaft to 2.0 m | tier 1 later |
 | Load | Building owner (same scene) | Does the structure still hold? | The structure still holds | After the shaft edit: Load is stuck at beam B2: nothing holds it up, no path down to a foundation | Add transfer beam at beam B2 | tier 1 later |
-| Glass | Building owner | Can a 4 m glass panel get into the lobby? | The glass panel gets into the lobby | Glass is stuck at Lobby door: cannot turn the corner, 4.0 m long, longest that turns 3.71 m | Widen lobby door to 1.6 m | tier 1 later |
-| People and smoke | Building manager | Do people get out before the smoke? | Everyone gets out before the smoke | People are stuck at North service corridor: smoke gets there first, people at step 1, smoke at step 1 | Close lobby door | now (key 6) |
+| Glass | Building owner | Can a 4 m glass panel get into the lobby? | The glass panel gets into the lobby | Glass is stuck at Lobby door: cannot turn the corner, 4.0 m long, longest that fits 3.71 m | Widen lobby door to 1.6 m | tier 1 later |
+| People and smoke | Building manager | Do people get out before the smoke? | Everyone gets out before the smoke | People are stuck at North service corridor: smoke gets there first, both at step 1, a tie goes to the smoke | Close lobby door | now (key 6) |
 
 Where the question shows:
 
@@ -99,8 +102,8 @@ test that every `MVP_TOKENS` id has an entry. No contract change.
 - Yes, one thing: the yes line from section 2 ("Everyone gets out").
 - No, one line (Answers row, live note, caption detail): `{Name} is stuck at {Place}: {reason}, {numbers}`.
   The verb agrees with the name: "People are stuck" (`plural` in `app/questions.ts`).
-  Example: "Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that turns 2.0 m".
-- No, on the fix card: line 1 `{Reason} at {Place}`, line 2 the numbers (`Needs 1.6 m, has 1.2 m`; a corner: `2.2 m long, longest that turns 2.0 m`), then the fix buttons.
+  Example: "Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that fits 2.0 m".
+- No, on the fix card: line 1 `{Reason} at {Place}`, line 2 the numbers (`Needs 1.6 m, has 1.2 m`; a corner: `2.2 m long, longest that fits 2.0 m`), then the fix buttons.
 - On the model (red X card): title `{Name}: {reason}`, detail `{Place}: {numbers}`.
 - All yes: banner `Yes` (one question) or `Yes to all {n}`; under it the yes lines joined by ". ",
   then `With {k} edit(s).` or `As built, no edits.`

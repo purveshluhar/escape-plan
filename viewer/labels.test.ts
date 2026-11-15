@@ -25,7 +25,7 @@ test('a step says how high it is; a lost support says why', () => {
 
 test('metres on the model show at least one decimal', () => {
   const sofa = failText(b, fail({ token: 'sofa', blocked_at: 'lobby-door', reason: 'cannot_turn', needed: 2.2, available: 1.9967350242673378 }));
-  assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: 2.2 m long, longest that turns 2.0 m' });
+  assert.deepEqual(sofa, { title: 'Sofa: cannot turn the corner', detail: 'Lobby door: 2.2 m long, fits 2.0 m' });
 });
 
 test('people and smoke count steps on the model too, not decimals', () => {
@@ -108,7 +108,7 @@ test('a load stays on its beam; a token that starts in a room has no such line',
 
 test('one step is "1 step", on the model as on the sheet', () => {
   const tie = failText(b, fail({ token: 'people', blocked_at: 'office-door', reason: 'smoke_first', needed: 1, available: 1 }));
-  assert.equal(tie?.detail, 'Office door: people at step 1, smoke at step 1');
+  assert.equal(tie?.detail, 'Office door: both at step 1, a tie');
 });
 
 test('a card that would cover another card, another red X or the caption is left out, not drawn over it', () => {
@@ -128,4 +128,8 @@ test('a card uses its measured height when it has one', () => {
   // A tall card (callout) right of the X would reach the X below it; the short estimate would not.
   const spots = [{ x: 400, y: 300, width: 200, height: 120 }, { x: 480, y: 360, width: 200 }];
   assert.notEqual(labelSides(spots, layout)[0], 'right');
+});
+
+test('a card that would run past the top of the screen is left out too', () => {
+  assert.deepEqual(labelSides([{ x: 250, y: 40, width: 300 }], { height: 56, gap: 36, minX: 8, maxX: 492 }), ['none']);
 });

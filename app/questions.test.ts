@@ -41,7 +41,7 @@ test('metres always show at least one decimal', () => {
 });
 
 test('the no line says who is stuck, where, why and the numbers, with the verb agreeing', () => {
-  assert.equal(stuckLine(building, at('sofa')), 'Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that turns 2.0 m');
+  assert.equal(stuckLine(building, at('sofa')), 'Sofa is stuck at Lobby door: cannot turn the corner, 2.2 m long, longest that fits 2.0 m');
   assert.equal(stuckLine(building, at('people')), 'People are stuck at Office door: too narrow, needs 0.6 m, has 0.5 m');
   assert.equal(stuckLine(building, at('wheelchair')), 'Wheelchair is stuck at Terrace door: step in the way, 0.15 m high, needs level');
   assert.equal(stuckLine(building, at('chiller')), 'Chiller is stuck at Plant shaft: too narrow, needs 1.6 m, has 1.2 m');

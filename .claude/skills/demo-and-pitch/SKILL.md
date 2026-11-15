@@ -13,7 +13,7 @@ the words in `design/copy.md`: question, Yes or No, Show me, Answers, Yes to all
 
 1. Open with the person and their question: "A home buyer asks: can my sofa get in?"
 2. Give the answer with the place and the numbers: "No. The sofa is stuck at the lobby door: it
-   cannot turn the corner, needs 2.2 m, has 2.0 m."
+   cannot turn the corner: it is 2.2 m long, and the longest that fits is 2.0 m."
 3. Then the fix, and the answer after it: "Widen the lobby door to 1.6 m. Yes, the sofa gets in."
 
 End the demo on the line "a quick check, not a code review".

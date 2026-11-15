@@ -64,9 +64,10 @@ export function failText(b: Building, r: SolverResult): FailText | null {
   else if (r.needed !== null && r.available !== null) {
     // Metres show one decimal; people and smoke count steps, as app/scoreboard.ts amount().
     const show = (v: number): string => (METRES.has(reason) ? `${num(v)} m` : reason === 'smoke_first' ? `${v} step${v === 1 ? '' : 's'}` : String(v));
-    // The same words as app/scoreboard.ts numbersText for a corner turn and the smoke.
-    numbers = reason === 'cannot_turn' ? `${show(r.needed)} long, longest that turns ${show(r.available)}`
-      : reason === 'smoke_first' ? `people at step ${r.needed}, smoke at step ${r.available}`
+    // app/scoreboard.ts numbersText's words for a corner turn and the smoke, shortened so the card keeps
+    // the width of "needs 2.2 m, has 2.0 m" (a wider card is left out more often).
+    numbers = reason === 'cannot_turn' ? `${show(r.needed)} long, fits ${show(r.available)}`
+      : reason === 'smoke_first' ? (r.needed === r.available ? `both at step ${r.needed}, a tie` : `people at step ${r.needed}, smoke at step ${r.available}`)
       : `needs ${show(r.needed)}, has ${show(r.available)}`;
   }
   const detail = [place, numbers].filter(Boolean).join(': ');
@@ -99,7 +100,7 @@ const overlaps = (a: Rect, b: Rect): boolean => a.l < b.r && b.l < a.r && a.t < 
 // and only its X shows (the fix sheet still says it). Text is never drawn over text.
 export type LabelSide = 'right' | 'left' | 'above' | 'none';
 const SIDES: LabelSide[] = ['right', 'left', 'above'];
-const offEdge = (r: Rect, minX: number, maxX: number): number => (r.l < minX || r.r > maxX ? 1 : 0);
+const offEdge = (r: Rect, minX: number, maxX: number): number => (r.l < minX || r.r > maxX || r.t < 0 ? 1 : 0); // or past the top
 
 export function labelSides(spots: LabelSpot[], layout: LabelLayout): LabelSide[] {
   const { gap, minX, maxX, xSize = 26, avoid = [] } = layout;
